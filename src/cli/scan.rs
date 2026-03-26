@@ -438,7 +438,15 @@ pub fn upgrade_cmd(pkg: &scanner::LockedPackage, fixed: &str) -> String {
             match source_file {
                 "yarn.lock"      => format!("yarn add {}@{}", pkg.name, fixed),
                 "pnpm-lock.yaml" => format!("pnpm add {}@{}", pkg.name, fixed),
-                _                => format!("npm install {}@{}", pkg.name, fixed),
+                "bun.lockb" | "bun.lock" => format!("bun add {}@{}", pkg.name, fixed),
+                _ => {
+                    // package.json / package-lock.json — check if bun.lockb exists nearby
+                    if std::path::Path::new("bun.lockb").exists() {
+                        format!("bun add {}@{}", pkg.name, fixed)
+                    } else {
+                        format!("npm install {}@{}", pkg.name, fixed)
+                    }
+                }
             }
         }
         "crates.io" => format!("cargo add {}@{}", pkg.name, fixed),
@@ -447,14 +455,24 @@ pub fn upgrade_cmd(pkg: &scanner::LockedPackage, fixed: &str) -> String {
             match source_file {
                 "uv.lock"      => format!("uv pip install {}=={}", pkg.name, fixed),
                 "poetry.lock"  => format!("poetry add {}=={}", pkg.name, fixed),
-                _              => {
-                    // Use pip3 on systems where pip might not exist
-                    if cfg!(unix) { format!("pip3 install {}=={}", pkg.name, fixed) }
-                    else          { format!("pip install {}=={}", pkg.name, fixed) }
+                _ => {
+                    // pyproject.toml or requirements.txt — detect tool from sibling lock files
+                    if std::path::Path::new("uv.lock").exists() {
+                        format!("uv pip install {}=={}", pkg.name, fixed)
+                    } else if std::path::Path::new("poetry.lock").exists() {
+                        format!("poetry add {}=={}", pkg.name, fixed)
+                    } else if cfg!(unix) {
+                        format!("pip3 install {}=={}", pkg.name, fixed)
+                    } else {
+                        format!("pip install {}=={}", pkg.name, fixed)
+                    }
                 }
             }
         }
-        "Go" => format!("go get {}@v{}", pkg.name, fixed),
+        "Go" => {
+            let ver = if fixed.starts_with('v') { fixed.to_string() } else { format!("v{}", fixed) };
+            format!("go get {}@{}", pkg.name, ver)
+        }
         "RubyGems"  => format!("gem install {} -v {}", pkg.name, fixed),
         "Packagist" => format!("composer require {}:{}", pkg.name, fixed),
         "NuGet"     => format!("dotnet add package {} --version {}", pkg.name, fixed),
