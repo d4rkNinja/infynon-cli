@@ -30,21 +30,28 @@
 
 ---
 
-## Features
+## What It Does Today
 
-- **Single binary** — one `infynon` binary does everything, no separate tools
-- **14 ecosystems** — npm, yarn, pnpm, bun, pip, uv, poetry, cargo, go, gem, composer, nuget, hex, pub
-- **Auto-detection** — detects ecosystem from `package.json`, `Cargo.toml`, `go.mod`, `pyproject.toml`, etc.
-- **OSV batch scanning** — queries [OSV.dev](https://osv.dev) for every dependency in your lock file
-- **3-layer verification pipeline**
-  - Layer 1: In-memory blocklist trie (<1ms)
-  - Layer 2: Static heuristic scan — preinstall scripts, typosquatting, package age (<50ms)
-  - Layer 3: LLM deep-code analysis via local Ollama (flagged packages only)
-- **Install-time interception** — checks packages *before* install with interactive approve/skip/upgrade
-- **Auto-fix** — `--fix` upgrades vulnerable packages to safe versions automatically
-- **Reports** — Markdown and PDF export
-- **Strict mode** — `--strict` blocks all vulnerable packages (CI-ready)
-- **Local-first** — zero data leaves your machine unless you opt in
+- **Single binary** — one `infynon` binary, two modes: `infynon pkg` for package security, `infynon` for firewall info
+- **14 ecosystem support** — npm, yarn, pnpm, bun, pip, uv, poetry, cargo, go, gem, composer, nuget, hex, pub
+- **Auto-detection** — detects your ecosystem from lock/manifest files (`package-lock.json`, `Cargo.lock`, `go.sum`, `requirements.txt`, etc.)
+- **OSV vulnerability scanning** — batch queries [OSV.dev](https://osv.dev) API to check every dependency in your lock file for known CVEs
+- **Lock file parsing** — parses 15 lock file formats (npm, yarn, pnpm, pip, poetry, uv, cargo, go.sum, go.mod, Gemfile.lock, composer.lock, packages.lock.json, mix.lock, pubspec.lock, pyproject.toml)
+- **Install-time interception** — checks packages against OSV *before* installation, shows severity badges, CVE details, and safe versions
+- **Interactive prompts** — per-package approve/skip/upgrade decisions with apply-to-all shortcut
+- **Auto-fix** — `--fix` executes upgrade commands automatically for all fixable vulnerabilities
+- **Strict mode** — `--strict` hard-blocks all vulnerable packages and exits (CI-ready)
+- **Report generation** — export scan results as Markdown or styled PDF with severity tables and upgrade commands
+- **Registry version resolution** — fetches latest versions from 9 registries (npm, PyPI, crates.io, Go proxy, RubyGems, Packagist, NuGet, Hex, pub.dev) when no version is specified
+- **Binary detection** — OS-native detection of package manager binaries with install instructions (winget/brew/apt)
+
+## Upcoming
+
+- **3-layer verification pipeline** — blocklist trie lookup, static heuristic scan (preinstall scripts, typosquatting, package age), LLM deep-code analysis via local Ollama
+- **Firewall engine** — `infynon daemon` for nightly CVE intelligence crawling, `infynon dashboard` for real-time TUI, `infynon update-intel` for manual intel refresh
+- **SBOM generation** — CycloneDX format after every install
+- **Configuration** — `.infynon.toml` project-level config, custom blocklists, Ollama endpoint settings
+- **Ecosystem adapters** — native dependency resolution and install routing per ecosystem
 
 ---
 
@@ -154,15 +161,6 @@ infynon pkg add serde             # detects cargo from Cargo.toml
 infynon pkg --strict npm install express   # exit 1 on any CVE
 ```
 
-### Firewall engine
-
-```bash
-infynon                    # show info
-infynon daemon             # start nightly CVE intelligence daemon
-infynon dashboard          # open real-time TUI dashboard
-infynon update-intel       # force CVE intel refresh
-```
-
 ---
 
 ## Commands
@@ -175,28 +173,32 @@ infynon update-intel       # force CVE intel refresh
 | `infynon pkg scan --output <FORMAT>` | Export: `markdown`, `pdf`, `both` |
 | `infynon pkg scan --fix [LEVEL]` | Auto-fix: `critical` `high` `medium` `low` `all` |
 | `infynon pkg scan --pkg-file <PATH>` | Scan specific file |
-| `infynon pkg <ecosystem> install <pkg>` | Secure install |
+| `infynon pkg <ecosystem> install <pkg>` | Secure install with CVE check |
 | `infynon pkg --strict ...` | Block all vulnerable packages |
 
-### `infynon` — Firewall Engine
+### `infynon` — Firewall Engine (Upcoming)
 
-| Command | Description |
-|---------|-------------|
-| `infynon` | Show info and commands |
-| `infynon daemon` | Start nightly intelligence pipeline |
-| `infynon dashboard` | Open TUI dashboard |
-| `infynon update-intel` | Force CVE intel refresh |
+| Command | Status |
+|---------|--------|
+| `infynon` | Shows project info and available commands |
+| `infynon daemon` | Planned — nightly CVE intelligence pipeline |
+| `infynon dashboard` | Planned — real-time TUI security dashboard |
+| `infynon update-intel` | Planned — manual CVE intel refresh |
 
 ---
 
 ## Supported Lock Files
 
-| Ecosystem | Files |
-|-----------|-------|
-| npm / yarn / pnpm / bun | `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml` |
-| pip / uv / poetry | `requirements.txt`, `poetry.lock` |
+| Ecosystem | Files Parsed |
+|-----------|-------------|
+| npm | `package-lock.json` |
+| yarn | `yarn.lock` |
+| pnpm | `pnpm-lock.yaml` |
+| pip / uv | `requirements.txt`, `pyproject.toml` |
+| poetry | `poetry.lock` |
+| uv | `uv.lock` |
 | cargo | `Cargo.lock` |
-| go | `go.sum` |
+| go | `go.sum`, `go.mod` |
 | gem | `Gemfile.lock` |
 | composer | `composer.lock` |
 | nuget | `packages.lock.json` |
@@ -214,27 +216,30 @@ infynon update-intel       # force CVE intel refresh
      ┌─────────────────────────┐
      │  Parse package specs    │
      │  Resolve latest version │
+     │  (9 registry APIs)      │
      └────────────┬────────────┘
                   │
                   ▼
      ┌─────────────────────────┐
      │  OSV Batch Query        │
+     │  (osv.dev/v1/querybatch)│
      └────────────┬────────────┘
                   │
-           CVEs found?
-          ╱            ╲
-        No              Yes
-         │               │
-         ▼               ▼
-      Install    ┌───────────────┐
-      directly   │ [1] Install   │
-                 │ [2] Skip      │
-                 │ [3] Upgrade   │
-                 └───────┬───────┘
-                         │
-                         ▼
-                 Execute native
-                 package manager
+            CVEs found?
+           ╱            ╲
+         No              Yes
+          │               │
+          ▼               ▼
+       Install    ┌───────────────┐
+       directly   │ Interactive:  │
+                  │ [1] Install   │
+                  │ [2] Skip      │
+                  │ [3] Upgrade   │
+                  └───────┬───────┘
+                          │
+                          ▼
+                  Execute native
+                  package manager
 ```
 
 ---
@@ -280,15 +285,6 @@ sudo rm /usr/local/bin/infynon
 Remove-Item "$env:USERPROFILE\.infynon\bin\infynon.exe"
 # Remove from PATH: Settings → Environment Variables → remove .infynon\bin entry
 ```
-
----
-
-## Known Issues (Beta)
-
-- Layer 3 (LLM analysis) requires local [Ollama](https://ollama.ai) — not yet fully integrated
-- Nightly daemon and TUI dashboard are in early development
-- SBOM generation planned but not yet implemented
-- PDF reports work up to ~200 findings
 
 ---
 
