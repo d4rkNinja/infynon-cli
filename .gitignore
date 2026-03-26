@@ -1,0 +1,32 @@
+# Build artifacts
+/target
+/dist
+
+# IDE & editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Environment & secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Scan output (generated at runtime)
+infynon-scan-report.md
+infynon-scan-report.pdf
+.infynon/
+
+# Logs
+*.log
+concept.md
+AGENTS.md
+# Cargo lock is committed for binaries (keep it)

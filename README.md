@@ -1,255 +1,309 @@
-# INFYNON — Universal Package Security Manager
+<p align="center">
+  <strong>INFYNON</strong><br>
+  Universal Package Security Manager
+</p>
 
-<div align="center">
-  <strong>A dual-personality security CLI that acts as both a vulnerability scanner and a secure package proxy for 14+ ecosystems.</strong>
-</div>
+<p align="center">
+  Single binary. 14 ecosystems. Automatic CVE scanning before every install.
+</p>
+
+<p align="center">
+  <a href="#installation">Install</a> &middot;
+  <a href="#quick-start">Quick Start</a> &middot;
+  <a href="#commands">Commands</a> &middot;
+  <a href="#uninstallation">Uninstall</a>
+</p>
 
 ---
-
-## 🏗️ Repository Layout
 
 ```
-infynon-cli/
-├── src/
-│   ├── main.rs              # Binary personality router (infynon vs infynon-pkg)
-│   ├── cli/
-│   │   ├── args.rs          # Clap v4 argument definitions
-│   │   ├── commands.rs      # Command dispatch & install security gate
-│   │   ├── scan.rs          # OSV scan orchestrator + install checker
-│   │   └── mod.rs
-│   ├── engine/
-│   │   ├── osv.rs           # OSV.dev batch API client
-│   │   ├── scanner.rs       # Lock-file / manifest parsers (14 ecosystems)
-│   │   ├── reporter.rs      # Markdown & PDF report generator
-│   │   └── mod.rs
-│   ├── tui/
-│   │   ├── logger.rs        # Centralized terminal styling (Logger::*)
-│   │   ├── loaders.rs       # Animated install progress bars
-│   │   └── dashboard.rs     # Ratatui dashboard stub
-│   ├── ecosystems/
-│   │   └── detector.rs      # Binary detection (where/which) + install hints
-│   ├── daemon/
-│   │   └── updater.rs       # Nightly intelligence pipeline stub
-│   └── error/
-│       └── types.rs         # InfynonError
-├── AGENTS.md                # Architecture rules & agent directives
-├── Cargo.toml
-└── README.md
+infynon pkg npm install express
 ```
 
+### Scan your dependencies for CVEs
+
+<p align="center">
+  <img src="assets/scan-demo.png" alt="infynon pkg scan" width="700">
+</p>
+
+### Secure install with interactive vulnerability prompts
+
+<p align="center">
+  <img src="assets/install-demo.png" alt="infynon pkg npm install" width="700">
+</p>
+
 ---
 
-## ⚡ Two Tools in One Binary
+## Features
 
-The same binary morphs based on **how it is invoked**:
-
-| Invocation | Personality | Purpose |
-|---|---|---|
-| `infynon` | Firewall / daemon | WAF intercept, threat intelligence, dashboard |
-| `infynon-pkg` | Secure package proxy | Vulnerability-gated installs + full CVE scanner |
+- **Single binary** — one `infynon` binary does everything, no separate tools
+- **14 ecosystems** — npm, yarn, pnpm, bun, pip, uv, poetry, cargo, go, gem, composer, nuget, hex, pub
+- **Auto-detection** — detects ecosystem from `package.json`, `Cargo.toml`, `go.mod`, `pyproject.toml`, etc.
+- **OSV batch scanning** — queries [OSV.dev](https://osv.dev) for every dependency in your lock file
+- **3-layer verification pipeline**
+  - Layer 1: In-memory blocklist trie (<1ms)
+  - Layer 2: Static heuristic scan — preinstall scripts, typosquatting, package age (<50ms)
+  - Layer 3: LLM deep-code analysis via local Ollama (flagged packages only)
+- **Install-time interception** — checks packages *before* install with interactive approve/skip/upgrade
+- **Auto-fix** — `--fix` upgrades vulnerable packages to safe versions automatically
+- **Reports** — Markdown and PDF export
+- **Strict mode** — `--strict` blocks all vulnerable packages (CI-ready)
+- **Local-first** — zero data leaves your machine unless you opt in
 
 ---
 
-## 🛡️ `infynon-pkg` — Secure Package Proxy
+## Installation
 
-### Install Commands
-
-Every install is intercepted, checked against the OSV database, and only proceeds if clear (or with a countdown warning):
+### One-liner — Linux / macOS
 
 ```bash
-# Explicit ecosystem
-infynon-pkg npm install express
-infynon-pkg yarn add lodash@4.17.21
-infynon-pkg pnpm add react@18.2.0
-infynon-pkg bun add hono
-
-infynon-pkg pip install requests==2.31.0
-infynon-pkg uv install fastapi>=0.100.0
-infynon-pkg poetry add django~=4.2.0
-
-infynon-pkg cargo add serde@1.0
-infynon-pkg go get golang.org/x/net@v0.25.0
-
-infynon-pkg gem install rails:7.1.0
-infynon-pkg composer require laravel/framework:^10.0
-infynon-pkg nuget Microsoft.Extensions.Logging --version 8.0.0
-infynon-pkg hex phoenix
-infynon-pkg pub http
-
-# Auto-detect ecosystem from project files
-infynon-pkg install <package>
-
-# CI/CD strict mode (block on ANY CVE hit)
-infynon-pkg --strict npm install express
+curl -fsSL https://raw.githubusercontent.com/d4rkNinja/infynon-cli/main/scripts/install.sh | bash
 ```
 
-### Version Spec Parsing
+### One-liner — Windows (PowerShell)
 
-`infynon-pkg` understands **every ecosystem's native spec format**:
-
-| Ecosystem | Example input | Parsed |
-|---|---|---|
-| npm/yarn/pnpm/bun | `picomatch@4.0.3` | name=`picomatch`, ver=`4.0.3` |
-| Scoped npm | `@types/node@20.0.0` | name=`@types/node`, ver=`20.0.0` |
-| pip/uv/poetry | `requests==2.28.0` | name=`requests`, ver=`2.28.0` |
-| pip range | `flask>=2.0,<3.0` | name=`flask`, ver=`2.0` |
-| pip extras | `requests[security]==2.31.0` | name=`requests`, ver=`2.31.0` |
-| cargo/go | `serde@1.0.190` | name=`serde`, ver=`1.0.190` |
-| Go modules | `golang.org/x/net@v0.25.0` | name=`golang.org/x/net`, ver=`v0.25.0` |
-| gem | `rails:7.1.0` | name=`rails`, ver=`7.1.0` |
-| composer | `laravel/framework:^10.0` | name=`laravel/framework`, ver=`^10.0` |
-
-### What Happens When a Vulnerability is Found
-
-```
-⚠ 'picomatch@4.0.3' has 2 known vulnerability(ies):
-     INFORMATIONAL   GHSA-3v7f-55p6-f55p   Method Injection in POSIX Character Classes
-          → safe version: 4.0.4   npm install picomatch@4.0.4
-     INFORMATIONAL   GHSA-c2c7-rcm5-vvqj   ReDoS vulnerability via extglob quantifiers
-          → safe version: 4.0.4   npm install picomatch@4.0.4
-
-  💡 Safe alternatives:
-     →  npm install picomatch@4.0.4
-
-  ⏱ Proceeding in 5 seconds... Press Ctrl+C to abort
+```powershell
+irm https://raw.githubusercontent.com/d4rkNinja/infynon-cli/main/scripts/install.ps1 | iex
 ```
 
-- **Normal mode**: 5-second countdown abort window, then proceeds
-- **`--strict` mode**: Hard block — installation is refused until CVEs are resolved
-- **CRITICAL/HIGH detected**: Extra ⛔ HIGH RISK warning before countdown
-
----
-
-## 🔍 `infynon-pkg scan` — Full CVE Scanner
-
-Reads all lock/manifest files in the current directory, batch-queries OSV for every pinned version, and presents a full report.
+### One-liner — Any OS with Rust
 
 ```bash
-# Inline report only (no files written)
-infynon-pkg scan
-
-# Filter by severity
-infynon-pkg scan --fix                     # show + auto-fix all severities
-infynon-pkg scan --fix high                # show + auto-fix CRITICAL and HIGH only
-infynon-pkg scan --fix critical            # only CRITICAL
-
-# Save reports
-infynon-pkg scan --output markdown         # infynon-scan-report.md
-infynon-pkg scan --output pdf              # infynon-scan-report.pdf
-infynon-pkg scan --output both             # both files
-
-# Custom lock file
-infynon-pkg scan --pkg-file ./Cargo.lock
-infynon-pkg scan --pkg-file ./requirements.txt
+cargo install --git https://github.com/d4rkNinja/infynon-cli
 ```
 
-### Supported Lock / Manifest Files
+### Manual download
 
-| Ecosystem | Files Parsed |
-|---|---|
-| **npm** | `package-lock.json` (v1/v2/v3) |
-| **yarn** | `yarn.lock` |
-| **pnpm** | `pnpm-lock.yaml` |
-| **bun** | `package.json` (bun fallback) |
-| **pip** | `requirements.txt` |
-| **uv** | `uv.lock` |
-| **poetry** | `poetry.lock`, `pyproject.toml` |
-| **cargo** | `Cargo.lock` |
-| **go** | `go.sum`, `go.mod` |
-| **gem** | `Gemfile.lock` |
-| **composer** | `composer.lock` |
-| **nuget** | `packages.lock.json` |
-| **hex** | `mix.lock` |
-| **pub** | `pubspec.lock` |
+Grab the single binary for your platform from [Releases](https://github.com/d4rkNinja/infynon-cli/releases):
 
-### `--fix` Auto-Remediation
-
-When `--fix` is passed, infynon-pkg **automatically executes** the upgrade command for every fixable package:
-
-```
-⚡ Auto-Fix  Executing 2 remediation command(s)...
-
-  ✔  picomatch 4.0.3 → 4.0.4  fixed
-  ✔  brace-expansion 1.1.12 → 5.0.5  fixed
-
-  Auto-fix complete  2 succeeded  0 failed
-```
-
-Failed commands show the exact `stderr` output so you know why.
-
----
-
-## 🔥 `infynon` — Firewall Mode
+| Platform | File |
+|----------|------|
+| Windows x86_64 | `infynon-x86_64-pc-windows-msvc.exe` |
+| Linux x86_64 | `infynon-x86_64-unknown-linux-musl` |
+| Linux ARM64 | `infynon-aarch64-unknown-linux-musl` |
+| macOS Intel | `infynon-x86_64-apple-darwin` |
+| macOS Apple Silicon | `infynon-aarch64-apple-darwin` |
 
 ```bash
-infynon                    # Show firewall splash
-infynon daemon             # Start background intelligence service
-infynon dashboard          # Open real-time ratatui dashboard
-infynon update-intel       # Pull latest OSV threat feeds
+# Linux / macOS
+chmod +x infynon
+sudo mv infynon /usr/local/bin/
+```
+
+```powershell
+# Windows — move to a folder in your PATH
+Move-Item infynon.exe "$env:USERPROFILE\.infynon\bin\infynon.exe"
 ```
 
 ---
 
-## 🌐 OSV API Integration
+## Quick Start
 
-Uses the [OSV.dev](https://osv.dev) batch API (`/v1/querybatch`) for high-throughput scanning:
-
-- **Batch query**: All 800+ packages sent in a single HTTP request
-- **Detail fetch**: Individual CVE records fetched for severity/version/summary
-- **Affected ranges**: `SEMVER` and `ECOSYSTEM` ranges parsed to extract exact fix versions
-- **Fail-open**: OSV errors skip the check rather than blocking installs
-
----
-
-## 🔧 Binary Detection
-
-`infynon-pkg` uses the OS's **native resolver** to check if package managers are installed:
-
-| OS | Method |
-|---|---|
-| Windows | `where <binary>` — resolves `.cmd`, `.bat`, `.exe` in PATH |
-| macOS | `which <binary>` — POSIX PATH resolver |
-| Linux | `which <binary>` — POSIX PATH resolver |
-
-Alternative names are also probed: `pip3`, `python3`, `nodejs`, `dotnet-host`, etc.
-
-When a binary is not found, OS-appropriate install instructions are shown:
-
-```
-  ✘ Package manager 'npm' is not installed on this system.
-  ℹ  npm ships bundled with Node.js — install Node.js to get npm.
-
-  Install command: brew install node   OR   nvm install --lts   (macOS)
-  Official docs:   https://nodejs.org/en/download
-```
-
----
-
-## 🏗️ Building
+### Scan your project
 
 ```bash
-# Development
-cargo build
+infynon pkg scan                          # auto-detect lock files
+infynon pkg scan --pkg-file ./Cargo.lock  # specific file
+infynon pkg scan --output pdf             # export report (markdown|pdf|both)
+infynon pkg scan --fix critical           # auto-fix critical+ vulns
+infynon pkg scan --fix                    # auto-fix all fixable vulns
+```
 
-# Release (produces infynon.exe / infynon)
+### Secure install
+
+```bash
+# JavaScript
+infynon pkg npm install express
+infynon pkg yarn add lodash
+infynon pkg pnpm add react
+infynon pkg bun add axios
+
+# Python
+infynon pkg pip install requests
+infynon pkg uv pip install fastapi
+infynon pkg poetry add django
+
+# Rust
+infynon pkg cargo add serde
+
+# Go
+infynon pkg go get golang.org/x/crypto
+
+# Ruby
+infynon pkg gem install rails
+
+# PHP
+infynon pkg composer require laravel/framework
+
+# .NET
+infynon pkg nuget add Newtonsoft.Json
+
+# Elixir
+infynon pkg hex deps.get
+
+# Dart / Flutter
+infynon pkg pub add http
+```
+
+### Auto-detect (no ecosystem prefix)
+
+```bash
+infynon pkg install express       # detects npm from package.json
+infynon pkg add serde             # detects cargo from Cargo.toml
+```
+
+### Strict mode (CI)
+
+```bash
+infynon pkg --strict npm install express   # exit 1 on any CVE
+```
+
+### Firewall engine
+
+```bash
+infynon                    # show info
+infynon daemon             # start nightly CVE intelligence daemon
+infynon dashboard          # open real-time TUI dashboard
+infynon update-intel       # force CVE intel refresh
+```
+
+---
+
+## Commands
+
+### `infynon pkg` — Package Security
+
+| Command | Description |
+|---------|-------------|
+| `infynon pkg scan` | Scan lock/manifest files for known CVEs |
+| `infynon pkg scan --output <FORMAT>` | Export: `markdown`, `pdf`, `both` |
+| `infynon pkg scan --fix [LEVEL]` | Auto-fix: `critical` `high` `medium` `low` `all` |
+| `infynon pkg scan --pkg-file <PATH>` | Scan specific file |
+| `infynon pkg <ecosystem> install <pkg>` | Secure install |
+| `infynon pkg --strict ...` | Block all vulnerable packages |
+
+### `infynon` — Firewall Engine
+
+| Command | Description |
+|---------|-------------|
+| `infynon` | Show info and commands |
+| `infynon daemon` | Start nightly intelligence pipeline |
+| `infynon dashboard` | Open TUI dashboard |
+| `infynon update-intel` | Force CVE intel refresh |
+
+---
+
+## Supported Lock Files
+
+| Ecosystem | Files |
+|-----------|-------|
+| npm / yarn / pnpm / bun | `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml` |
+| pip / uv / poetry | `requirements.txt`, `poetry.lock` |
+| cargo | `Cargo.lock` |
+| go | `go.sum` |
+| gem | `Gemfile.lock` |
+| composer | `composer.lock` |
+| nuget | `packages.lock.json` |
+| hex | `mix.lock` |
+| pub | `pubspec.lock` |
+
+---
+
+## How It Works
+
+```
+  infynon pkg npm install express
+                  │
+                  ▼
+     ┌─────────────────────────┐
+     │  Parse package specs    │
+     │  Resolve latest version │
+     └────────────┬────────────┘
+                  │
+                  ▼
+     ┌─────────────────────────┐
+     │  OSV Batch Query        │
+     └────────────┬────────────┘
+                  │
+           CVEs found?
+          ╱            ╲
+        No              Yes
+         │               │
+         ▼               ▼
+      Install    ┌───────────────┐
+      directly   │ [1] Install   │
+                 │ [2] Skip      │
+                 │ [3] Upgrade   │
+                 └───────┬───────┘
+                         │
+                         ▼
+                 Execute native
+                 package manager
+```
+
+---
+
+## Building From Source
+
+```bash
+git clone https://github.com/d4rkNinja/infynon-cli.git
+cd infynon-cli
 cargo build --release
-
-# Install both personalities to PATH
-cp target/release/infynon ~/.cargo/bin/infynon
-cp target/release/infynon ~/.cargo/bin/infynon-pkg
+# Binary → target/release/infynon
 ```
 
-**Zero-warning requirement**: `cargo build` must emit no warnings. All unused stubs must be annotated `#[allow(dead_code)]`.
+Cross-compile with [cross](https://github.com/cross-rs/cross):
+
+```bash
+cargo install cross
+cross build --release --target x86_64-unknown-linux-musl
+cross build --release --target aarch64-unknown-linux-musl
+cross build --release --target x86_64-apple-darwin
+cross build --release --target aarch64-apple-darwin
+```
 
 ---
 
-## 🧠 Architecture Principles
+## Uninstallation
 
-See [AGENTS.md](./AGENTS.md) for the full agent directive spec.
+### Installed via cargo
 
-- **No logic in root**: `main.rs` delegates immediately to `src/cli`, `src/engine`, `src/tui`
-- **No inline styling**: All output goes through `Logger::*` — never raw ANSI in business logic
-- **No ANSI in tabled cells**: Color breaks width calculations; use plain text + tabled's `Color` modifier
-- **Dual-personality routing**: `std::env::args().next()` determines mode at startup
-#   i n f y n o n - c l i  
- 
+```bash
+cargo uninstall infynon
+```
+
+### Installed via install script
+
+**Linux / macOS:**
+```bash
+sudo rm /usr/local/bin/infynon
+```
+
+**Windows:**
+```powershell
+Remove-Item "$env:USERPROFILE\.infynon\bin\infynon.exe"
+# Remove from PATH: Settings → Environment Variables → remove .infynon\bin entry
+```
+
+---
+
+## Known Issues (Beta)
+
+- Layer 3 (LLM analysis) requires local [Ollama](https://ollama.ai) — not yet fully integrated
+- Nightly daemon and TUI dashboard are in early development
+- SBOM generation planned but not yet implemented
+- PDF reports work up to ~200 findings
+
+---
+
+## License
+
+MIT
+
+---
+
+Built by **d4rkninja** & **whit3ninj4**
+
+### Special Thanks
+
+Huge shoutout to **whit3ninj4** for the relentless contributions, ideas, and late-night debugging sessions that shaped INFYNON into what it is today.

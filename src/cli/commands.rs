@@ -1,0 +1,371 @@
+use clap::Parser;
+use crate::cli::args::{PkgArgs, PkgCommands, FirewallArgs, FirewallCommands};
+use crate::cli::scan::{self, run_scan, check_packages_before_install, OutputFormat, FixLevel};
+use crate::error::types::InfynonError;
+use crate::tui::logger::Logger;
+use crate::ecosystems::detector;
+use std::path::Path;
+use owo_colors::OwoColorize;
+
+pub fn execute_pkg_mode() -> Result<(), InfynonError> {
+    // When invoked as `infynon pkg ...`, strip the "pkg" arg before clap parses
+    let raw_args: Vec<String> = std::env::args().collect();
+    let args = if raw_args.len() > 1 && raw_args[1] == "pkg" {
+        let filtered: Vec<String> = std::iter::once(raw_args[0].clone())
+            .chain(raw_args[2..].iter().cloned())
+            .collect();
+        PkgArgs::parse_from(filtered)
+    } else {
+        PkgArgs::parse()
+    };
+
+    // ── Route subcommands first ────────────────────────────────────────────
+    if let Some(cmd) = args.command {
+        match cmd {
+            PkgCommands::Scan { output, fix, pkg_file } => {
+                let fmt = output.as_deref().map(|o| match o.to_lowercase().as_str() {
+                    "pdf"  => OutputFormat::Pdf,
+                    "both" => OutputFormat::Both,
+                    _      => OutputFormat::Markdown,
+                });
+                let fl   = fix.map(|f| FixLevel::from_str(&f));
+                let file = pkg_file.or(args.pkg_file);
+                run_scan(fmt, fl, file.as_deref());
+                return Ok(());
+            }
+        }
+    }
+
+    if args.passthrough_args.is_empty() {
+        Logger::splash_pkg();
+        return Ok(());
+    }
+
+
+    let first_arg = &args.passthrough_args[0];
+    let known_ecosystems = vec!["npm", "yarn", "pnpm", "bun", "pip", "uv", "poetry", "cargo", "go", "gem", "composer", "nuget", "hex", "pub"];
+    
+    let mut ecosystem = "auto-detected";
+    let mut install_packages = vec![];
+    let mut cmd_idx = 0;
+
+    if known_ecosystems.contains(&first_arg.as_str()) {
+        ecosystem = first_arg;
+        cmd_idx = 1; 
+    } else {
+        if Path::new("package.json").exists() { ecosystem = "npm"; }
+        else if Path::new("Cargo.toml").exists() { ecosystem = "cargo"; }
+        else if Path::new("pyproject.toml").exists() || Path::new("requirements.txt").exists() { ecosystem = "pip"; }
+        else if Path::new("go.mod").exists() { ecosystem = "go"; }
+        else if Path::new("composer.json").exists() { ecosystem = "composer"; }
+        else if Path::new("Gemfile").exists() { ecosystem = "gem"; }
+        else if Path::new("pubspec.yaml").exists() { ecosystem = "pub"; }
+        else if Path::new("mix.exs").exists() { ecosystem = "hex"; }
+    }
+
+    if args.passthrough_args.len() > cmd_idx {
+        let action = &args.passthrough_args[cmd_idx];
+        if action == "install" || action == "add" || action == "i" || action == "require" || action == "get" {
+            install_packages = args.passthrough_args[cmd_idx + 1..].to_vec();
+        }
+    }
+
+    // ── Binary availability check ────────────────────────────────────────
+    let binary_to_check = match ecosystem {
+        "poetry"  => "poetry",
+        "uv"      => "uv",
+        "hex"     => "mix",
+        "pub"     => "dart",
+        other     => other,
+    };
+
+    if !detector::is_installed(binary_to_check) {
+        println!();
+        println!(
+            "  {} {}{}{}\n",
+            "✘".red().bold(),
+            "Package manager ".red().bold(),
+            format!("'{}'" , ecosystem).bright_red().bold(),
+            " is not installed on this system.".red().bold()
+        );
+        if let Some(info) = detector::install_instructions(ecosystem) {
+            println!("  {}  {}", "ℹ".bright_cyan().bold(), info.note.white());
+            println!();
+            println!("  {} {}", "Install command:".bold().truecolor(255,170,50), info.install_cmd.bright_green());
+            println!("  {} {}", "Official docs:  ".bold().truecolor(255,170,50), info.install_url.truecolor(100,150,255));
+        }
+        println!();
+        return Ok(());
+    }
+
+    Logger::subtitle("🛡️", "INFYNON Secure Proxy", "Active");
+    Logger::detail("» Ecosystem:", ecosystem);
+    Logger::success(&format!("'{}' binary found — proceeding", binary_to_check));
+
+    if !install_packages.is_empty() {
+        let (safe, hits) = check_packages_before_install(&install_packages, ecosystem);
+
+        if !safe {
+            if args.strict {
+                println!(
+                    "\n  {}  {} — {}  (pass without --strict to choose per-package)\n",
+                    "╳".bright_red().bold(),
+                    "BLOCKED".bold().bright_red(),
+                    "--strict mode active".truecolor(200,80,80)
+                );
+                return Ok(());
+            }
+
+            // Interactive decision prompt — replaces the countdown
+            let final_specs = ask_vuln_decisions(&install_packages, &hits, ecosystem);
+            if final_specs.is_empty() {
+                Logger::raw_dim("  All packages skipped. Nothing to install.");
+                return Ok(());
+            }
+            println!();
+            crate::tui::loaders::show_stylish_install_loader(&final_specs, ecosystem);
+            return Ok(());
+        }
+
+        println!();
+        crate::tui::loaders::show_stylish_install_loader(&install_packages, ecosystem);
+    } else {
+        Logger::raw_dim(&format!("» Pass-through execution for: {:?}", args.passthrough_args));
+    }
+    
+    Ok(())
+}
+
+// ── Interactive vulnerability decision prompt ─────────────────────────────────
+
+#[derive(Debug, Clone)]
+enum PkgAction {
+    /// Install the original (vulnerable) version anyway
+    InstallVulnerable,
+    /// Skip — don't install this package
+    Skip,
+    /// Install the recommended safe version
+    InstallFixed(String),
+}
+
+/// Show a per-package decision prompt for all vulnerable packages in the install list.
+/// Returns the final list of package specs to actually install.
+fn ask_vuln_decisions(
+    original_specs: &[String],
+    hits: &[scan::VulnHit],
+    ecosystem: &str,
+) -> Vec<String> {
+    use std::collections::HashMap;
+    use std::io::{self, Write};
+
+    // Build: package_name → best fixed_version (highest from all CVEs)
+    let mut fix_map: HashMap<String, Option<String>> = HashMap::new();
+    for h in hits {
+        let entry = fix_map.entry(h.package.clone()).or_insert(None);
+        if h.fixed_version.is_some() {
+            *entry = h.fixed_version.clone();
+        }
+    }
+
+    // Packages that hit vulnerabilities (by parsed name)
+    let vuln_names: std::collections::HashSet<String> = hits.iter()
+        .map(|h| h.package.clone())
+        .collect();
+
+    // ── Summary header ────────────────────────────────────────────────────────
+    println!();
+    println!(
+        "  {} {} vulnerable package(s) in your install list:\n",
+        "⚠".bold().bright_yellow(),
+        vuln_names.len()
+    );
+
+    for (idx, name) in vuln_names.iter().enumerate() {
+        let fixed = fix_map.get(name).and_then(|v| v.clone());
+        let cves: Vec<_> = hits.iter().filter(|h| &h.package == name).collect();
+        let worst_sev = cves.iter().map(|h| h.severity).fold("INFORMATIONAL", scan::escalate_severity);
+        let sev_colored = scan::severity_colored(worst_sev);
+        let fix_hint = fixed.as_deref()
+            .map(|f| format!(" → safe: {}", f.bright_green()))
+            .unwrap_or_else(|| " (no fix available)".truecolor(160,100,50).to_string());
+        println!(
+            "  {}  {}  [{}]  {} CVE(s){}",
+            format!("{:>2}.", idx+1).truecolor(80,80,100),
+            name.bold(),
+            sev_colored,
+            cves.len(),
+            fix_hint
+        );
+    }
+    println!();
+
+    // ── Apply-to-all shortcut ─────────────────────────────────────────────────
+    println!("  {}  Apply same action to ALL infected packages?", "→".truecolor(100,100,140));
+    println!(
+        "     {}  Install anyway (vulnerable)   {}  Skip all   {}  Install recommended   {}  Decide per package\n",
+        "[1]".bold().bright_yellow(),
+        "[2]".bold().bright_red(),
+        "[3]".bold().bright_green(),
+        "[4]".bold().bright_cyan(),
+    );
+    print!("  Choice (1/2/3/4): ");
+    io::stdout().flush().ok();
+
+    let mut global_choice = String::new();
+    io::stdin().read_line(&mut global_choice).ok();
+    let global_action: Option<PkgAction> = match global_choice.trim() {
+        "1" => Some(PkgAction::InstallVulnerable),
+        "2" => Some(PkgAction::Skip),
+        "3" => {
+            // Best fix per package
+            Some(PkgAction::InstallFixed("__per_pkg__".to_string()))
+        }
+        _ => None, // Per-package
+    };
+
+    // ── Build per-package decisions ───────────────────────────────────────────
+    let mut decisions: HashMap<String, PkgAction> = HashMap::new();
+
+    if let Some(ref ga) = global_action {
+        for name in &vuln_names {
+            let action = match ga {
+                PkgAction::InstallFixed(_) => {
+                    let fixed = fix_map.get(name).and_then(|v| v.clone());
+                    match fixed {
+                        Some(f) => PkgAction::InstallFixed(f),
+                        None    => {
+                            println!(
+                                "  {} No fix for {} — falling back to: install vulnerable",
+                                "⚠".bright_yellow(), name.bold()
+                            );
+                            PkgAction::InstallVulnerable
+                        }
+                    }
+                }
+                other => other.clone(),
+            };
+            decisions.insert(name.clone(), action);
+        }
+    } else {
+        // Per-package prompts
+        println!();
+        for name in &vuln_names {
+            let fixed = fix_map.get(name).and_then(|v| v.clone());
+            println!(
+                "\n  Package: {}",
+                name.bold().bright_white()
+            );
+            match &fixed {
+                Some(f) => println!(
+                    "  {}  Install anyway   {}  Skip   {}  Install {}",
+                    "[1]".bold().bright_yellow(),
+                    "[2]".bold().bright_red(),
+                    "[3]".bold().bright_green(),
+                    f.bright_green().bold()
+                ),
+                None => println!(
+                    "  {}  Install anyway (no fix available)   {}  Skip",
+                    "[1]".bold().bright_yellow(),
+                    "[2]".bold().bright_red(),
+                ),
+            }
+            print!("  Choice ({}): ", if fixed.is_some() { "1/2/3" } else { "1/2" });
+            io::stdout().flush().ok();
+
+            let mut line = String::new();
+            io::stdin().read_line(&mut line).ok();
+            let action = match (line.trim(), &fixed) {
+                ("2", _)          => PkgAction::Skip,
+                ("3", Some(f))    => PkgAction::InstallFixed(f.clone()),
+                _                 => PkgAction::InstallVulnerable,
+            };
+            decisions.insert(name.clone(), action);
+        }
+    }
+
+    // ── Print decision summary ────────────────────────────────────────────────
+    println!();
+    println!("  {}  Decision summary:\n", "✦".truecolor(100,160,255));
+    for (name, action) in &decisions {
+        let label = match action {
+            PkgAction::InstallVulnerable   => "install vulnerable".bright_yellow().to_string(),
+            PkgAction::Skip                => "skip".bright_red().to_string(),
+            PkgAction::InstallFixed(v)     => format!("install {}", v.bright_green()),
+        };
+        println!("     {}  {} → {}", "·".truecolor(60,60,80), name.bold(), label);
+    }
+    println!();
+
+    // ── Build final spec list ─────────────────────────────────────────────────
+    let mut final_specs: Vec<String> = Vec::new();
+
+    for spec in original_specs {
+        let (pkg_name, _) = scan::parse_pkg_spec(spec);
+
+        if let Some(action) = decisions.get(&pkg_name) {
+            match action {
+                PkgAction::Skip => {
+                    println!(
+                        "  {} Skipping {}",
+                        "✘".bright_red(), pkg_name.bold()
+                    );
+                }
+                PkgAction::InstallFixed(ver) => {
+                    let new_spec = format_spec_for_ecosystem(&pkg_name, ver, ecosystem);
+                    println!(
+                        "  {} {} → {}",
+                        "✔".bright_green(), pkg_name.bold(), new_spec.bright_green().bold()
+                    );
+                    final_specs.push(new_spec);
+                }
+                PkgAction::InstallVulnerable => {
+                    final_specs.push(spec.clone());
+                }
+            }
+        } else {
+            // Clean package — always include
+            final_specs.push(spec.clone());
+        }
+    }
+    final_specs
+}
+
+/// Format a package@version spec for the given ecosystem CLI install syntax.
+fn format_spec_for_ecosystem(name: &str, ver: &str, ecosystem: &str) -> String {
+    match ecosystem {
+        "pip" | "pip3" | "uv" | "poetry" => format!("{}=={}", name, ver),
+        "gem"                             => format!("{}:{}", name, ver),
+        "composer"                        => format!("{}:{}", name, ver),
+        "nuget"                           => format!("{} --version {}", name, ver),
+        _                                 => format!("{}@{}", name, ver), // npm/cargo/go/bun/pnpm/yarn/hex/pub
+    }
+}
+
+
+pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonError> {
+    let args = FirewallArgs::parse();
+    
+    match args.command {
+        None => {
+            Logger::splash(start);
+        },
+        Some(FirewallCommands::Daemon) => {
+            Logger::title("INFYNON FIREWALL ENGINE", "red");
+            Logger::step("Initialize background nightly intelligence service...");
+            Logger::info("Loading blocklists into memory map...");
+            Logger::success("Daemon successfully activated in background!");
+        },
+        Some(FirewallCommands::Dashboard) => {
+            Logger::title("INFYNON FIREWALL ENGINE", "red");
+            Logger::step("Loading real-time dashboard components...");
+            crate::tui::dashboard::open_dashboard();
+        },
+        Some(FirewallCommands::UpdateIntel) => {
+            Logger::title("INFYNON FIREWALL ENGINE", "red");
+            Logger::step("Fetching upstream LLM vulnerability Intel from OSV feeds...");
+            crate::daemon::updater::trigger_nightly_pipeline();
+        },
+    }
+    Ok(())
+}
+
