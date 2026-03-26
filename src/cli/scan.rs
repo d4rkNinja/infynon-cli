@@ -425,11 +425,36 @@ pub fn severity_colored(sev: &str) -> String {
 }
 
 pub fn upgrade_cmd(pkg: &scanner::LockedPackage, fixed: &str) -> String {
+    // Determine the actual CLI tool from the source lock file, not just the ecosystem
+    let source = pkg.source.as_str();
+    let source_file = std::path::Path::new(source)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(source);
+
     match pkg.ecosystem.as_str() {
-        "npm"       => format!("npm install {}@{}", pkg.name, fixed),
+        "npm" => {
+            // Detect yarn/pnpm/bun from lock file source
+            match source_file {
+                "yarn.lock"      => format!("yarn add {}@{}", pkg.name, fixed),
+                "pnpm-lock.yaml" => format!("pnpm add {}@{}", pkg.name, fixed),
+                _                => format!("npm install {}@{}", pkg.name, fixed),
+            }
+        }
         "crates.io" => format!("cargo add {}@{}", pkg.name, fixed),
-        "PyPI"      => format!("pip install {}=={}", pkg.name, fixed),
-        "Go"        => format!("go get {}@v{}", pkg.name, fixed),
+        "PyPI" => {
+            // Detect uv/poetry from lock file source
+            match source_file {
+                "uv.lock"      => format!("uv pip install {}=={}", pkg.name, fixed),
+                "poetry.lock"  => format!("poetry add {}=={}", pkg.name, fixed),
+                _              => {
+                    // Use pip3 on systems where pip might not exist
+                    if cfg!(unix) { format!("pip3 install {}=={}", pkg.name, fixed) }
+                    else          { format!("pip install {}=={}", pkg.name, fixed) }
+                }
+            }
+        }
+        "Go" => format!("go get {}@v{}", pkg.name, fixed),
         "RubyGems"  => format!("gem install {} -v {}", pkg.name, fixed),
         "Packagist" => format!("composer require {}:{}", pkg.name, fixed),
         "NuGet"     => format!("dotnet add package {} --version {}", pkg.name, fixed),
@@ -640,18 +665,22 @@ fn install_cmd_for_ecosystem(pkg: &str, fixed: &str, ecosystem: &str) -> String 
         "yarn"      => format!("yarn add {}@{}", pkg, fixed),
         "pnpm"      => format!("pnpm add {}@{}", pkg, fixed),
         "bun"       => format!("bun add {}@{}", pkg, fixed),
-        "crates.io" => format!("cargo add {}@{}", pkg, fixed),
-        "PyPI"      => format!("pip install {}=={}", pkg, fixed),
-        "Go"        => {
-            // Go versions need v-prefix; don't double-add it
+        "crates.io" | "cargo" => format!("cargo add {}@{}", pkg, fixed),
+        "uv"        => format!("uv pip install {}=={}", pkg, fixed),
+        "poetry"    => format!("poetry add {}=={}", pkg, fixed),
+        "PyPI" | "pip" | "pip3" => {
+            if cfg!(unix) { format!("pip3 install {}=={}", pkg, fixed) }
+            else           { format!("pip install {}=={}", pkg, fixed) }
+        }
+        "Go" | "go" => {
             let ver = if fixed.starts_with('v') { fixed.to_string() } else { format!("v{}", fixed) };
             format!("go get {}@{}", pkg, ver)
         },
-        "RubyGems"  => format!("gem install {} -v {}", pkg, fixed),
-        "Packagist" => format!("composer require {}:{}", pkg, fixed),
-        "NuGet"     => format!("dotnet add package {} --version {}", pkg, fixed),
-        "Hex"       => format!("mix deps.update {}", pkg),
-        "pub.dev"   => format!("dart pub upgrade {}", pkg),
+        "RubyGems" | "gem"  => format!("gem install {} -v {}", pkg, fixed),
+        "Packagist" | "composer" => format!("composer require {}:{}", pkg, fixed),
+        "NuGet" | "nuget"     => format!("dotnet add package {} --version {}", pkg, fixed),
+        "Hex" | "hex"       => format!("mix deps.update {}", pkg),
+        "pub.dev" | "pub"   => format!("dart pub upgrade {}", pkg),
         _           => format!("upgrade {} to {}", pkg, fixed),
     }
 }
