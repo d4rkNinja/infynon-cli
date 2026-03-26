@@ -26,10 +26,10 @@ jobs:
             os: ubuntu-latest
             ext: ""
           - target: x86_64-apple-darwin
-            os: macos-13
+            os: macos-latest
             ext: ""
           - target: aarch64-apple-darwin
-            os: macos-14
+            os: macos-latest
             ext: ""
 
     runs-on: ${{ matrix.os }}
