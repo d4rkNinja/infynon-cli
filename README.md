@@ -16,10 +16,6 @@
 
 ---
 
-```
-infynon pkg npm install express
-```
-
 ### Scan your dependencies for CVEs
 
 <p align="center">
