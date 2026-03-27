@@ -17,9 +17,10 @@ use serde::Deserialize;
 use std::time::Duration;
 
 fn client() -> Client {
+    let ua = format!("infynon/{} (https://github.com/d4rkNinja/infynon-cli)", env!("CARGO_PKG_VERSION"));
     Client::builder()
         .timeout(Duration::from_secs(10))
-        .user_agent("infynon/0.1.0-beta.4 (https://github.com/d4rkNinja/infynon-cli)")
+        .user_agent(ua)
         .build()
         .unwrap_or_default()
 }
@@ -201,6 +202,6 @@ fn pubdev_latest(name: &str) -> Option<String> {
 
 // ── URL encode ────────────────────────────────────────────────────────────────
 // Minimal percent-encoder for package names (handles scoped @scope/pkg)
-fn urlenc(s: &str) -> String {
+pub fn urlenc(s: &str) -> String {
     s.replace('@', "%40").replace('/', "%2F")
 }

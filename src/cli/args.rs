@@ -63,6 +63,92 @@ pub enum PkgCommands {
         #[arg(long, value_name = "FILE")]
         pkg_file: Option<String>,
     },
+
+    /// Deep recursive dependency audit with tree visualization
+    Audit {
+        /// Override lock/manifest file
+        #[arg(long, value_name = "FILE")]
+        pkg_file: Option<String>,
+    },
+
+    /// Show why a package is in your dependency tree
+    Why {
+        /// Package name to trace
+        package: String,
+        /// Override lock/manifest file
+        #[arg(long, value_name = "FILE")]
+        pkg_file: Option<String>,
+    },
+
+    /// Check for outdated dependencies across all ecosystems
+    Outdated {
+        /// Override lock/manifest file
+        #[arg(long, value_name = "FILE")]
+        pkg_file: Option<String>,
+    },
+
+    /// Show what changed between two versions of a package
+    Diff {
+        /// Package name
+        package: String,
+        /// First version
+        v1: String,
+        /// Second version
+        v2: String,
+        /// Ecosystem (auto-detected if omitted)
+        #[arg(long)]
+        ecosystem: Option<String>,
+    },
+
+    /// Health check: duplicates, unused deps, phantom deps, lock files
+    Doctor {
+        /// Override lock/manifest file
+        #[arg(long, value_name = "FILE")]
+        pkg_file: Option<String>,
+    },
+
+    /// Show package size, install weight, and dependency count
+    Size {
+        /// Package name(s) to check
+        packages: Vec<String>,
+        /// Ecosystem (auto-detected if omitted)
+        #[arg(long)]
+        ecosystem: Option<String>,
+    },
+
+    /// Search packages across ecosystems
+    Search {
+        /// Search query
+        query: String,
+        /// Limit to a specific ecosystem
+        #[arg(long)]
+        ecosystem: Option<String>,
+    },
+
+    /// Auto-fix all vulnerable dependencies to their nearest safe version
+    Fix {
+        /// Automatically fix all vulnerabilities
+        #[arg(long)]
+        auto: bool,
+        /// Override lock/manifest file
+        #[arg(long, value_name = "FILE")]
+        pkg_file: Option<String>,
+    },
+
+    /// Find and remove unused dependencies
+    Clean {
+        /// Override lock/manifest file
+        #[arg(long, value_name = "FILE")]
+        pkg_file: Option<String>,
+    },
+
+    /// Migrate between package managers (e.g. npm → pnpm, pip → uv)
+    Migrate {
+        /// Source package manager
+        from: String,
+        /// Target package manager
+        to: String,
+    },
 }
 
 #[derive(Parser, Debug)]

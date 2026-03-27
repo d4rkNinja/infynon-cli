@@ -1,5 +1,6 @@
 pub mod args;
 pub mod commands;
+pub mod features;
 pub mod scan;
 
 use std::time::Instant;

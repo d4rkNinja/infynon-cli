@@ -80,7 +80,7 @@ impl Logger {
   ██║██║ ╚████║██║        ██║   ██║ ╚████║╚██████╔╝██║ ╚████║
   ╚═╝╚═╝  ╚═══╝╚═╝        ╚═╝   ╚═╝  ╚═══╝ ╚═════╝ ╚═╝  ╚═══╝"#;
         println!("{}", banner.truecolor(0, 210, 255).bold());
-        println!("  {}\n", "Universal Package Security Manager  ·  v0.1.0-beta.1".truecolor(120, 120, 140).italic());
+        println!("  {}\n", format!("Universal Package Security Manager  ·  v{}", env!("CARGO_PKG_VERSION")).truecolor(120, 120, 140).italic());
 
         Self::divider();
         Self::section("⚡", "What is INFYNON?");
@@ -114,7 +114,7 @@ impl Logger {
         println!(
             "  {} {}",
             "infynon pkg".bold().truecolor(120, 80, 255),
-            "·  Package Security Manager  ·  v0.1.0-beta.1".truecolor(120, 120, 140).italic()
+            format!("·  Package Security Manager  ·  v{}", env!("CARGO_PKG_VERSION")).truecolor(120, 120, 140).italic()
         );
         println!("  {}\n", "─".repeat(52).truecolor(80, 50, 160));
 
@@ -169,6 +169,18 @@ impl Logger {
         println!("\n  {}\n", "── Auto-detect ────────────────────────────────────────────────".truecolor(60, 60, 80));
         Self::cmd_row("infynon pkg install <pkg>",            "Detects from package.json / Cargo.toml / go.mod …");
         Self::cmd_row("infynon pkg --strict install <pkg>",   "Treat WARN as BLOCKED (CI mode)");
+
+        println!("\n  {}\n", "── Security & Analysis ────────────────────────────────────────".truecolor(60, 60, 80));
+        Self::cmd_row("infynon pkg audit",                     "Deep recursive dependency scan with tree");
+        Self::cmd_row("infynon pkg why <package>",            "Trace why a package is in your tree");
+        Self::cmd_row("infynon pkg outdated",                 "Check for outdated dependencies");
+        Self::cmd_row("infynon pkg diff <pkg> <v1> <v2>",     "Compare two versions of a package");
+        Self::cmd_row("infynon pkg doctor",                   "Health check: dupes, unused, phantoms");
+        Self::cmd_row("infynon pkg size <package>",           "Show package size and dep count");
+        Self::cmd_row("infynon pkg search <query>",           "Cross-ecosystem package search");
+        Self::cmd_row("infynon pkg fix --auto",               "Auto-fix all vulnerable deps");
+        Self::cmd_row("infynon pkg clean",                    "Find & remove unused dependencies");
+        Self::cmd_row("infynon pkg migrate <from> <to>",      "Migrate between package managers");
 
         Self::divider();
         println!();

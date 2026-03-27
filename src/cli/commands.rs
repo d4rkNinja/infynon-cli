@@ -1,6 +1,7 @@
 use clap::Parser;
 use crate::cli::args::{PkgArgs, PkgCommands, FirewallArgs, FirewallCommands};
 use crate::cli::scan::{self, run_scan, check_packages_before_install, OutputFormat, FixLevel};
+use crate::cli::features;
 use crate::error::types::InfynonError;
 use crate::tui::logger::Logger;
 use crate::ecosystems::detector;
@@ -31,6 +32,56 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
                 let fl   = fix.map(|f| FixLevel::from_str(&f));
                 let file = pkg_file.or(args.pkg_file);
                 run_scan(fmt, fl, file.as_deref());
+                return Ok(());
+            }
+            PkgCommands::Audit { pkg_file } => {
+                let file = pkg_file.or(args.pkg_file);
+                features::cmd_audit_deep(file.as_deref());
+                return Ok(());
+            }
+            PkgCommands::Why { package, pkg_file } => {
+                let file = pkg_file.or(args.pkg_file);
+                features::cmd_why(&package, file.as_deref());
+                return Ok(());
+            }
+            PkgCommands::Outdated { pkg_file } => {
+                let file = pkg_file.or(args.pkg_file);
+                features::cmd_outdated(file.as_deref());
+                return Ok(());
+            }
+            PkgCommands::Diff { package, v1, v2, ecosystem } => {
+                features::cmd_diff(&package, &v1, &v2, ecosystem.as_deref());
+                return Ok(());
+            }
+            PkgCommands::Doctor { pkg_file } => {
+                let file = pkg_file.or(args.pkg_file);
+                features::cmd_doctor(file.as_deref());
+                return Ok(());
+            }
+            PkgCommands::Size { packages, ecosystem } => {
+                if packages.is_empty() {
+                    Logger::error("Please specify at least one package name.");
+                    return Ok(());
+                }
+                features::cmd_size(&packages, ecosystem.as_deref());
+                return Ok(());
+            }
+            PkgCommands::Search { query, ecosystem } => {
+                features::cmd_search(&query, ecosystem.as_deref());
+                return Ok(());
+            }
+            PkgCommands::Fix { auto: _, pkg_file } => {
+                let file = pkg_file.or(args.pkg_file);
+                features::cmd_fix_auto(file.as_deref());
+                return Ok(());
+            }
+            PkgCommands::Clean { pkg_file } => {
+                let file = pkg_file.or(args.pkg_file);
+                features::cmd_clean(file.as_deref());
+                return Ok(());
+            }
+            PkgCommands::Migrate { from, to } => {
+                features::cmd_migrate(&from, &to);
                 return Ok(());
             }
         }
