@@ -170,12 +170,28 @@ fn parse_yarn_lock(path: &str) -> Vec<LockedPackage> {
         let line = line.trim();
         if line.ends_with(':') && !line.starts_with('#') && !line.starts_with("\"__metadata") {
             let entry = line.trim_end_matches(':').trim_matches('"');
-            let name = entry.split('@').next().unwrap_or("").trim_matches('"').to_string();
+            // Handle scoped packages: @scope/name@version
+            // The name is everything up to the LAST '@' (skipping leading '@' for scoped pkgs)
+            let name = if entry.starts_with('@') {
+                // Scoped: find the last '@' after position 0
+                if let Some(pos) = entry[1..].rfind('@') {
+                    entry[..pos + 1].to_string()
+                } else {
+                    // No version separator — use entire entry as name
+                    entry.to_string()
+                }
+            } else if let Some(pos) = entry.find('@') {
+                entry[..pos].to_string()
+            } else {
+                entry.to_string()
+            };
             if !name.is_empty() { current_name = Some(name); }
         } else if line.starts_with("version") {
             if let Some(ref name) = current_name {
                 let version = line.trim_start_matches("version").trim().trim_matches('"').to_string();
-                out.push(LockedPackage { name: name.clone(), version, ecosystem: "npm".to_string(), source: path.to_string() });
+                if !version.is_empty() {
+                    out.push(LockedPackage { name: name.clone(), version, ecosystem: "npm".to_string(), source: path.to_string() });
+                }
             }
         }
     }

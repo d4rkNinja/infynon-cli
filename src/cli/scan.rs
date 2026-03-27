@@ -128,6 +128,7 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
     }
 
     let mut sources: Vec<String> = packages.iter().map(|p| p.source.clone()).collect();
+    sources.sort();
     sources.dedup();
     Logger::success(&format!("Found {} pinned packages from: {}", packages.len(), sources.join(", ")));
     println!();
@@ -157,16 +158,31 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
         Err(e) => { Logger::error(&format!("Vulnerability DB error: {}", e)); return; }
     };
 
-    // 3. Fetch full vuln details — show CVE ID + package name live
-    let total_vulns: usize = results.iter().map(|r| r.len()).sum();
-    if total_vulns == 0 {
+    // 3. Collect unique vuln IDs and map them back to packages
+    let mut vuln_to_packages: Vec<(String, usize)> = Vec::new(); // (vuln_id, package_index)
+    let mut unique_ids: Vec<String> = Vec::new();
+    {
+        use std::collections::HashSet;
+        let mut seen: HashSet<String> = HashSet::new();
+        for (i, vuln_refs) in results.iter().enumerate() {
+            for vref in vuln_refs {
+                if seen.insert(vref.id.clone()) {
+                    unique_ids.push(vref.id.clone());
+                }
+                vuln_to_packages.push((vref.id.clone(), i));
+            }
+        }
+    }
+
+    if unique_ids.is_empty() {
         println!();
         Logger::success("No known vulnerabilities found for your dependency tree!");
         return;
     }
 
+    // 4. Fetch full vuln details in parallel (20 concurrent threads)
     println!();
-    let detail_pb = ProgressBar::new(total_vulns as u64);
+    let detail_pb = ProgressBar::new(unique_ids.len() as u64);
     detail_pb.set_style(
         ProgressStyle::with_template(
             "  {spinner:.yellow}  fetching  {msg:<45} [{bar:40.yellow/blue}] {pos}/{len} CVEs"
@@ -176,38 +192,44 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
         .progress_chars("█▉▊▋▌▍▎▏  "),
     );
     detail_pb.enable_steady_tick(Duration::from_millis(60));
+    detail_pb.set_message(format!("{} unique CVEs (parallel fetch)...", unique_ids.len()));
 
-    let mut findings: Vec<reporter::ScanFinding> = Vec::new();
+    let detail_results = osv::fetch_vuln_details_batch(&unique_ids);
 
-    for (i, vuln_refs) in results.iter().enumerate() {
-        for vref in vuln_refs {
-            detail_pb.set_message(format!("{} ({})", vref.id, packages[i].name));
-            detail_pb.inc(1);
-            match osv::fetch_vuln_detail(&vref.id) {
-                Ok(detail) => {
-                    let severity = osv::severity_label(&detail);
-                    let include  = fix_level.as_ref().map_or(true, |fl| fl.matches(severity));
-                    if include {
-                        let fixed_version = osv::first_fixed_version(&detail);
-                        findings.push(reporter::ScanFinding {
-                            package:      packages[i].clone(),
-                            vuln:         detail,
-                            severity,
-                            fixed_version,
-                            suggested_version: None, // populated below
-                        });
-                    }
-                }
-                Err(e) => {
-                    detail_pb.suspend(|| {
-                        eprintln!("  {} could not fetch {}: {}", "warn:".yellow(), vref.id, e);
-                    });
-                }
+    // Build lookup: vuln_id → detail
+    let mut detail_map: std::collections::HashMap<String, osv::OsvVulnDetail> = std::collections::HashMap::new();
+    for (id, result) in detail_results {
+        detail_pb.inc(1);
+        match result {
+            Ok(detail) => { detail_map.insert(id, detail); }
+            Err(e) => {
+                detail_pb.suspend(|| {
+                    eprintln!("  {} could not fetch {}: {}", "warn:".yellow(), id, e);
+                });
             }
         }
     }
-    detail_pb.finish_with_message(format!("{} CVE records fetched", total_vulns));
+    detail_pb.finish_with_message(format!("{} CVE records fetched", detail_map.len()));
     println!();
+
+    // 5. Build findings from the detail map
+    let mut findings: Vec<reporter::ScanFinding> = Vec::new();
+    for (vuln_id, pkg_idx) in &vuln_to_packages {
+        if let Some(detail) = detail_map.get(vuln_id) {
+            let severity = osv::severity_label(detail);
+            let include = fix_level.as_ref().map_or(true, |fl| fl.matches(severity));
+            if include {
+                let fixed_version = osv::first_fixed_version(detail);
+                findings.push(reporter::ScanFinding {
+                    package:           packages[*pkg_idx].clone(),
+                    vuln:              detail.clone(),
+                    severity,
+                    fixed_version,
+                    suggested_version: None,
+                });
+            }
+        }
+    }
 
     // 4. For findings with no fixed version, look up latest stable from registry
     {
@@ -668,8 +690,7 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str) -> (bool
                     let sev      = osv::severity_label(&detail);
                     let fixed    = osv::first_fixed_version(&detail);
                     let summary  = detail.summary.clone().unwrap_or_else(|| "No description available".to_string());
-                    let eco_norm = ecosystem.to_string();
-                    let up_cmd   = fixed.as_deref().map(|fv| install_cmd_for_ecosystem(pkg_name, fv, &eco_norm));
+                    let up_cmd   = fixed.as_deref().map(|fv| install_cmd_for_ecosystem(pkg_name, fv, ecosystem));
 
                     // Track highest severity across all findings
                     highest_sev = escalate_severity(highest_sev, sev);

@@ -1,8 +1,11 @@
 use serde::{Deserialize, Serialize};
 use reqwest::blocking::Client;
+use std::sync::OnceLock;
 
 const BATCH_URL: &str = "https://api.osv.dev/v1/querybatch";
 const VULN_URL:  &str = "https://api.osv.dev/v1/vulns";
+const BATCH_CHUNK_SIZE: usize = 1000;
+const DETAIL_CONCURRENCY: usize = 20;
 
 // ── Request types ─────────────────────────────────────────────────────────────
 
@@ -111,65 +114,136 @@ pub fn first_fixed_version(detail: &OsvVulnDetail) -> Option<String> {
     None
 }
 
-// ── Shared HTTP client ────────────────────────────────────────────────────────
+// ── Shared HTTP client (reused across all calls) ─────────────────────────────
 
-fn client() -> Client {
-    Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .unwrap_or_default()
+static CLIENT: OnceLock<Client> = OnceLock::new();
+
+fn client() -> &'static Client {
+    CLIENT.get_or_init(|| {
+        Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .unwrap_or_default()
+    })
 }
 
 // ── API calls ─────────────────────────────────────────────────────────────────
 
 /// Send a batch of (name, ecosystem, version) queries to OSV.
 /// Returns a parallel vec of vuln ID lists.
+/// Filters out invalid entries (empty name/version) and chunks large batches.
 pub fn batch_query(packages: &[(String, String, String)]) -> Result<Vec<Vec<OsvVulnRef>>, String> {
-    let client = client();
+    let c = client();
 
-    let queries: Vec<OsvQuery> = packages
-        .iter()
-        .map(|(name, ecosystem, version)| OsvQuery {
-            package: OsvPackage { name: name.clone(), ecosystem: ecosystem.clone() },
-            version: version.clone(),
+    // Build queries, filtering out invalid entries that would cause HTTP 400
+    let valid_indices: Vec<usize> = (0..packages.len())
+        .filter(|&i| {
+            let (name, eco, ver) = &packages[i];
+            !name.trim().is_empty() && !eco.trim().is_empty() && !ver.trim().is_empty()
         })
         .collect();
 
-    let body = OsvBatchRequest { queries };
+    // Pre-fill results for all packages (empty for invalid ones)
+    let mut all_results: Vec<Vec<OsvVulnRef>> = vec![vec![]; packages.len()];
 
-    let resp = client
-        .post(BATCH_URL)
-        .json(&body)
-        .send()
-        .map_err(|e| format!("request failed: {}", e))?;
-
-    let status = resp.status();
-    if !status.is_success() {
-        return Err(format!("OSV API returned HTTP {}", status));
+    if valid_indices.is_empty() {
+        return Ok(all_results);
     }
 
-    let text = resp.text().map_err(|e| format!("failed to read response: {}", e))?;
-    let batch: OsvBatchResponse = serde_json::from_str(&text)
-        .map_err(|e| format!("failed to parse OSV response: {}", e))?;
-    Ok(batch.results.into_iter().map(|r| r.vulns).collect())
+    // Process in chunks to avoid oversized requests
+    for chunk_indices in valid_indices.chunks(BATCH_CHUNK_SIZE) {
+        let queries: Vec<OsvQuery> = chunk_indices.iter().map(|&i| {
+            let (name, ecosystem, version) = &packages[i];
+            OsvQuery {
+                package: OsvPackage { name: name.clone(), ecosystem: ecosystem.clone() },
+                version: version.clone(),
+            }
+        }).collect();
+
+        let body = OsvBatchRequest { queries };
+
+        let resp = c
+            .post(BATCH_URL)
+            .json(&body)
+            .send()
+            .map_err(|e| format!("request failed: {}", e))?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            let body_text = resp.text().unwrap_or_default();
+            return Err(format!("API returned HTTP {} — {}", status, body_text.chars().take(200).collect::<String>()));
+        }
+
+        let text = resp.text().map_err(|e| format!("failed to read response: {}", e))?;
+        let batch: OsvBatchResponse = serde_json::from_str(&text)
+            .map_err(|e| format!("failed to parse response: {}", e))?;
+
+        // Map results back to original indices
+        for (j, result) in batch.results.into_iter().enumerate() {
+            if j < chunk_indices.len() {
+                all_results[chunk_indices[j]] = result.vulns;
+            }
+        }
+    }
+
+    Ok(all_results)
 }
 
-/// Fetch full detail for a single vulnerability ID.
-pub fn fetch_vuln_detail(id: &str) -> Result<OsvVulnDetail, String> {
-    let client = client();
+/// Fetch full details for multiple vulnerability IDs in parallel.
+/// Uses a thread pool with bounded concurrency.
+pub fn fetch_vuln_details_batch(ids: &[String]) -> Vec<(String, Result<OsvVulnDetail, String>)> {
+    use std::sync::Mutex;
 
+    if ids.is_empty() {
+        return vec![];
+    }
+
+    let results: Mutex<Vec<(String, Result<OsvVulnDetail, String>)>> = Mutex::new(Vec::with_capacity(ids.len()));
+    let work: Mutex<std::slice::Iter<String>> = Mutex::new(ids.iter());
+
+    std::thread::scope(|s| {
+        let num_threads = DETAIL_CONCURRENCY.min(ids.len());
+        for _ in 0..num_threads {
+            let results = &results;
+            let work = &work;
+            s.spawn(move || {
+                let c = client();
+                loop {
+                    let id = {
+                        let mut iter = work.lock().unwrap();
+                        iter.next().cloned()
+                    };
+                    let Some(id) = id else { break };
+
+                    let result = fetch_single_detail(c, &id);
+                    results.lock().unwrap().push((id, result));
+                }
+            });
+        }
+    });
+
+    results.into_inner().unwrap()
+}
+
+/// Fetch full detail for a single vulnerability ID using the provided client.
+fn fetch_single_detail(c: &Client, id: &str) -> Result<OsvVulnDetail, String> {
     let url = format!("{}/{}", VULN_URL, id);
-    let resp = client.get(&url).send().map_err(|e| format!("request failed: {}", e))?;
+    let resp = c.get(&url).send().map_err(|e| format!("request failed: {}", e))?;
 
     let status = resp.status();
     if !status.is_success() {
-        return Err(format!("OSV API returned HTTP {} for {}", status, id));
+        return Err(format!("API returned HTTP {} for {}", status, id));
     }
 
     let text = resp.text().map_err(|e| format!("failed to read response: {}", e))?;
     let detail: OsvVulnDetail = serde_json::from_str(&text)
         .map_err(|e| format!("failed to parse vuln detail: {}", e))?;
     Ok(detail)
+}
+
+/// Fetch full detail for a single vulnerability ID (convenience wrapper).
+pub fn fetch_vuln_detail(id: &str) -> Result<OsvVulnDetail, String> {
+    fetch_single_detail(client(), id)
 }
 
 /// Derive a simple severity label from OSV severity array or summary keywords.

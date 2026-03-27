@@ -31,10 +31,7 @@ pub fn write_markdown(findings: &[ScanFinding], path: &str) -> Result<(), String
     out.push_str("| Risk | Package | Version | CVE / ID | Remediation | Upgrade Command |\n");
     out.push_str("|------|---------|---------|----------|-------------|------------------|\n");
     for f in findings {
-        let badge = match f.severity {
-            "CRITICAL" => "🔴", "HIGH" => "🟠",
-            "MEDIUM"   => "🟡", "LOW"  => "🟢", _ => "ℹ️",
-        };
+        let badge = severity_badge(f.severity);
         let (fix_col, cmd_col) = if let Some(ref fv) = f.fixed_version {
             (format!("✅ `{}`", fv), format!("`{}`", upgrade_cmd(&f.package, fv)))
         } else if let Some(ref sv) = f.suggested_version {
@@ -52,10 +49,7 @@ pub fn write_markdown(findings: &[ScanFinding], path: &str) -> Result<(), String
 
     // Detailed findings
     for f in findings {
-        let badge = match f.severity {
-            "CRITICAL" => "🔴", "HIGH" => "🟠",
-            "MEDIUM"   => "🟡", "LOW"  => "🟢", _ => "ℹ️",
-        };
+        let badge = severity_badge(f.severity);
         out.push_str(&format!("### {} {} — `{}`\n\n", badge, f.package.name, f.package.version));
         out.push_str("| Field | Value |\n|---|---|\n");
         out.push_str(&format!("| **Ecosystem** | {} |\n", f.package.ecosystem));
@@ -112,7 +106,6 @@ pub fn write_pdf(findings: &[ScanFinding], path: &str) -> Result<(), String> {
         layer_idx: layer1,
         y: 277.0_f32,
         page_num: 1,
-        total_pages: 1,
     };
 
     // ── Header bar ────────────────────────────────────────────────────────
@@ -276,7 +269,6 @@ struct PdfCtx<'a> {
     layer_idx:  PdfLayerIndex,
     y:          f32,
     page_num:   usize,
-    total_pages: usize,
 }
 
 impl<'a> PdfCtx<'a> {
@@ -311,13 +303,24 @@ impl<'a> PdfCtx<'a> {
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 pub fn severity_counts(findings: &[ScanFinding]) -> (usize, usize, usize, usize, usize) {
-    (
-        findings.iter().filter(|f| f.severity == "CRITICAL").count(),
-        findings.iter().filter(|f| f.severity == "HIGH").count(),
-        findings.iter().filter(|f| f.severity == "MEDIUM").count(),
-        findings.iter().filter(|f| f.severity == "LOW").count(),
-        findings.iter().filter(|f| f.severity == "INFORMATIONAL").count(),
-    )
+    let (mut crit, mut high, mut med, mut low, mut info) = (0, 0, 0, 0, 0);
+    for f in findings {
+        match f.severity {
+            "CRITICAL"      => crit += 1,
+            "HIGH"          => high += 1,
+            "MEDIUM"        => med  += 1,
+            "LOW"           => low  += 1,
+            _               => info += 1,
+        }
+    }
+    (crit, high, med, low, info)
+}
+
+fn severity_badge(sev: &str) -> &'static str {
+    match sev {
+        "CRITICAL" => "🔴", "HIGH" => "🟠",
+        "MEDIUM"   => "🟡", "LOW"  => "🟢", _ => "ℹ️",
+    }
 }
 
 fn upgrade_cmd(pkg: &LockedPackage, fixed: &str) -> String {
