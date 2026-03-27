@@ -160,9 +160,12 @@ pub(crate) fn cargo_toml_dep_names() -> Vec<String> {
     names
 }
 
-/// Load packages from lock files. If `explicit_file` is given, use it directly.
-/// If multiple lock files are detected and none is specified, prompt the user
-/// to choose one or all (matching the same UX as `infynon pkg scan`).
+pub(crate) fn format_severity_bar(count: usize, total: usize) -> String {
+    if total == 0 || count == 0 { return String::new(); }
+    let filled = ((count * 20) / total).max(1);
+    "█".repeat(filled)
+}
+
 pub(crate) fn load_packages(explicit_file: Option<&str>) -> Vec<scanner::LockedPackage> {
     if let Some(f) = explicit_file {
         return scanner::detect_locked_packages(Some(f));
@@ -183,9 +186,13 @@ pub(crate) fn load_packages(explicit_file: Option<&str>) -> Vec<scanner::LockedP
         .items(&options)
         .default(0)
         .interact_opt()
-        .unwrap_or(None);
+        .ok()
+        .flatten();
     match sel {
-        Some(0) | None => scanner::detect_locked_packages(None),
+        Some(0) | None => {
+            let files: Vec<&str> = found.iter().map(|(f, _)| *f).collect();
+            scanner::parse_selected_files(&files)
+        }
         Some(i) => scanner::parse_selected_files(&[found[i - 1].0]),
     }
 }

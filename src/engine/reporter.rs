@@ -108,6 +108,13 @@ pub fn write_pdf(findings: &[ScanFinding], path: &str) -> Result<(), String> {
         page_num: 1,
     };
 
+    // ── Full-page dark background ────────────────────────────────────────
+    {
+        let layer = ctx.layer();
+        layer.set_fill_color(Color::Rgb(Rgb::new(0.09, 0.11, 0.16, None)));
+        layer.add_rect(Rect::new(Mm(0.0), Mm(0.0), Mm(210.0), Mm(297.0)));
+    }
+
     // ── Header bar ────────────────────────────────────────────────────────
     {
         let layer = ctx.layer();
@@ -284,8 +291,12 @@ impl<'a> PdfCtx<'a> {
             self.y          = 285.0;
             self.page_num  += 1;
 
-            // Page header continuation
+            // Full-page dark background for new page
             let layer = self.layer();
+            layer.set_fill_color(Color::Rgb(Rgb::new(0.09, 0.11, 0.16, None)));
+            layer.add_rect(Rect::new(Mm(0.0), Mm(0.0), Mm(210.0), Mm(297.0)));
+
+            // Page header continuation
             layer.set_fill_color(Color::Rgb(Rgb::new(0.05, 0.07, 0.12, None)));
             layer.add_rect(Rect::new(Mm(0.0), Mm(288.0), Mm(210.0), Mm(297.0)));
             layer.set_fill_color(Color::Rgb(Rgb::new(0.0, 0.85, 0.9, None)));

@@ -101,11 +101,16 @@ pub fn cmd_audit_deep(pkg_file: Option<&str>) {
     }
 
     // ── Risk breakdown ──────────────────────────────────────────────────────
-    let critical     = vuln_sev.values().filter(|s| s.as_str() == "CRITICAL").count();
-    let high         = vuln_sev.values().filter(|s| s.as_str() == "HIGH").count();
-    let medium       = vuln_sev.values().filter(|s| s.as_str() == "MEDIUM").count();
-    let low          = vuln_sev.values().filter(|s| s.as_str() == "LOW").count();
-    let informational = vuln_sev.values().filter(|s| s.as_str() == "INFORMATIONAL").count();
+    let (mut critical, mut high, mut medium, mut low, mut informational) = (0, 0, 0, 0, 0);
+    for sev in vuln_sev.values() {
+        match sev.as_str() {
+            "CRITICAL"      => critical += 1,
+            "HIGH"          => high += 1,
+            "MEDIUM"        => medium += 1,
+            "LOW"           => low += 1,
+            _               => informational += 1,
+        }
+    }
     let clean        = packages.len().saturating_sub(vuln_map.len());
 
     // Weighted risk score 0–100
@@ -113,17 +118,20 @@ pub fn cmd_audit_deep(pkg_file: Option<&str>) {
     let max_weighted = packages.len() * 40;
     let risk_score: usize = if max_weighted == 0 { 0 } else { (weighted * 100 / max_weighted).min(100) };
 
-    let (overall_label, overall_color) = if critical > 0      { ("CRITICAL RISK", (255u8,  60u8,  60u8)) }
-        else if high > 0                                       { ("HIGH RISK",     (255u8, 140u8,  40u8)) }
-        else if medium > 0                                     { ("MEDIUM RISK",   (255u8, 200u8,  40u8)) }
-        else if low > 0 || informational > 0                   { ("LOW RISK",      (200u8, 255u8, 100u8)) }
-        else                                                   { ("CLEAN",         ( 50u8, 255u8, 160u8)) };
+    const SEV_COLORS: [(u8, u8, u8); 6] = [
+        (255,  60,  60), // CRITICAL
+        (255, 140,  40), // HIGH
+        (255, 200,  40), // MEDIUM
+        (200, 220, 100), // LOW
+        (160, 160, 200), // INFORMATIONAL
+        ( 50, 220, 130), // CLEAN
+    ];
 
-    fn sev_bar(count: usize, total: usize) -> String {
-        if total == 0 || count == 0 { return String::new(); }
-        let filled = ((count * 20) / total).max(1);
-        "█".repeat(filled)
-    }
+    let (overall_label, overall_color) = if critical > 0       { ("CRITICAL RISK", SEV_COLORS[0]) }
+        else if high > 0                                        { ("HIGH RISK",     SEV_COLORS[1]) }
+        else if medium > 0                                      { ("MEDIUM RISK",   SEV_COLORS[2]) }
+        else if low > 0 || informational > 0                    { ("LOW RISK",      SEV_COLORS[3]) }
+        else                                                    { ("CLEAN",         (50u8, 255u8, 160u8)) };
 
     println!();
     println!("  {}", "─".repeat(66).truecolor(40, 40, 60));
@@ -133,15 +141,15 @@ pub fn cmd_audit_deep(pkg_file: Option<&str>) {
 
     let total = packages.len();
     let rows = [
-        ("CRITICAL",     critical,      (255u8,  60u8,  60u8)),
-        ("HIGH",         high,          (255u8, 140u8,  40u8)),
-        ("MEDIUM",       medium,        (255u8, 200u8,  40u8)),
-        ("LOW",          low,           (200u8, 220u8, 100u8)),
-        ("INFORMATIONAL",informational, (160u8, 160u8, 200u8)),
-        ("CLEAN",        clean,         ( 50u8, 220u8, 130u8)),
+        ("CRITICAL",      critical,      SEV_COLORS[0]),
+        ("HIGH",          high,          SEV_COLORS[1]),
+        ("MEDIUM",        medium,        SEV_COLORS[2]),
+        ("LOW",           low,           SEV_COLORS[3]),
+        ("INFORMATIONAL", informational, SEV_COLORS[4]),
+        ("CLEAN",         clean,         SEV_COLORS[5]),
     ];
     for (label, count, (r, g, b)) in rows {
-        let bar_str = sev_bar(count, total);
+        let bar_str = format_severity_bar(count, total);
         println!(
             "     {:<14}  {:>4} packages  {}",
             label.bold().truecolor(r, g, b),
