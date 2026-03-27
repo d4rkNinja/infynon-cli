@@ -431,6 +431,42 @@ fn parse_pubspec_lock(path: &str) -> Vec<LockedPackage> {
     out
 }
 
+/// Detect which lock/manifest files exist in the current directory.
+/// Returns a list of (file_path, ecosystem_label) for each found file.
+pub fn detect_lock_files() -> Vec<(&'static str, &'static str)> {
+    let candidates: Vec<(&str, &str)> = vec![
+        ("package-lock.json", "npm"),
+        ("yarn.lock",         "yarn"),
+        ("pnpm-lock.yaml",   "pnpm"),
+        ("bun.lockb",        "bun"),
+        ("package.json",     "npm (manifest)"),
+        ("requirements.txt", "pip"),
+        ("pyproject.toml",   "pip/uv/poetry"),
+        ("poetry.lock",      "poetry"),
+        ("uv.lock",          "uv"),
+        ("Cargo.lock",       "cargo"),
+        ("go.sum",           "go"),
+        ("go.mod",           "go (manifest)"),
+        ("Gemfile.lock",     "gem"),
+        ("composer.lock",    "composer"),
+        ("packages.lock.json", "nuget"),
+        ("mix.lock",         "hex"),
+        ("pubspec.lock",     "pub"),
+    ];
+    candidates.into_iter()
+        .filter(|(path, _)| Path::new(path).exists())
+        .collect()
+}
+
+/// Parse packages from a specific list of lock files (user-selected subset).
+pub fn parse_selected_files(files: &[&str]) -> Vec<LockedPackage> {
+    let mut packages = Vec::new();
+    for file in files {
+        packages.extend(parse_custom_file(file));
+    }
+    packages
+}
+
 /// Return human-readable list of all supported lock/manifest files.
 pub fn supported_files() -> Vec<(&'static str, &'static str, &'static str)> {
     vec![

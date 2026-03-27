@@ -93,7 +93,7 @@ impl Logger {
         Self::row("  ", "Layer 3",      "LLM deep-code analysis via local Ollama  (<8s, flagged only)");
         Self::row("📦", "Ecosystems",   "npm · yarn · pnpm · bun · pip · uv · poetry · cargo · go");
         Self::cont(                      "gem · composer · nuget · hex · pub  — auto-detected from project");
-        Self::row("🌙", "Night Daemon", "Nightly CVE/OSV/GitHub feed crawl → LLM extraction → hot-swap");
+        Self::row("🌙", "Night Daemon", "Nightly CVE/GitHub feed crawl → LLM extraction → hot-swap");
         Self::row("🔒", "Privacy",      "Local-first. Zero data leaves machine unless API mode is opted in.");
 
         Self::divider();

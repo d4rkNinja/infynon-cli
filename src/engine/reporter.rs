@@ -5,10 +5,12 @@ use crate::engine::osv::OsvVulnDetail;
 use crate::engine::scanner::LockedPackage;
 
 pub struct ScanFinding {
-    pub package:       LockedPackage,
-    pub vuln:          OsvVulnDetail,
-    pub severity:      &'static str,
-    pub fixed_version: Option<String>,
+    pub package:           LockedPackage,
+    pub vuln:              OsvVulnDetail,
+    pub severity:          &'static str,
+    pub fixed_version:     Option<String>,
+    /// Latest stable version from registry — used when no fix exists in vulnerability DB.
+    pub suggested_version: Option<String>,
 }
 
 /// Write a Markdown report to disk.
@@ -25,21 +27,50 @@ pub fn write_markdown(findings: &[ScanFinding], path: &str) -> Result<(), String
     ));
     out.push_str("---\n\n");
 
+    // Unified vulnerability + remediation table
+    out.push_str("| Risk | Package | Version | CVE / ID | Remediation | Upgrade Command |\n");
+    out.push_str("|------|---------|---------|----------|-------------|------------------|\n");
     for f in findings {
         let badge = match f.severity {
             "CRITICAL" => "🔴", "HIGH" => "🟠",
             "MEDIUM"   => "🟡", "LOW"  => "🟢", _ => "ℹ️",
         };
-        out.push_str(&format!("## {} {} — `{}`\n\n", badge, f.package.name, f.package.version));
+        let (fix_col, cmd_col) = if let Some(ref fv) = f.fixed_version {
+            (format!("✅ `{}`", fv), format!("`{}`", upgrade_cmd(&f.package, fv)))
+        } else if let Some(ref sv) = f.suggested_version {
+            (format!("⚠️ No DB fix — try `{}`", sv), format!("`{}`", upgrade_cmd(&f.package, sv)))
+        } else {
+            ("❌ No fix available".to_string(), "—".to_string())
+        };
+        out.push_str(&format!(
+            "| {} `{}` | {} | `{}` | [`{}`](https://osv.dev/vulnerability/{}) | {} | {} |\n",
+            badge, f.severity, f.package.name, f.package.version,
+            f.vuln.id, f.vuln.id, fix_col, cmd_col
+        ));
+    }
+    out.push_str("\n---\n\n");
+
+    // Detailed findings
+    for f in findings {
+        let badge = match f.severity {
+            "CRITICAL" => "🔴", "HIGH" => "🟠",
+            "MEDIUM"   => "🟡", "LOW"  => "🟢", _ => "ℹ️",
+        };
+        out.push_str(&format!("### {} {} — `{}`\n\n", badge, f.package.name, f.package.version));
         out.push_str("| Field | Value |\n|---|---|\n");
         out.push_str(&format!("| **Ecosystem** | {} |\n", f.package.ecosystem));
         out.push_str(&format!("| **Source** | `{}` |\n", f.package.source));
-        out.push_str(&format!("| **CVE / OSV ID** | [`{}`](https://osv.dev/vulnerability/{}) |\n", f.vuln.id, f.vuln.id));
+        out.push_str(&format!("| **CVE / ID** | [`{}`](https://osv.dev/vulnerability/{}) |\n", f.vuln.id, f.vuln.id));
         out.push_str(&format!("| **Risk Level** | {} `{}` |\n", badge, f.severity));
         out.push_str(&format!("| **Current Version** | `{}` |\n", f.package.version));
         if let Some(ref fv) = f.fixed_version {
-            out.push_str(&format!("| **Fix Version** | `{}` |\n", fv));
+            out.push_str(&format!("| **Fix Version** | ✅ `{}` |\n", fv));
             out.push_str(&format!("| **Upgrade Command** | `{}` |\n", upgrade_cmd(&f.package, fv)));
+        } else if let Some(ref sv) = f.suggested_version {
+            out.push_str(&format!("| **Fix Version** | ⚠️ No fix in DB — latest stable: `{}` |\n", sv));
+            out.push_str(&format!("| **Upgrade Command** | `{}` |\n", upgrade_cmd(&f.package, sv)));
+        } else {
+            out.push_str("| **Fix Version** | ❌ No fix available |\n");
         }
         out.push_str(&format!("| **Published** | {} |\n", f.vuln.published.as_deref().unwrap_or("N/A")));
         if let Some(ref s) = f.vuln.summary {
@@ -174,6 +205,11 @@ pub fn write_pdf(findings: &[ScanFinding], path: &str) -> Result<(), String> {
             if let Some(ref fv) = f.fixed_version {
                 v.push(("Fix Version", fv.clone()));
                 v.push(("Upgrade", upgrade_cmd(&f.package, fv)));
+            } else if let Some(ref sv) = f.suggested_version {
+                v.push(("Remediation", format!("No DB fix — try latest: {}", sv)));
+                v.push(("Upgrade", upgrade_cmd(&f.package, sv)));
+            } else {
+                v.push(("Remediation", "No fix available".to_string()));
             }
             v
         };
@@ -221,7 +257,7 @@ pub fn write_pdf(findings: &[ScanFinding], path: &str) -> Result<(), String> {
         layer.set_fill_color(Color::Rgb(Rgb::new(0.08, 0.09, 0.13, None)));
         layer.add_rect(Rect::new(Mm(0.0), Mm(0.0), Mm(210.0), Mm(9.0)));
         layer.set_fill_color(Color::Rgb(Rgb::new(0.4, 0.4, 0.55, None)));
-        layer.use_text("INFYNON Security — powered by OSV.dev", 7.0_f32, Mm(14.0), Mm(3.0), &reg);
+        layer.use_text("INFYNON Security — Vulnerability Intelligence", 7.0_f32, Mm(14.0), Mm(3.0), &reg);
         layer.use_text("CONFIDENTIAL", 7.0_f32, Mm(170.0), Mm(3.0), &bold);
     }
 

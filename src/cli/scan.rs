@@ -36,6 +36,8 @@ impl FixLevel {
 
 /// Main entry point for `infynon pkg scan`
 pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_file: Option<&str>) {
+    use std::io::{self, Write};
+
     println!();
     Logger::title("INFYNON Package Scanner", "blue");
 
@@ -45,13 +47,83 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
     } else {
         Logger::step("Detecting lock files in current directory...");
     }
-    let packages = scanner::detect_locked_packages(pkg_file);
+
+    let packages = if pkg_file.is_some() {
+        scanner::detect_locked_packages(pkg_file)
+    } else {
+        let found_files = scanner::detect_lock_files();
+
+        if found_files.is_empty() {
+            Logger::error("No packages found in supported lock/manifest files.");
+            Logger::info("Supported: package-lock.json · yarn.lock · pnpm-lock.yaml · requirements.txt");
+            Logger::info("           poetry.lock · Cargo.lock · go.sum · Gemfile.lock · composer.lock");
+            Logger::info("           mix.lock · pubspec.lock  — or pass --pkg-file <path>");
+            return;
+        }
+
+        if found_files.len() == 1 {
+            // Single file — use it directly
+            scanner::parse_selected_files(&[found_files[0].0])
+        } else {
+            // Multiple lock files detected — let user choose
+            println!();
+            println!(
+                "  {} Found {} lock/manifest files:\n",
+                "ℹ".bright_cyan().bold(),
+                found_files.len()
+            );
+            for (idx, (file, eco)) in found_files.iter().enumerate() {
+                println!(
+                    "     {}  {} {}",
+                    format!("[{}]", idx + 1).bold().bright_cyan(),
+                    file.bold(),
+                    format!("({})", eco).truecolor(120, 120, 140)
+                );
+            }
+            println!();
+            println!(
+                "     {}  Scan all files",
+                "[A]".bold().bright_green()
+            );
+            println!();
+            print!("  Select files to scan (e.g. 1,3 or A for all): ");
+            io::stdout().flush().ok();
+
+            let mut choice = String::new();
+            io::stdin().read_line(&mut choice).ok();
+            let choice = choice.trim();
+
+            let selected_files: Vec<&str> = if choice.eq_ignore_ascii_case("a") || choice.is_empty() {
+                found_files.iter().map(|(f, _)| *f).collect()
+            } else {
+                choice.split(',')
+                    .filter_map(|s| {
+                        let idx: usize = s.trim().parse().ok()?;
+                        if idx >= 1 && idx <= found_files.len() {
+                            Some(found_files[idx - 1].0)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect()
+            };
+
+            if selected_files.is_empty() {
+                Logger::error("No valid files selected.");
+                return;
+            }
+
+            println!();
+            for f in &selected_files {
+                Logger::detail("» Scanning:", f);
+            }
+
+            scanner::parse_selected_files(&selected_files)
+        }
+    };
 
     if packages.is_empty() {
-        Logger::error("No packages found in supported lock/manifest files.");
-        Logger::info("Supported: package-lock.json · yarn.lock · pnpm-lock.yaml · requirements.txt");
-        Logger::info("           poetry.lock · Cargo.lock · go.sum · Gemfile.lock · composer.lock");
-        Logger::info("           mix.lock · pubspec.lock  — or pass --pkg-file <path>");
+        Logger::error("No packages found in selected lock/manifest files.");
         return;
     }
 
@@ -78,11 +150,11 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
         pb.inc(1);
         (p.name.clone(), p.ecosystem.clone(), p.version.clone())
     }).collect();
-    pb.finish_with_message(format!("{} packages queued → sending to OSV...", packages.len()));
+    pb.finish_with_message(format!("{} packages queued → checking vulnerabilities...", packages.len()));
 
     let results = match osv::batch_query(&tuples) {
         Ok(r) => r,
-        Err(e) => { Logger::error(&format!("OSV API error: {}", e)); return; }
+        Err(e) => { Logger::error(&format!("Vulnerability DB error: {}", e)); return; }
     };
 
     // 3. Fetch full vuln details — show CVE ID + package name live
@@ -122,6 +194,7 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
                             vuln:         detail,
                             severity,
                             fixed_version,
+                            suggested_version: None, // populated below
                         });
                     }
                 }
@@ -136,18 +209,33 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
     detail_pb.finish_with_message(format!("{} CVE records fetched", total_vulns));
     println!();
 
-    // 4. Summary table
-    println!();
-    print_summary_table(&findings);
-
-    // 5. Inline fix report (always shown when there are findings)
-    let has_fixes = findings.iter().any(|f| f.fixed_version.is_some());
-    if has_fixes {
-        print_fix_report(&findings);
+    // 4. For findings with no fixed version, look up latest stable from registry
+    {
+        use std::collections::HashMap;
+        let mut cache: HashMap<(String, String), Option<String>> = HashMap::new();
+        for f in findings.iter_mut() {
+            if f.fixed_version.is_none() {
+                let key = (f.package.name.clone(), f.package.ecosystem.clone());
+                let latest = cache.entry(key).or_insert_with(|| {
+                    crate::engine::registry::fetch_latest_version(&f.package.name, &f.package.ecosystem)
+                });
+                // Only suggest if the latest version differs from the current one
+                if let Some(ref lv) = latest {
+                    if lv != &f.package.version {
+                        f.suggested_version = Some(lv.clone());
+                    }
+                }
+            }
+        }
     }
 
-    // 5b. Auto-execute remediation commands when --fix was explicitly passed
-    if fix_level.is_some() && has_fixes {
+    // 5. Unified report table (vulnerability + remediation in one table)
+    println!();
+    print_report_table(&findings);
+
+    // 6. Auto-execute remediation commands when --fix was explicitly passed
+    let has_remediation = findings.iter().any(|f| f.fixed_version.is_some() || f.suggested_version.is_some());
+    if fix_level.is_some() && has_remediation {
         run_auto_fix(&findings);
     }
 
@@ -185,11 +273,14 @@ fn run_auto_fix(findings: &[reporter::ScanFinding]) {
     use std::collections::HashSet;
 
     let fixable: Vec<(&reporter::ScanFinding, String)> = findings.iter()
-        .filter_map(|f| f.fixed_version.as_deref().map(|v| (f, upgrade_cmd(&f.package, v))))
+        .filter_map(|f| {
+            let ver = f.fixed_version.as_deref().or(f.suggested_version.as_deref());
+            ver.map(|v| (f, upgrade_cmd(&f.package, v)))
+        })
         .collect();
 
     if fixable.is_empty() {
-        Logger::info("No packages have a known fixed version available.");
+        Logger::info("No packages have a known fixed or suggested version available.");
         return;
     }
 
@@ -209,11 +300,14 @@ fn run_auto_fix(findings: &[reporter::ScanFinding]) {
     for (finding, cmd) in &fixable {
         if !seen.insert(cmd.clone()) { continue; }
 
+        let target_ver = finding.fixed_version.as_deref()
+            .or(finding.suggested_version.as_deref())
+            .unwrap_or("?");
         let pkg_label = format!(
             "{} {} → {}",
             finding.package.name,
             finding.package.version,
-            finding.fixed_version.as_deref().unwrap_or("?")
+            target_ver
         );
 
         // Parse shell command into binary + args
@@ -295,24 +389,35 @@ fn run_auto_fix(findings: &[reporter::ScanFinding]) {
 
 // ── Tables ────────────────────────────────────────────────────────────────────
 
-fn print_summary_table(findings: &[reporter::ScanFinding]) {
+/// Unified report table: vulnerability info + remediation in a single table.
+fn print_report_table(findings: &[reporter::ScanFinding]) {
     use tabled::{Table, Tabled};
     use tabled::settings::{Style, Padding, object::Rows, Color};
 
-    // Plain-text risk label (no ANSI) for tabled — color is added as row prefix
     #[derive(Tabled)]
     struct Row {
-        #[tabled(rename = " Risk ")]      sev: String,
-        #[tabled(rename = " Package ")]   pkg: String,
-        #[tabled(rename = " Version ")]   ver: String,
-        #[tabled(rename = " CVE / ID ")] cve: String,
+        #[tabled(rename = " Risk ")]          sev: String,
+        #[tabled(rename = " Package ")]       pkg: String,
+        #[tabled(rename = " Version ")]       ver: String,
+        #[tabled(rename = " CVE / ID ")]      cve: String,
+        #[tabled(rename = " Remediation ")]   fix: String,
     }
 
-    let rows: Vec<Row> = findings.iter().map(|f| Row {
-        sev: f.severity.to_string(),          // plain text — no ANSI
-        pkg: f.package.name.chars().take(28).collect(),
-        ver: f.package.version.chars().take(14).collect(),
-        cve: f.vuln.id.clone(),
+    let rows: Vec<Row> = findings.iter().map(|f| {
+        let fix = if let Some(ref fv) = f.fixed_version {
+            fv.clone()
+        } else if let Some(ref sv) = f.suggested_version {
+            format!("~{} (latest)", sv)
+        } else {
+            "No fix".to_string()
+        };
+        Row {
+            sev: f.severity.to_string(),
+            pkg: f.package.name.chars().take(25).collect(),
+            ver: f.package.version.chars().take(12).collect(),
+            cve: f.vuln.id.clone(),
+            fix: fix.chars().take(18).collect(),
+        }
     }).collect();
 
     let mut table = Table::new(rows);
@@ -321,19 +426,45 @@ fn print_summary_table(findings: &[reporter::ScanFinding]) {
         .with(Padding::new(1, 1, 0, 0))
         .modify(Rows::first(), Color::BOLD | Color::FG_BRIGHT_CYAN);
 
-    println!("  {}\n", "Vulnerability Summary:".bold().white());
+    println!("  {}\n", "Vulnerability Report:".bold().white());
     println!("{}", table);
 
-    // Print summary text below each finding as indented block
+    // Print detailed remediation info below the table
     for f in findings {
-        if let Some(ref s) = f.vuln.summary {
-            let short: String = s.chars().take(90).collect();
+        let summary = f.vuln.summary.as_deref().unwrap_or("CVE in this version range");
+        let short: String = summary.chars().take(80).collect();
+
+        if let Some(ref fv) = f.fixed_version {
+            let cmd = upgrade_cmd(&f.package, fv);
             println!(
-                "       {} {} {}  {}",
+                "       {} {} {}  {} → {}  {}",
                 "→".truecolor(80,80,100),
                 f.vuln.id.truecolor(100,160,255),
                 f.package.name.bold(),
-                short.truecolor(160,160,180)
+                "fix:".bright_green(),
+                cmd.bright_green().bold(),
+                short.truecolor(140,140,160)
+            );
+        } else if let Some(ref sv) = f.suggested_version {
+            let cmd = upgrade_cmd(&f.package, sv);
+            println!(
+                "       {} {} {}  {} {} → {}  {}",
+                "→".truecolor(80,80,100),
+                f.vuln.id.truecolor(100,160,255),
+                f.package.name.bold(),
+                "no DB fix".truecolor(180,120,50),
+                "try latest:".truecolor(200,180,80),
+                cmd.truecolor(200,200,100).bold(),
+                short.truecolor(140,140,160)
+            );
+        } else {
+            println!(
+                "       {} {} {}  {}  {}",
+                "→".truecolor(80,80,100),
+                f.vuln.id.truecolor(100,160,255),
+                f.package.name.bold(),
+                "no fix available".truecolor(180,80,50),
+                short.truecolor(140,140,160)
             );
         }
     }
@@ -348,66 +479,10 @@ fn print_summary_table(findings: &[reporter::ScanFinding]) {
         format!("LOW: {}",      low).bold().bright_green(),
         format!("INFO: {}",     info).truecolor(140, 140, 160),
     );
-}
 
-/// Fix report — 5-column narrow table: package, old ver, fix ver, risk, CVE.
-/// Upgrade command + reason printed as indented lines below.
-fn print_fix_report(findings: &[reporter::ScanFinding]) {
-    use tabled::{Table, Tabled};
-    use tabled::settings::{Style, Padding, object::Rows, Color};
-
-    // Plain-text risk in fix table too
-    #[derive(Tabled)]
-    struct FixRow {
-        #[tabled(rename = " Risk ")]      risk:    String,
-        #[tabled(rename = " Package ")]   pkg:     String,
-        #[tabled(rename = " Current ")]   old_ver: String,
-        #[tabled(rename = " Fix Ver ")]   new_ver: String,
-        #[tabled(rename = " CVE ID ")]    id:      String,
-    }
-
-    let fixable: Vec<&reporter::ScanFinding> = findings.iter()
-        .filter(|f| f.fixed_version.is_some())
-        .collect();
-
-    if fixable.is_empty() { return; }
-
-    let rows: Vec<FixRow> = fixable.iter().map(|f| {
-        let fixed = f.fixed_version.as_deref().unwrap_or("N/A");
-        FixRow {
-            risk:    f.severity.to_string(),
-            pkg:     f.package.name.chars().take(25).collect(),
-            old_ver: f.package.version.chars().take(12).collect(),
-            new_ver: fixed.chars().take(12).collect(),
-            id:      f.vuln.id.clone(),
-        }
-    }).collect();
-
-    let mut table = Table::new(rows);
-    table
-        .with(Style::modern())
-        .with(Padding::new(1, 1, 0, 0))
-        .modify(Rows::first(), Color::BOLD | Color::FG_BRIGHT_YELLOW);
-
-    println!("  {}\n", "Fix Recommendations:".bold().truecolor(255, 170, 50));
-    println!("{}", table);
-
-    // Print upgrade command + reason below the table
-    for f in &fixable {
-        let fixed = f.fixed_version.as_deref().unwrap_or("N/A");
-        let cmd   = upgrade_cmd(&f.package, fixed);
-        let why   = f.vuln.summary.as_deref().unwrap_or("CVE in this version range").chars().take(80).collect::<String>();
-        println!(
-            "       {} {}  {} {}",
-            "run:".truecolor(80,80,100),
-            cmd.bright_green().bold(),
-            "#".truecolor(60,60,80),
-            why.truecolor(140,140,160)
-        );
-    }
-    println!();
     println!(
-        "  {}  Upgrade to the 'Fix Ver' column value to remediate each finding.\n",
+        "  {}  Upgrade to the 'Remediation' column value to fix each finding.\n     {}  ~ prefix means: no known fix in vulnerability DB — latest stable version suggested.\n",
+        "ℹ".bright_cyan(),
         "ℹ".bright_cyan()
     );
 }
@@ -537,12 +612,12 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str) -> (bool
                 None => {
                     sp.suspend(|| {
                         println!(
-                            "  {} Could not resolve latest version for {} — skipping OSV check for this package",
+                            "  {} Could not resolve latest version for {} — skipping vulnerability check",
                             "⚠".bright_yellow(),
                             name.bold()
                         );
                     });
-                    // Return empty version → will return no OSV hits → fail-open for this pkg
+                    // Return empty version → will return no hits → fail-open for this pkg
                     (name, eco_osv.clone(), String::new())
                 }
             }
@@ -550,7 +625,7 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str) -> (bool
         .collect();
 
     sp.set_message(format!(
-        "Checking {} package(s) against OSV vulnerability database...",
+        "Checking {} package(s) against vulnerability database...",
         names.len()
     ));
 
@@ -558,7 +633,7 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str) -> (bool
         Ok(r)  => r,
         Err(e) => {
             sp.finish_and_clear();
-            Logger::raw_dim(&format!("  OSV check skipped (API error): {}", e));
+            Logger::raw_dim(&format!("  CVE check skipped (API error): {}", e));
             return (true, vec![]);
         }
     };
@@ -566,7 +641,7 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str) -> (bool
 
     let total_hits: usize = results.iter().map(|r| r.len()).sum();
     if total_hits == 0 {
-        Logger::success("OSV check passed — no known CVEs for requested packages.");
+        Logger::success("Security check passed — no known CVEs for requested packages.");
         return (true, vec![]);
     }
 

@@ -1,6 +1,6 @@
 [package]
 name = "infynon"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.4"
 edition = "2021"
 description = "Universal package security manager — intercepts installs across npm, pip, cargo, go, gem, composer, nuget, hex, pub with 3-layer CVE verification"
 license = "MIT"
@@ -24,7 +24,7 @@ owo-colors  = "4.0"
 tabled      = "0.15"
 ratatui     = "0.26"
 dialoguer   = "0.11"
-reqwest     = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+reqwest     = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls", "gzip", "brotli", "deflate"] }
 serde       = { version = "1.0", features = ["derive"] }
 serde_json  = "1.0"
 printpdf    = "0.7"

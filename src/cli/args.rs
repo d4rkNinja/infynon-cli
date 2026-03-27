@@ -18,9 +18,16 @@ fn get_styles() -> Styles {
     styles = get_styles()
 )]
 pub struct PkgArgs {
-    /// Treat WARN verdicts as BLOCKED
-    #[arg(long, global = true)]
-    pub strict: bool,
+    /// Block vulnerable packages. Optionally specify severity level: critical | high | medium | low | all (default: all)
+    #[arg(
+        long,
+        global = true,
+        value_name = "LEVEL",
+        default_missing_value = "all",
+        num_args = 0..=1,
+        require_equals = false,
+    )]
+    pub strict: Option<String>,
 
     /// Override lock/manifest file path (e.g. --pkg-file ./subdir/Cargo.lock)
     #[arg(long, global = true, value_name = "FILE", help = "Path to a specific lock/manifest file to scan or install from")]
@@ -36,7 +43,7 @@ pub struct PkgArgs {
 
 #[derive(Subcommand, Debug)]
 pub enum PkgCommands {
-    /// Scan project lock/manifest files for known CVEs via OSV batch API
+    /// Scan project lock/manifest files for known CVEs
     Scan {
         /// Save report to file: markdown | pdf | both  (omit to show inline only)
         #[arg(long, value_name = "FORMAT")]

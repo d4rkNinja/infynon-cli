@@ -207,39 +207,49 @@ infynon pkg --strict npm install express   # exit 1 on any CVE
 
 ---
 
-## How It Works
+## Use with AI / Agentic Coding Tools
+
+Add this to your AI coding tool's system prompt or rules file (`.cursorrules`, `.claude/CLAUDE.md`, `.github/copilot-instructions.md`, etc.) to make it use INFYNON for all package installs:
+
+### Prompt
 
 ```
-  infynon pkg npm install express
-                  │
-                  ▼
-     ┌─────────────────────────┐
-     │  Parse package specs    │
-     │  Resolve latest version │
-     │  (9 registry APIs)      │
-     └────────────┬────────────┘
-                  │
-                  ▼
-     ┌─────────────────────────┐
-     │  OSV Batch Query        │
-     │  (osv.dev/v1/querybatch)│
-     └────────────┬────────────┘
-                  │
-            CVEs found?
-           ╱            ╲
-         No              Yes
-          │               │
-          ▼               ▼
-       Install    ┌───────────────┐
-       directly   │ Interactive:  │
-                  │ [1] Install   │
-                  │ [2] Skip      │
-                  │ [3] Upgrade   │
-                  └───────┬───────┘
-                          │
-                          ▼
-                  Execute native
-                  package manager
+When installing any package or dependency, ALWAYS use `infynon pkg` as a secure proxy instead of calling the package manager directly. This automatically scans for CVEs before installation.
+
+Examples:
+  - Instead of `npm install express`     → `infynon pkg npm install express`
+  - Instead of `pip install requests`    → `infynon pkg pip install requests`
+  - Instead of `yarn add lodash`         → `infynon pkg yarn add lodash`
+  - Instead of `cargo add serde`         → `infynon pkg cargo add serde`
+  - Instead of `go get golang.org/x/net` → `infynon pkg go get golang.org/x/net`
+  - Instead of `uv pip install fastapi`  → `infynon pkg uv pip install fastapi`
+  - Instead of `poetry add django`       → `infynon pkg poetry add django`
+  - Instead of `composer require laravel/framework` → `infynon pkg composer require laravel/framework`
+  - Instead of `gem install rails`       → `infynon pkg gem install rails`
+  - Instead of `dotnet add package X`    → `infynon pkg nuget add X`
+  - Instead of `dart pub add http`       → `infynon pkg pub add http`
+  - Instead of `mix deps.get`            → `infynon pkg hex deps.get`
+
+After adding dependencies, run `infynon pkg scan` to audit the full dependency tree.
+Use `infynon pkg scan --fix` to auto-remediate all fixable vulnerabilities.
+Use `infynon pkg scan --output both` to export Markdown + PDF reports.
+
+For strict CI pipelines, use `infynon pkg --strict <ecosystem> install <pkg>` to hard-block any vulnerable package.
+
+For full command reference, see: https://github.com/d4rkNinja/infynon-cli/tree/main/docs
+```
+
+### Example `.cursorrules` / `.claude/CLAUDE.md`
+
+```
+# Package Security
+
+All package installations MUST go through infynon:
+  infynon pkg <ecosystem> <command> <packages>
+
+Run `infynon pkg scan` after modifying dependencies.
+Run `infynon pkg scan --fix` to auto-fix vulnerabilities.
+Run `infynon pkg scan --output both` to generate security reports.
 ```
 
 ---

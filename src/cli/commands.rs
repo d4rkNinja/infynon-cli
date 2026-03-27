@@ -106,14 +106,22 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
         let (safe, hits) = check_packages_before_install(&install_packages, ecosystem);
 
         if !safe {
-            if args.strict {
-                println!(
-                    "\n  {}  {} — {}  (pass without --strict to choose per-package)\n",
-                    "╳".bright_red().bold(),
-                    "BLOCKED".bold().bright_red(),
-                    "--strict mode active".truecolor(200,80,80)
-                );
-                return Ok(());
+            if let Some(ref strict_level) = args.strict {
+                let level = scan::FixLevel::from_str(strict_level);
+                // Check if any hit meets the strict severity threshold
+                let blocked = hits.iter().any(|h| level.matches(h.severity));
+                if blocked {
+                    let level_label = if strict_level == "all" { "all severities".to_string() } else { format!("{}+", strict_level) };
+                    println!(
+                        "\n  {}  {} — {}  (blocking: {})\n",
+                        "╳".bright_red().bold(),
+                        "BLOCKED".bold().bright_red(),
+                        "--strict mode active".truecolor(200,80,80),
+                        level_label.truecolor(200,120,80)
+                    );
+                    return Ok(());
+                }
+                // Hits exist but none match the strict level — allow through
             }
 
             // Interactive decision prompt — replaces the countdown
@@ -362,7 +370,7 @@ pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonErr
         },
         Some(FirewallCommands::UpdateIntel) => {
             Logger::title("INFYNON FIREWALL ENGINE", "red");
-            Logger::step("Fetching upstream LLM vulnerability Intel from OSV feeds...");
+            Logger::step("Fetching upstream LLM vulnerability intel from security feeds...");
             crate::daemon::updater::trigger_nightly_pipeline();
         },
     }

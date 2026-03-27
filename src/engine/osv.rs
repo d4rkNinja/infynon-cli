@@ -141,9 +141,16 @@ pub fn batch_query(packages: &[(String, String, String)]) -> Result<Vec<Vec<OsvV
         .post(BATCH_URL)
         .json(&body)
         .send()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("request failed: {}", e))?;
 
-    let batch: OsvBatchResponse = resp.json().map_err(|e| e.to_string())?;
+    let status = resp.status();
+    if !status.is_success() {
+        return Err(format!("OSV API returned HTTP {}", status));
+    }
+
+    let text = resp.text().map_err(|e| format!("failed to read response: {}", e))?;
+    let batch: OsvBatchResponse = serde_json::from_str(&text)
+        .map_err(|e| format!("failed to parse OSV response: {}", e))?;
     Ok(batch.results.into_iter().map(|r| r.vulns).collect())
 }
 
@@ -152,8 +159,16 @@ pub fn fetch_vuln_detail(id: &str) -> Result<OsvVulnDetail, String> {
     let client = client();
 
     let url = format!("{}/{}", VULN_URL, id);
-    let resp = client.get(&url).send().map_err(|e| e.to_string())?;
-    let detail: OsvVulnDetail = resp.json().map_err(|e| e.to_string())?;
+    let resp = client.get(&url).send().map_err(|e| format!("request failed: {}", e))?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        return Err(format!("OSV API returned HTTP {} for {}", status, id));
+    }
+
+    let text = resp.text().map_err(|e| format!("failed to read response: {}", e))?;
+    let detail: OsvVulnDetail = serde_json::from_str(&text)
+        .map_err(|e| format!("failed to parse vuln detail: {}", e))?;
     Ok(detail)
 }
 

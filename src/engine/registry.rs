@@ -19,7 +19,7 @@ use std::time::Duration;
 fn client() -> Client {
     Client::builder()
         .timeout(Duration::from_secs(10))
-        .user_agent("infynon/0.1.0-beta.1 (https://github.com/d4rkNinja/infynon-cli)")
+        .user_agent("infynon/0.1.0-beta.4 (https://github.com/d4rkNinja/infynon-cli)")
         .build()
         .unwrap_or_default()
 }
