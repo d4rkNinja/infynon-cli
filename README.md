@@ -1,8 +1,8 @@
 <p align="center">
   <h1 align="center">🛡️ INFYNON</h1>
   <p align="center">
-    <strong>Dependency Firewall for Developers</strong><br/>
-    Prevent vulnerable packages from entering your project — before installation.
+    <strong>Network Firewall & Dependency Security Manager</strong><br/>
+    Real-time reverse proxy WAF with TUI dashboard + pre-install CVE verification for 14 ecosystems.
   </p>
 </p>
 
@@ -18,7 +18,10 @@
   </a>
   <img src="https://img.shields.io/badge/ecosystems-14-blue?style=for-the-badge" />
   <img src="https://img.shields.io/badge/lockfiles-15-purple?style=for-the-badge" />
-  <img src="https://img.shields.io/badge/version-0.1.0--beta.7-orange?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/version-0.2.0--beta.1-orange?style=for-the-badge" />
+  <a href="https://github.com/d4rkNinja/infynon-cli/tree/development">
+    <img src="https://img.shields.io/badge/channel-development-blueviolet?style=for-the-badge" />
+  </a>
 </p>
 
 <p align="center">
@@ -31,7 +34,9 @@
   <a href="#-why-infynon">Why INFYNON</a> •
   <a href="#-how-it-works">How It Works</a> •
   <a href="#-key-features">Features</a> •
+  <a href="#-firewall-mode-v020">Firewall</a> •
   <a href="#-installation">Install</a> •
+  <a href="#-development-channel">Dev Channel</a> •
   <a href="docs/commands.md">Commands</a>
 </p>
 
@@ -39,7 +44,22 @@
 
 ## ⚡ What is INFYNON?
 
-INFYNON is a **universal package security CLI** that acts as a **pre-installation firewall for dependencies**.
+INFYNON is a **dual-mode security tool** written in Rust:
+
+1. **`infynon` (Firewall Mode)** — A real-time reverse proxy WAF that sits between the internet and your backend, inspecting and filtering every HTTP request with a beautiful TUI dashboard.
+2. **`infynon pkg` (Package Manager Mode)** — A universal pre-installation firewall for dependencies across 14 ecosystems.
+
+### Firewall Mode (NEW in v0.2.0)
+
+```
+Internet → INFYNON Firewall → Nginx / App Server → Your Application
+```
+
+INFYNON acts as a **self-hosted Cloudflare WAF** — IP filtering, rate limiting, SQL injection detection, XSS protection, custom rules, all with a real-time TUI monitor.
+
+### Package Manager Mode
+
+INFYNON is also a **universal package security CLI** that acts as a **pre-installation firewall for dependencies**.
 
 Modern development relies heavily on third-party packages — but every install introduces risk.
 
@@ -296,21 +316,115 @@ INFYNON ensures that:
 
 ---
 
+## 🔥 Firewall Mode (v0.2.0)
+
+INFYNON now includes a **real network firewall** — a reverse proxy that inspects, filters, and blocks HTTP traffic in real time.
+
+### Quick Start — Firewall
+
+```bash
+# Initialize configuration
+infynon init --port 8080 --upstream-port 3000
+
+# Start firewall with TUI dashboard
+infynon start
+
+# Start in headless mode (no TUI)
+infynon start --headless
+
+# View status
+infynon status
+
+# Block an IP
+infynon block 203.0.113.50
+
+# View logs
+infynon logs --verdict block --count 100
+
+# Validate config
+infynon config check
+```
+
+### Firewall Features
+
+| Feature | Description |
+|---------|-------------|
+| **Reverse Proxy** | Sits between internet and your backend, forwards clean traffic |
+| **IP Filtering** | Blocklist, allowlist, CIDR range blocking |
+| **Auto-Reputation** | Automatically bans IPs that get blocked too many times |
+| **Rate Limiting** | Per-IP, per-path, and global rate limits with sliding window |
+| **WAF Engine** | SQL injection, XSS, path traversal, command injection detection |
+| **Custom Rules** | IF-THEN rules with combinable conditions and priority ordering |
+| **TUI Dashboard** | 7 real-time views: Dashboard, Live Feed, Blocked, IP Inspector, Rules, Stats, Config |
+| **JSONL Logging** | Structured event logging with separate blocked request log |
+| **Config from TUI** | Edit firewall settings directly from the terminal UI |
+| **Hot Config** | Edit `infynon.toml` — changes apply on restart |
+| **Cross-Platform** | Works on Linux, macOS, and Windows |
+
+### TUI Views
+
+| Key | View | Description |
+|-----|------|-------------|
+| `1` | Dashboard | Live stats, sparklines, top IPs, top rules, recent events |
+| `2` | Live Feed | All requests in real time with filtering |
+| `3` | Blocked | Blocked requests with rule and reason details |
+| `4` | IP Inspector | Search any IP — see full history, block/unblock |
+| `5` | Rules | Custom rules with hit counts, enable/disable |
+| `6` | Stats | Traffic breakdown, status codes, top paths |
+| `7` | Config | Edit settings directly from TUI |
+
+### Configuration
+
+Copy `infynon.example.toml` to `infynon.toml` and customize, or run `infynon init` for interactive setup. The config is also editable from the TUI Config view.
+
+---
+
 ## ⚠️ Current Scope
 
 INFYNON currently focuses on:
 
-* Known vulnerabilities (CVE-based detection)
-* Pre-install interception
-* Dependency-level security
+* **Firewall**: Reverse proxy WAF with real-time TUI monitoring
+* **Package Security**: Known vulnerabilities (CVE-based detection), pre-install interception
+* **Cross-platform**: Single binary for Linux, macOS, Windows
+
+---
+
+## 🧪 Development Channel
+
+Want to try the latest features before they hit stable? Follow the **development** branch:
+
+```bash
+# Clone the development branch
+git clone -b development https://github.com/d4rkNinja/infynon-cli.git
+cd infynon-cli
+
+# Build from source
+cargo build --release
+
+# Or install directly from development branch
+cargo install --git https://github.com/d4rkNinja/infynon-cli --branch development
+```
+
+The `development` branch contains:
+- Bleeding-edge features still under testing
+- Firewall TUI improvements and new views
+- Experimental WAF rules and pipeline stages
+- Performance optimizations before release
+
+> **Note**: The development branch may have breaking changes. For production use, stick to tagged releases on `main`.
+
+**Watch the branch** for updates: [github.com/d4rkNinja/infynon-cli/tree/development](https://github.com/d4rkNinja/infynon-cli/tree/development)
 
 ---
 
 ## 🔮 Upcoming
 
+* Geo-IP blocking (MaxMind GeoLite2 integration)
+* SQLite event database for historical queries
+* Webhook alerts (Slack, Discord, email)
 * LLM-based deep inspection (Layer 3 — local Ollama)
-* Firewall daemon & real-time monitoring dashboard
+* AI-powered anomaly detection and rule suggestion
 * SBOM generation (CycloneDX) after every install
-* Team policies & configuration file
-* `infynon pkg bun add` live support
+* TLS termination support
+* Maintenance mode
 

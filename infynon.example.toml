@@ -1,0 +1,141 @@
+# ============================================================
+# INFYNON FIREWALL CONFIGURATION
+# ============================================================
+# Copy this file to infynon.toml and customize.
+# Config is also editable from the TUI (press 7 for Config view).
+# Changes to this file take effect on next `infynon start`.
+
+# --- SERVER ---
+[server]
+listen_address = "0.0.0.0"            # Address to bind to
+listen_port = 8080                     # Port to listen on
+max_connections = 10000                # Max concurrent connections
+request_timeout_seconds = 30           # Timeout for full request read
+worker_threads = 0                     # 0 = auto (number of CPU cores)
+
+# --- UPSTREAM (your backend) ---
+[upstream]
+address = "127.0.0.1"                 # Backend address
+port = 3000                            # Backend port
+health_check_path = "/health"          # Health check endpoint
+health_check_interval_seconds = 10
+forward_timeout_seconds = 30
+
+# --- TLS (optional) ---
+[tls]
+enabled = false
+# cert_path = "tls/cert.pem"
+# key_path = "tls/key.pem"
+
+# --- IP FILTERING ---
+[ip]
+mode = "blocklist"                     # "blocklist" | "allowlist" | "disabled"
+# blocklist_file = "blocklists/ip-blocklist.txt"
+# allowlist_file = "blocklists/ip-allowlist.txt"
+blocklist = []
+allowlist = []
+
+[ip.auto_reputation]
+enabled = true
+threshold = 50                         # Block after N blocked requests
+window_minutes = 60                    # Within this time window
+ban_duration_minutes = 1440            # Ban for 24 hours
+
+# --- RATE LIMITING ---
+[rate_limit]
+enabled = true
+
+[rate_limit.global]
+requests_per_second = 1000
+
+[rate_limit.per_ip]
+requests = 100
+window_seconds = 60
+
+[rate_limit.per_path]
+"/api/login" = { requests = 5, window_seconds = 60 }
+"/api/register" = { requests = 3, window_seconds = 60 }
+
+# --- WAF (Web Application Firewall) ---
+[waf]
+enabled = true
+sqli_protection = true
+xss_protection = true
+path_traversal_protection = true
+command_injection_protection = true
+header_injection_protection = true
+max_url_length = 4096
+max_header_size = 8192
+max_body_size = 10485760               # 10MB
+allowed_methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"]
+blocked_extensions = [".env", ".git", ".sql", ".bak", ".log", ".ini", ".cfg"]
+blocked_paths = [
+    "/wp-admin",
+    "/wp-login.php",
+    "/.git/",
+    "/.env",
+    "/phpinfo.php",
+    "/server-status",
+    "/actuator",
+]
+block_empty_user_agent = true
+blocked_user_agents = [
+    "sqlmap",
+    "nikto",
+    "nmap",
+    "dirbuster",
+    "gobuster",
+    "masscan",
+    "ZmEu",
+]
+
+# --- CUSTOM RULES ---
+# Rules are evaluated in priority order (lowest first).
+# All conditions in a rule must match (AND logic).
+
+# [[rules]]
+# name = "block-admin-external"
+# description = "Block external access to admin endpoints"
+# priority = 10
+# enabled = true
+# [rules.condition]
+# path_prefix = "/admin"
+# [rules.action]
+# type = "block"
+# status = 403
+# message = "Admin access denied"
+
+# [[rules]]
+# name = "flag-trace-method"
+# description = "Flag but allow TRACE method for monitoring"
+# priority = 100
+# enabled = true
+# [rules.condition]
+# method = ["TRACE", "CONNECT"]
+# [rules.action]
+# type = "flag"
+# tag = "unusual-method"
+
+# --- LOGGING ---
+[logging]
+access_log = "logs/access.jsonl"
+blocked_log = "logs/blocked.jsonl"
+alert_log = "logs/alerts.jsonl"
+error_log = "logs/error.log"
+max_file_size_mb = 100
+max_files = 10
+log_request_headers = true
+log_request_body = false
+
+# --- TUI ---
+[tui]
+refresh_rate_fps = 10
+default_view = "dashboard"
+theme = "dark"
+max_events_in_memory = 10000
+
+# --- CUSTOM RESPONSES ---
+[responses]
+# block_page_html = "responses/block.html"
+# block_page_json = "responses/block.json"
+# ratelimit_page_html = "responses/ratelimit.html"

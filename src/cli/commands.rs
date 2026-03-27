@@ -402,29 +402,416 @@ fn format_spec_for_ecosystem(name: &str, ver: &str, ecosystem: &str) -> String {
 
 
 pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonError> {
+    use crate::cli::args::{FirewallCommands, RulesAction, ConfigAction};
+
     let args = FirewallArgs::parse();
-    
+
     match args.command {
         None => {
             Logger::splash(start);
-        },
+        }
+
+        // ── Init: create default config ─────────────────────────────────
+        Some(FirewallCommands::Init { port, upstream, upstream_port }) => {
+            use crate::firewall::config::{init_config, save_firewall_config};
+            Logger::title("INFYNON FIREWALL INIT", "blue");
+            let config = init_config(port, &upstream, upstream_port);
+            match save_firewall_config(&config, Some("infynon.toml")) {
+                Ok(()) => {
+                    Logger::success("Created infynon.toml with default configuration");
+                    Logger::detail("  Listen:", &format!("{}:{}", config.server.listen_address, config.server.listen_port));
+                    Logger::detail("  Upstream:", &format!("{}:{}", config.upstream.address, config.upstream.port));
+                    Logger::detail("  WAF:", "enabled (SQLi, XSS, path traversal, cmd injection)");
+                    Logger::detail("  Rate limit:", "100 req/min per IP");
+                    Logger::info("Edit infynon.toml to customize. Run `infynon start` to begin.");
+                }
+                Err(e) => Logger::error(&format!("Failed to create config: {}", e)),
+            }
+        }
+
+        // ── Start: run the reverse proxy + TUI ──────────────────────────
+        Some(FirewallCommands::Start { config, port, upstream, headless }) => {
+            use crate::firewall::config::load_firewall_config;
+            use crate::firewall::server::SharedState;
+            use crate::firewall::pipeline::Pipeline;
+            use crate::firewall::stats::Stats;
+            use crate::firewall::logger::EventLogger;
+            use std::sync::Arc;
+
+            Logger::title("INFYNON FIREWALL", "red");
+            Logger::step("Loading configuration...");
+
+            let mut cfg = load_firewall_config(config.as_deref())
+                .map_err(|e| InfynonError::System(e))?;
+
+            // Apply CLI overrides
+            if let Some(p) = port { cfg.server.listen_port = p; }
+            if let Some(ref u) = upstream {
+                if let Some((addr, port_str)) = u.rsplit_once(':') {
+                    cfg.upstream.address = addr.to_string();
+                    if let Ok(p) = port_str.parse::<u16>() { cfg.upstream.port = p; }
+                }
+            }
+
+            let listen_addr = format!("{}:{}", cfg.server.listen_address, cfg.server.listen_port);
+            let upstream_addr = format!("{}:{}", cfg.upstream.address, cfg.upstream.port);
+            Logger::detail("  Listen:", &listen_addr);
+            Logger::detail("  Upstream:", &upstream_addr);
+            Logger::detail("  WAF:", if cfg.waf.enabled { "enabled" } else { "disabled" });
+            Logger::detail("  Rate Limit:", if cfg.rate_limit.enabled { "enabled" } else { "disabled" });
+            Logger::detail("  IP Mode:", &cfg.ip.mode);
+            Logger::detail("  Rules:", &format!("{} custom rules loaded", cfg.rules.len()));
+
+            let pipeline = Pipeline::new(&cfg);
+            let stats = Stats::new();
+            let logger = EventLogger::new(&cfg.logging.access_log, &cfg.logging.blocked_log);
+
+            let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+
+            // Build tokio runtime
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| InfynonError::System(format!("Failed to create runtime: {}", e)))?;
+
+            let max_events = cfg.tui.max_events_in_memory;
+
+            // Spawn the logger on the runtime
+            let event_tx = rt.block_on(async { logger.spawn() });
+
+            let state = Arc::new(SharedState {
+                pipeline,
+                stats,
+                config: cfg,
+                event_tx,
+                recent_events: std::sync::Mutex::new(Vec::new()),
+                max_recent: max_events,
+                shutdown: shutdown_rx,
+            });
+
+            // Start proxy server in background
+            let server_state = state.clone();
+            let server_handle = rt.spawn(async move {
+                if let Err(e) = crate::firewall::server::run_proxy(server_state).await {
+                    eprintln!("Proxy server error: {}", e);
+                }
+            });
+
+            // Start periodic cleanup
+            let cleanup_state = state.clone();
+            rt.spawn(async move {
+                let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+                loop {
+                    interval.tick().await;
+                    cleanup_state.pipeline.cleanup();
+                }
+            });
+
+            Logger::success(&format!("Firewall running on {}", listen_addr));
+
+            if headless {
+                Logger::info("Running in headless mode. Press Ctrl+C to stop.");
+                // Block on Ctrl+C
+                rt.block_on(async {
+                    let _ = tokio::signal::ctrl_c().await;
+                });
+                let _ = shutdown_tx.send(true);
+            } else {
+                Logger::info("Starting TUI monitor... (press 'q' to quit)");
+                println!();
+
+                // Run TUI on main thread
+                run_firewall_tui(state.clone());
+                let _ = shutdown_tx.send(true);
+            }
+
+            // Give server time to shut down gracefully
+            rt.block_on(async {
+                let _ = tokio::time::timeout(
+                    std::time::Duration::from_secs(2),
+                    server_handle,
+                ).await;
+            });
+
+            Logger::success("Firewall stopped.");
+        }
+
+        // ── Monitor: TUI only (starts its own proxy) ────────────────────
+        Some(FirewallCommands::Monitor { config, view: _ }) => {
+            use crate::firewall::config::load_firewall_config;
+            use crate::firewall::server::SharedState;
+            use crate::firewall::pipeline::Pipeline;
+            use crate::firewall::stats::Stats;
+            use crate::firewall::logger::EventLogger;
+            use std::sync::Arc;
+
+            let cfg = load_firewall_config(config.as_deref())
+                .map_err(|e| InfynonError::System(e))?;
+
+            let pipeline = Pipeline::new(&cfg);
+            let stats = Stats::new();
+            let logger = EventLogger::new(&cfg.logging.access_log, &cfg.logging.blocked_log);
+
+            let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| InfynonError::System(format!("Failed to create runtime: {}", e)))?;
+
+            let max_events = cfg.tui.max_events_in_memory;
+            let event_tx = rt.block_on(async { logger.spawn() });
+
+            let state = Arc::new(SharedState {
+                pipeline,
+                stats,
+                config: cfg,
+                event_tx,
+                recent_events: std::sync::Mutex::new(Vec::new()),
+                max_recent: max_events,
+                shutdown: shutdown_rx,
+            });
+
+            let server_state = state.clone();
+            rt.spawn(async move {
+                if let Err(e) = crate::firewall::server::run_proxy(server_state).await {
+                    eprintln!("Proxy server error: {}", e);
+                }
+            });
+
+            let cleanup_state = state.clone();
+            rt.spawn(async move {
+                let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+                loop {
+                    interval.tick().await;
+                    cleanup_state.pipeline.cleanup();
+                }
+            });
+
+            run_firewall_tui(state);
+        }
+
+        // ── Status ──────────────────────────────────────────────────────
+        Some(FirewallCommands::Status { config }) => {
+            use crate::firewall::config::load_firewall_config;
+            Logger::title("INFYNON FIREWALL STATUS", "blue");
+            match load_firewall_config(config.as_deref()) {
+                Ok(cfg) => {
+                    Logger::detail("  Config:", &crate::firewall::config::default_config_path().display().to_string());
+                    Logger::detail("  Listen:", &format!("{}:{}", cfg.server.listen_address, cfg.server.listen_port));
+                    Logger::detail("  Upstream:", &format!("{}:{}", cfg.upstream.address, cfg.upstream.port));
+                    Logger::detail("  WAF:", if cfg.waf.enabled { "enabled" } else { "disabled" });
+                    Logger::detail("  Rate Limit:", if cfg.rate_limit.enabled { "enabled" } else { "disabled" });
+                    Logger::detail("  IP Mode:", &cfg.ip.mode);
+                    Logger::detail("  Rules:", &format!("{} custom rules", cfg.rules.len()));
+                }
+                Err(e) => Logger::error(&format!("Config error: {}", e)),
+            }
+        }
+
+        // ── Block/Unblock IP ────────────────────────────────────────────
+        Some(FirewallCommands::BlockIp { ip }) => {
+            Logger::title("INFYNON FIREWALL", "red");
+            // Append to blocklist file
+            let path = std::path::Path::new("blocklists/ip-blocklist.txt");
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            match std::fs::OpenOptions::new().create(true).append(true).open(path) {
+                Ok(mut f) => {
+                    use std::io::Write;
+                    let _ = writeln!(f, "{}", ip);
+                    Logger::success(&format!("Blocked IP: {}", ip));
+                    Logger::info("Restart firewall or edit config for immediate effect.");
+                }
+                Err(e) => Logger::error(&format!("Failed to write blocklist: {}", e)),
+            }
+        }
+        Some(FirewallCommands::UnblockIp { ip }) => {
+            Logger::title("INFYNON FIREWALL", "blue");
+            let path = "blocklists/ip-blocklist.txt";
+            match std::fs::read_to_string(path) {
+                Ok(content) => {
+                    let filtered: String = content.lines()
+                        .filter(|l| l.trim() != ip)
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    let _ = std::fs::write(path, filtered + "\n");
+                    Logger::success(&format!("Unblocked IP: {}", ip));
+                }
+                Err(_) => Logger::error("No blocklist file found."),
+            }
+        }
+
+        // ── Rules management ────────────────────────────────────────────
+        Some(FirewallCommands::Rules { action }) => {
+            use crate::firewall::config::load_firewall_config;
+            Logger::title("INFYNON FIREWALL RULES", "blue");
+            match action {
+                RulesAction::List => {
+                    match load_firewall_config(None) {
+                        Ok(cfg) => {
+                            if cfg.rules.is_empty() {
+                                Logger::info("No custom rules defined. Add [[rules]] sections to infynon.toml.");
+                            } else {
+                                for rule in &cfg.rules {
+                                    let status = if rule.enabled { "ON " } else { "OFF" };
+                                    println!(
+                                        "  [{}] {:3} {:<30} {}",
+                                        if rule.enabled { status } else { status },
+                                        rule.priority,
+                                        rule.name,
+                                        rule.description,
+                                    );
+                                }
+                            }
+                        }
+                        Err(e) => Logger::error(&format!("Config error: {}", e)),
+                    }
+                }
+                RulesAction::Enable { ref name } => {
+                    Logger::info(&format!("Enabling rule '{}' — edit infynon.toml to persist.", name));
+                }
+                RulesAction::Disable { ref name } => {
+                    Logger::info(&format!("Disabling rule '{}' — edit infynon.toml to persist.", name));
+                }
+            }
+        }
+
+        // ── Logs ────────────────────────────────────────────────────────
+        Some(FirewallCommands::Logs { follow: _, verdict, ip, since: _, count }) => {
+            Logger::title("INFYNON FIREWALL LOGS", "blue");
+            let log_path = "logs/access.jsonl";
+            match std::fs::read_to_string(log_path) {
+                Ok(content) => {
+                    let lines: Vec<&str> = content.lines().collect();
+                    let start = if lines.len() > count { lines.len() - count } else { 0 };
+                    for line in &lines[start..] {
+                        if let Ok(event) = serde_json::from_str::<crate::firewall::events::FirewallEvent>(line) {
+                            // Apply filters
+                            if let Some(ref v) = verdict {
+                                if !event.verdict.to_string().eq_ignore_ascii_case(v) { continue; }
+                            }
+                            if let Some(ref filter_ip) = ip {
+                                if &event.source_ip != filter_ip { continue; }
+                            }
+                            println!(
+                                "  {} {} {:<6} {:<30} {:<12} {}",
+                                event.timestamp.format("%H:%M:%S"),
+                                event.source_ip,
+                                event.method,
+                                truncate_str(&event.path, 30),
+                                event.verdict,
+                                event.blocked_reason.as_deref().unwrap_or("-"),
+                            );
+                        }
+                    }
+                }
+                Err(_) => Logger::info("No log file found. Start the firewall first."),
+            }
+        }
+
+        // ── Config ──────────────────────────────────────────────────────
+        Some(FirewallCommands::ConfigCmd { action }) => {
+            use crate::firewall::config::load_firewall_config;
+            Logger::title("INFYNON FIREWALL CONFIG", "blue");
+            match action {
+                Some(ConfigAction::Check) | None => {
+                    match load_firewall_config(None) {
+                        Ok(_) => Logger::success("Configuration is valid."),
+                        Err(e) => Logger::error(&format!("Configuration error: {}", e)),
+                    }
+                }
+                Some(ConfigAction::Show) => {
+                    match load_firewall_config(None) {
+                        Ok(cfg) => {
+                            match toml::to_string_pretty(&cfg) {
+                                Ok(s) => println!("{}", s),
+                                Err(e) => Logger::error(&format!("Serialization error: {}", e)),
+                            }
+                        }
+                        Err(e) => Logger::error(&format!("Config error: {}", e)),
+                    }
+                }
+            }
+        }
+
+        // ── Legacy commands ─────────────────────────────────────────────
         Some(FirewallCommands::Daemon) => {
             Logger::title("INFYNON FIREWALL ENGINE", "red");
             Logger::step("Initialize background nightly intelligence service...");
             Logger::info("Loading blocklists into memory map...");
             Logger::success("Daemon successfully activated in background!");
-        },
-        Some(FirewallCommands::Dashboard) => {
-            Logger::title("INFYNON FIREWALL ENGINE", "red");
-            Logger::step("Loading real-time dashboard components...");
-            crate::tui::dashboard::open_dashboard();
-        },
+        }
         Some(FirewallCommands::UpdateIntel) => {
             Logger::title("INFYNON FIREWALL ENGINE", "red");
             Logger::step("Fetching upstream LLM vulnerability intel from security feeds...");
             crate::daemon::updater::trigger_nightly_pipeline();
-        },
+        }
     }
     Ok(())
+}
+
+fn run_firewall_tui(state: std::sync::Arc<crate::firewall::server::SharedState>) {
+    use crossterm::{
+        event::{self, Event, KeyCode},
+        execute,
+        terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    };
+    use ratatui::{backend::CrosstermBackend, Terminal};
+    use std::io;
+
+    // Setup terminal
+    let _ = enable_raw_mode();
+    let mut stdout = io::stdout();
+    let _ = execute!(stdout, EnterAlternateScreen);
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = match Terminal::new(backend) {
+        Ok(t) => t,
+        Err(e) => {
+            let _ = disable_raw_mode();
+            eprintln!("Failed to initialize terminal: {}", e);
+            return;
+        }
+    };
+
+    let mut app = crate::tui::firewall_app::App::new(state);
+
+    loop {
+        // Render
+        let _ = terminal.draw(|f| {
+            crate::tui::views::render(f, &app);
+        });
+
+        // Handle input (with timeout for refresh)
+        if event::poll(std::time::Duration::from_millis(100)).unwrap_or(false) {
+            if let Ok(Event::Key(key)) = event::read() {
+                // Ctrl+C = quit
+                if key.code == KeyCode::Char('c')
+                    && key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL)
+                {
+                    break;
+                }
+                app.handle_key(key);
+            }
+        }
+
+        if app.should_quit {
+            break;
+        }
+    }
+
+    // Restore terminal
+    let _ = disable_raw_mode();
+    let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
+    let _ = terminal.show_cursor();
+}
+
+fn truncate_str(s: &str, max: usize) -> String {
+    if s.len() > max {
+        format!("{}...", &s[..max.saturating_sub(3)])
+    } else {
+        s.to_string()
+    }
 }
 
