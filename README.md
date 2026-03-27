@@ -18,7 +18,7 @@
   </a>
   <img src="https://img.shields.io/badge/ecosystems-14-blue?style=for-the-badge" />
   <img src="https://img.shields.io/badge/lockfiles-15-purple?style=for-the-badge" />
-  <img src="https://img.shields.io/badge/version-0.1.0--beta.6-orange?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/version-0.1.0--beta.7-orange?style=for-the-badge" />
 </p>
 
 <p align="center">

@@ -1,5 +1,9 @@
 # INFYNON Command Reference
 
+> **Multi-file detection**: When multiple lock files exist and `--pkg-file` is not specified,
+> commands that scan lock files (`scan`, `audit`, `why`, `outdated`, `doctor`, `fix`, `clean`)
+> automatically show an interactive selector so you can choose one specific file or scan all.
+
 ## Package Security Mode
 
 ```
@@ -101,12 +105,18 @@ infynon pkg add <pkg>
 
 ### Audit
 
-Deep recursive dependency audit with visual tree and CVE highlights.
+Deep recursive dependency audit with visual tree, CVE annotations, and risk breakdown.
 
 ```bash
 infynon pkg audit                          # audit detected lock files
 infynon pkg audit --pkg-file Cargo.lock    # audit specific file
 ```
+
+Output includes:
+- Dependency tree with `├──` / `└──` structure; vulnerable packages highlighted in red with CVE IDs and severity
+- **Risk Breakdown** table: per-severity counts (CRITICAL / HIGH / MEDIUM / LOW / INFORMATIONAL / CLEAN) with bar visualization
+- **Risk Score** (0–100): weighted by severity (CRITICAL=40, HIGH=20, MEDIUM=8, LOW=2, INFO=1 per affected package)
+- Overall risk label: CRITICAL RISK / HIGH RISK / MEDIUM RISK / LOW RISK / CLEAN
 
 ### Why
 

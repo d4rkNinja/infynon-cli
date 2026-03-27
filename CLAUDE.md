@@ -53,7 +53,8 @@ The single `infynon` binary operates in two modes, determined at startup in `mai
 - **Version spec formatting**: `format_spec_for_ecosystem()` handles ecosystem-specific syntax (npm: `@ver`, pip: `==ver`, gem/composer: `:ver`, nuget: `--version ver`)
 - **Dynamic versioning**: Version strings use `env!("CARGO_PKG_VERSION")` — update only in `Cargo.toml`
 - **Cross-ecosystem registry APIs**: `registry.rs` queries npm, PyPI, crates.io, Go proxy, RubyGems, Packagist, NuGet, Hex, pub.dev. `features/` extends this with search, size, and diff APIs
-- **Features folder**: `src/cli/features/` is a module folder with `mod.rs` (shared HTTP client via `OnceLock`, helpers: `detect_ecosystem`, `cargo_lock_deps`, `npm_declared_deps`, `format_bytes`, `spinner`, `bar`) and one file per command: `audit.rs`, `why_cmd.rs`, `outdated.rs`, `diff.rs`, `doctor.rs`, `size.rs`, `search.rs`, `fix.rs`, `clean.rs`, `migrate.rs`. All `cmd_*` functions are re-exported from `mod.rs`.
+- **Features folder**: `src/cli/features/` is a module folder with `mod.rs` (shared HTTP client via `OnceLock`, helpers: `detect_ecosystem`, `cargo_lock_deps`, `npm_declared_deps`, `format_bytes`, `spinner`, `bar`, `load_packages`) and one file per command: `audit.rs`, `why_cmd.rs`, `outdated.rs`, `diff.rs`, `doctor.rs`, `size.rs`, `search.rs`, `fix.rs`, `clean.rs`, `migrate.rs`. All `cmd_*` functions are re-exported from `mod.rs`.
+- **`load_packages(explicit_file)`**: Central helper in `features/mod.rs`. If `explicit_file` is `Some`, reads it directly. If `None` and multiple lock files exist, shows an interactive `dialoguer::Select` prompt (same UX as `infynon pkg scan`). All commands that accept `--pkg-file` use this instead of calling `scanner::detect_locked_packages` directly.
 
 ## CI/CD
 
