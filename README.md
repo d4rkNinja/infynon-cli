@@ -82,9 +82,9 @@ This simple shift prevents:
 ## ⚙️ How It Works
 
 1. **Intercept install command**
-   ```bash
+  ```bash
    infynon pkg npm install express
-````
+  ```
 
 2. **Resolve dependency tree**
 
