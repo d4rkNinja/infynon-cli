@@ -29,7 +29,7 @@ The single `infynon` binary operates in two modes, determined at startup in `mai
 
 ### Module Layout
 
-- **`cli/`** — Clap-based argument parsing (`args.rs`), command routing (`commands.rs`), scan logic (`scan.rs`), and feature commands (`features.rs` — audit, why, outdated, diff, doctor, size, search, fix, clean, migrate). The pkg mode uses trailing variadic args for passthrough to native package managers.
+- **`cli/`** — Clap-based argument parsing (`args.rs`), command routing (`commands.rs`), scan logic (`scan.rs`), and feature commands (`features/` folder — see below). The pkg mode uses trailing variadic args for passthrough to native package managers.
 - **`ecosystems/`** — `RegistryAdapter` trait in `adapter.rs` provides a polymorphic interface. `detector.rs` handles binary availability checks and auto-detection via manifest file presence. Per-ecosystem implementations in `npm.rs`, `pypi.rs`, `cargo.rs`.
 - **`engine/`** — The 3-layer security pipeline:
   - `layer1_blocklist.rs` — Fast in-memory blocklist check (<1ms)
@@ -52,7 +52,8 @@ The single `infynon` binary operates in two modes, determined at startup in `mai
 - **`--strict` flag**: Blocks installation if any CVE meets the specified severity threshold
 - **Version spec formatting**: `format_spec_for_ecosystem()` handles ecosystem-specific syntax (npm: `@ver`, pip: `==ver`, gem/composer: `:ver`, nuget: `--version ver`)
 - **Dynamic versioning**: Version strings use `env!("CARGO_PKG_VERSION")` — update only in `Cargo.toml`
-- **Cross-ecosystem registry APIs**: `registry.rs` queries npm, PyPI, crates.io, Go proxy, RubyGems, Packagist, NuGet, Hex, pub.dev. `features.rs` extends this with search, size, and diff APIs
+- **Cross-ecosystem registry APIs**: `registry.rs` queries npm, PyPI, crates.io, Go proxy, RubyGems, Packagist, NuGet, Hex, pub.dev. `features/` extends this with search, size, and diff APIs
+- **Features folder**: `src/cli/features/` is a module folder with `mod.rs` (shared HTTP client via `OnceLock`, helpers: `detect_ecosystem`, `cargo_lock_deps`, `npm_declared_deps`, `format_bytes`, `spinner`, `bar`) and one file per command: `audit.rs`, `why_cmd.rs`, `outdated.rs`, `diff.rs`, `doctor.rs`, `size.rs`, `search.rs`, `fix.rs`, `clean.rs`, `migrate.rs`. All `cmd_*` functions are re-exported from `mod.rs`.
 
 ## CI/CD
 

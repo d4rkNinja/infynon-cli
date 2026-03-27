@@ -5,9 +5,8 @@ use crate::cli::scan;
 pub fn cmd_audit_deep(pkg_file: Option<&str>) {
     println!();
     Logger::title("INFYNON Deep Audit", "blue");
-    Logger::step("Scanning all dependencies (direct + transitive)...");
 
-    let packages = scanner::detect_locked_packages(pkg_file);
+    let packages = load_packages(pkg_file);
     if packages.is_empty() {
         Logger::error("No packages found. Run from a project with lock files.");
         return;
@@ -16,6 +15,7 @@ pub fn cmd_audit_deep(pkg_file: Option<&str>) {
     let mut sources: Vec<String> = packages.iter().map(|p| p.source.clone()).collect();
     sources.sort();
     sources.dedup();
+    Logger::step("Scanning all dependencies (direct + transitive)...");
     Logger::success(&format!("Found {} total packages from: {}", packages.len(), sources.join(", ")));
 
     // Build tree structure
@@ -89,7 +89,7 @@ pub fn cmd_audit_deep(pkg_file: Option<&str>) {
         "Dependency Tree".bold().truecolor(0, 210, 255),
         "─".repeat(30).truecolor(40, 40, 60),
         if total_vulns > 0 {
-            format!("{} vulnerable", total_vulns).bold().bright_red().to_string()
+            format!("{} CVEs found", total_vulns).bold().bright_red().to_string()
         } else {
             "all clear".bold().bright_green().to_string()
         }
@@ -100,17 +100,66 @@ pub fn cmd_audit_deep(pkg_file: Option<&str>) {
         print_tree_node(node, "", i == tree.len() - 1, &vuln_map, &vuln_sev);
     }
 
-    // Summary
+    // ── Risk breakdown ──────────────────────────────────────────────────────
+    let critical     = vuln_sev.values().filter(|s| s.as_str() == "CRITICAL").count();
+    let high         = vuln_sev.values().filter(|s| s.as_str() == "HIGH").count();
+    let medium       = vuln_sev.values().filter(|s| s.as_str() == "MEDIUM").count();
+    let low          = vuln_sev.values().filter(|s| s.as_str() == "LOW").count();
+    let informational = vuln_sev.values().filter(|s| s.as_str() == "INFORMATIONAL").count();
+    let clean        = packages.len().saturating_sub(vuln_map.len());
+
+    // Weighted risk score 0–100
+    let weighted = critical * 40 + high * 20 + medium * 8 + low * 2 + informational;
+    let max_weighted = packages.len() * 40;
+    let risk_score: usize = if max_weighted == 0 { 0 } else { (weighted * 100 / max_weighted).min(100) };
+
+    let (overall_label, overall_color) = if critical > 0      { ("CRITICAL RISK", (255u8,  60u8,  60u8)) }
+        else if high > 0                                       { ("HIGH RISK",     (255u8, 140u8,  40u8)) }
+        else if medium > 0                                     { ("MEDIUM RISK",   (255u8, 200u8,  40u8)) }
+        else if low > 0 || informational > 0                   { ("LOW RISK",      (200u8, 255u8, 100u8)) }
+        else                                                   { ("CLEAN",         ( 50u8, 255u8, 160u8)) };
+
+    fn sev_bar(count: usize, total: usize) -> String {
+        if total == 0 || count == 0 { return String::new(); }
+        let filled = ((count * 20) / total).max(1);
+        "█".repeat(filled)
+    }
+
     println!();
     println!("  {}", "─".repeat(66).truecolor(40, 40, 60));
+    println!();
+    println!("  {}  {}", "◆ Risk Breakdown".bold().truecolor(0, 210, 255), format!("— {}", overall_label).bold().truecolor(overall_color.0, overall_color.1, overall_color.2));
+    println!();
+
+    let total = packages.len();
+    let rows = [
+        ("CRITICAL",     critical,      (255u8,  60u8,  60u8)),
+        ("HIGH",         high,          (255u8, 140u8,  40u8)),
+        ("MEDIUM",       medium,        (255u8, 200u8,  40u8)),
+        ("LOW",          low,           (200u8, 220u8, 100u8)),
+        ("INFORMATIONAL",informational, (160u8, 160u8, 200u8)),
+        ("CLEAN",        clean,         ( 50u8, 220u8, 130u8)),
+    ];
+    for (label, count, (r, g, b)) in rows {
+        let bar_str = sev_bar(count, total);
+        println!(
+            "     {:<14}  {:>4} packages  {}",
+            label.bold().truecolor(r, g, b),
+            count.to_string().bold().truecolor(r, g, b),
+            bar_str.truecolor(r, g, b),
+        );
+    }
+
+    println!();
     println!(
-        "\n  {}  {} total  ·  {} vulnerable  ·  {} clean\n",
+        "  {}  Risk Score: {}  ·  {} total pkgs  ·  {} CVEs  ·  {} unique pkgs affected",
         "◆".truecolor(0, 210, 255),
-        packages.len().to_string().bold(),
-        if total_vulns > 0 { total_vulns.to_string().bold().bright_red().to_string() }
-        else { "0".bold().bright_green().to_string() },
-        (packages.len() - vuln_map.len()).to_string().bold().bright_green(),
+        format!("{}/100", risk_score).bold().truecolor(overall_color.0, overall_color.1, overall_color.2),
+        total.to_string().bold(),
+        total_vulns.to_string().bold().bright_yellow(),
+        vuln_map.len().to_string().bold().bright_red(),
     );
+    println!();
 }
 
 #[derive(Debug, Clone)]

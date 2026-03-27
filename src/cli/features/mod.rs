@@ -29,6 +29,7 @@ use std::sync::OnceLock;
 use std::time::Duration;
 use std::fs;
 use std::path::Path;
+use dialoguer::Select;
 
 // ── Shared utilities ─────────────────────────────────────────────────────────
 
@@ -157,4 +158,34 @@ pub(crate) fn cargo_toml_dep_names() -> Vec<String> {
         }
     }
     names
+}
+
+/// Load packages from lock files. If `explicit_file` is given, use it directly.
+/// If multiple lock files are detected and none is specified, prompt the user
+/// to choose one or all (matching the same UX as `infynon pkg scan`).
+pub(crate) fn load_packages(explicit_file: Option<&str>) -> Vec<scanner::LockedPackage> {
+    if let Some(f) = explicit_file {
+        return scanner::detect_locked_packages(Some(f));
+    }
+    let found = scanner::detect_lock_files();
+    if found.is_empty() {
+        return vec![];
+    }
+    if found.len() == 1 {
+        return scanner::parse_selected_files(&[found[0].0]);
+    }
+    // Multiple lock files — let the user choose
+    println!();
+    let mut options = vec![format!("  ✦ All ({} files detected)", found.len())];
+    options.extend(found.iter().map(|(f, eco)| format!("  {}  ({})", f, eco)));
+    let sel = Select::new()
+        .with_prompt("Multiple lock files detected — select which to scan")
+        .items(&options)
+        .default(0)
+        .interact_opt()
+        .unwrap_or(None);
+    match sel {
+        Some(0) | None => scanner::detect_locked_packages(None),
+        Some(i) => scanner::parse_selected_files(&[found[i - 1].0]),
+    }
 }

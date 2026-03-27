@@ -18,6 +18,7 @@
   </a>
   <img src="https://img.shields.io/badge/ecosystems-14-blue?style=for-the-badge" />
   <img src="https://img.shields.io/badge/lockfiles-15-purple?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/version-0.1.0--beta.6-orange?style=for-the-badge" />
 </p>
 
 <p align="center">
@@ -29,8 +30,9 @@
   <a href="#-quick-start">Quick Start</a> •
   <a href="#-why-infynon">Why INFYNON</a> •
   <a href="#-how-it-works">How It Works</a> •
-  <a href="#-features">Features</a> •
-  <a href="#-installation">Install</a>
+  <a href="#-key-features">Features</a> •
+  <a href="#-installation">Install</a> •
+  <a href="docs/commands.md">Commands</a>
 </p>
 
 ---
@@ -153,9 +155,9 @@ hex • pub
 
 ### 🛠️ Auto Remediation
 
-* `--fix` upgrades vulnerable dependencies
-* Suggests safe versions
-* Reduces manual effort
+* `infynon pkg fix --auto` upgrades all vulnerable dependencies
+* `infynon pkg scan --fix high` targets critical + high only
+* Suggests safe versions from OSV.dev
 
 ---
 
@@ -172,15 +174,24 @@ infynon pkg --strict npm install express
 
 ### 📄 Reporting
 
-* Export results as:
+* Export results as Markdown or PDF
+* Includes CVE details, severity breakdown, upgrade suggestions
 
-  * Markdown
-  * PDF
-* Includes:
+---
 
-  * CVE details
-  * Severity breakdown
-  * Upgrade suggestions
+### 🔬 Dependency Intelligence
+
+| Command | Description |
+|---------|-------------|
+| `infynon pkg audit` | Recursive dependency tree with CVE annotations |
+| `infynon pkg why <pkg>` | Trace why a package is in your tree |
+| `infynon pkg outdated` | Detect outdated deps across all ecosystems |
+| `infynon pkg diff <pkg> v1 v2` | Compare versions: size, deps, scripts, CVEs |
+| `infynon pkg doctor` | Health check: dupes, unused, phantoms, missing locks |
+| `infynon pkg size <pkg>` | Install weight and transitive dep count |
+| `infynon pkg search <query>` | Cross-ecosystem search (npm, crates, PyPI, …) |
+| `infynon pkg clean` | Find and remove unused dependencies |
+| `infynon pkg migrate <from> <to>` | Migrate between package managers |
 
 ---
 
@@ -203,16 +214,45 @@ infynon pkg --strict npm install express
 ## ⚡ Quick Start
 
 ```bash
-# Scan project dependencies
+# Scan project dependencies for CVEs
 infynon pkg scan
 
-# Secure install (example)
+# Secure install — any ecosystem
 infynon pkg npm install express
+infynon pkg cargo add serde
+infynon pkg pip install requests
 
-# Auto-fix vulnerabilities
-infynon pkg scan --fix
+# Auto-fix all vulnerable dependencies
+infynon pkg fix --auto
 
-# Export report
+# Deep audit with dependency tree
+infynon pkg audit
+
+# Why is a package in the tree?
+infynon pkg why lodash
+
+# Check for outdated deps
+infynon pkg outdated
+
+# Compare two versions of a package
+infynon pkg diff express 4.17.1 4.18.2
+
+# Dependency health check
+infynon pkg doctor
+
+# Package size & weight
+infynon pkg size express
+
+# Cross-ecosystem search
+infynon pkg search http-client
+
+# Remove unused deps
+infynon pkg clean
+
+# Migrate npm → pnpm
+infynon pkg migrate npm pnpm
+
+# Export PDF report
 infynon pkg scan --output pdf
 
 # Strict mode for CI
@@ -268,9 +308,9 @@ INFYNON currently focuses on:
 
 ## 🔮 Upcoming
 
-* Advanced static analysis (typosquatting, scripts)
-* LLM-based deep inspection
-* Firewall daemon & real-time monitoring
-* SBOM generation (CycloneDX)
-* Team policies & configuration
+* LLM-based deep inspection (Layer 3 — local Ollama)
+* Firewall daemon & real-time monitoring dashboard
+* SBOM generation (CycloneDX) after every install
+* Team policies & configuration file
+* `infynon pkg bun add` live support
 

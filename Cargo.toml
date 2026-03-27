@@ -1,6 +1,6 @@
 [package]
 name = "infynon"
-version = "0.1.0-beta.6"
+version = "0.1.0-beta.7"
 edition = "2021"
 description = "Universal package security manager — intercepts installs across npm, pip, cargo, go, gem, composer, nuget, hex, pub with 3-layer CVE verification"
 license = "MIT"

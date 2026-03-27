@@ -5,7 +5,7 @@ pub fn cmd_doctor(pkg_file: Option<&str>) {
     Logger::title("INFYNON Doctor", "blue");
     Logger::step("Running health checks...\n");
 
-    let packages = scanner::detect_locked_packages(pkg_file);
+    let packages = load_packages(pkg_file);
     if packages.is_empty() {
         Logger::error("No packages found in lock files.");
         return;

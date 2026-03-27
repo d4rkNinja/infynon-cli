@@ -8,7 +8,7 @@ pub fn cmd_outdated(pkg_file: Option<&str>) {
     Logger::title("INFYNON Outdated Check", "blue");
     Logger::step("Checking for outdated dependencies...");
 
-    let packages = scanner::detect_locked_packages(pkg_file);
+    let packages = load_packages(pkg_file);
     if packages.is_empty() {
         Logger::error("No packages found in lock files.");
         return;
