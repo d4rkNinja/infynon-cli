@@ -1,1 +1,2 @@
-pub fn run_verification() { println!("Running 3-Layer verification..."); }
+// Verification pipeline stub removed — real CVE checking is done via
+// crate::engine::osv::batch_query in the scan pipeline.

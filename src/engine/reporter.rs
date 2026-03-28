@@ -178,17 +178,17 @@ pub fn write_pdf(findings: &[ScanFinding], path: &str) -> Result<(), String> {
             layer.set_fill_color(Color::Rgb(Rgb::new(0.08, 0.10, 0.17, None)));
             layer.add_rect(Rect::new(Mm(10.0), Mm(ctx.y - 5.5), Mm(200.0), Mm(ctx.y + 1.5)));
 
-            // Severity badge
+            // Severity badge — wide enough for "INFORMATIONAL" (~13 chars at 7pt ≈ 21mm)
             layer.set_fill_color(Color::Rgb(sev_color.clone()));
-            layer.add_rect(Rect::new(Mm(10.0), Mm(ctx.y - 5.5), Mm(28.0), Mm(ctx.y + 1.5)));
+            layer.add_rect(Rect::new(Mm(10.0), Mm(ctx.y - 5.5), Mm(36.0), Mm(ctx.y + 1.5)));
             layer.set_fill_color(Color::Rgb(Rgb::new(1.0, 1.0, 1.0, None)));
-            layer.use_text(f.severity, 7.0_f32, Mm(11.0), Mm(ctx.y - 2.5), &bold);
+            layer.use_text(f.severity, 7.0_f32, Mm(11.5), Mm(ctx.y - 2.5), &bold);
 
-            // Package name
+            // Package name — starts after badge with clear gap
             layer.set_fill_color(Color::Rgb(Rgb::new(0.95, 0.95, 1.0, None)));
             layer.use_text(
                 &format!("{}. {} @ {}", i+1, f.package.name, f.package.version),
-                10.0_f32, Mm(31.0), Mm(ctx.y - 2.5), &bold
+                10.0_f32, Mm(39.0), Mm(ctx.y - 2.5), &bold
             );
             // CVE ID right-aligned
             layer.set_fill_color(Color::Rgb(Rgb::new(0.4, 0.7, 1.0, None)));

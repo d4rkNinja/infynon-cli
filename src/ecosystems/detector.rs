@@ -14,6 +14,17 @@ pub fn is_installed(binary: &str) -> bool {
     false
 }
 
+/// Returns the actual binary name that is available on PATH.
+/// Tries the primary name first, then falls through alternatives.
+/// Falls back to the primary name if nothing is found (command will fail with a clear OS error).
+pub fn resolve_binary(primary: &str) -> String {
+    if native_which(primary) { return primary.to_string(); }
+    for alt in alt_binaries(primary) {
+        if native_which(alt) { return alt.to_string(); }
+    }
+    primary.to_string()
+}
+
 /// Run the OS-native binary resolver.
 fn native_which(binary: &str) -> bool {
     #[cfg(target_os = "windows")]
