@@ -85,6 +85,17 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
                 features::cmd_migrate(&from, &to);
                 return Ok(());
             }
+            PkgCommands::EagleEye { action } => {
+                use crate::cli::args::EagleEyeAction;
+                match action {
+                    EagleEyeAction::Setup => features::eagle_eye::cmd_setup(),
+                    EagleEyeAction::Start => features::eagle_eye::cmd_start(),
+                    EagleEyeAction::Status => features::eagle_eye::cmd_status(),
+                    EagleEyeAction::Enable => features::eagle_eye::cmd_enable(),
+                    EagleEyeAction::Disable => features::eagle_eye::cmd_disable(),
+                }
+                return Ok(());
+            }
         }
     }
 

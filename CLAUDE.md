@@ -80,7 +80,8 @@ The single `infynon` binary operates in two modes, determined at startup in `mai
 - **Cross-platform**: Uses `cfg(windows)` / `cfg(not(windows))` for home directory resolution. All I/O uses cross-platform APIs. No Unix-specific features
 - **Ecosystem auto-detection**: Falls back through manifest file checks (package.json → Cargo.toml → pyproject.toml → go.mod → etc.) in `commands.rs`
 - **Interactive vulnerability decisions**: Per-package prompts to install anyway, skip, or install a fixed version
-- **Features folder**: `src/cli/features/` has one file per command: `audit.rs`, `why_cmd.rs`, `outdated.rs`, `diff.rs`, `doctor.rs`, `size.rs`, `search.rs`, `fix.rs`, `clean.rs`, `migrate.rs`
+- **Features folder**: `src/cli/features/` has one file per command: `audit.rs`, `why_cmd.rs`, `outdated.rs`, `diff.rs`, `doctor.rs`, `size.rs`, `search.rs`, `fix.rs`, `clean.rs`, `migrate.rs`, `eagle_eye.rs`
+- **Eagle Eye** (`eagle_eye.rs`): Scheduled vulnerability monitoring with email alerts. Interactive setup (SMTP config, project paths, risk levels, scan interval), foreground scanner loop, HTML email templates with per-project CVE breakdown. Config stored in `~/.infynon/eagle-eye.toml`
 
 ### Firewall CLI Commands
 

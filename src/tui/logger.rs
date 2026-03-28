@@ -185,6 +185,13 @@ impl Logger {
         Self::cmd_row("infynon pkg install <pkg>",            "Detects from package.json / Cargo.toml / go.mod …");
         Self::cmd_row("infynon pkg --strict install <pkg>",   "Treat WARN as BLOCKED (CI mode)");
 
+        println!("\n  {}\n", "── Eagle Eye  (scheduled monitoring) ──────────────────────────".truecolor(60, 60, 80));
+        Self::cmd_row("infynon pkg eagle-eye setup",          "Interactive setup: SMTP, paths, risk level");
+        Self::cmd_row("infynon pkg eagle-eye start",          "Start scheduled vulnerability monitoring");
+        Self::cmd_row("infynon pkg eagle-eye status",         "Show current Eagle Eye config and status");
+        Self::cmd_row("infynon pkg eagle-eye enable",         "Enable Eagle Eye monitoring");
+        Self::cmd_row("infynon pkg eagle-eye disable",        "Disable Eagle Eye monitoring");
+
         println!("\n  {}\n", "── Security & Analysis ────────────────────────────────────────".truecolor(60, 60, 80));
         Self::cmd_row("infynon pkg scan",                     "Scan lock files for known CVEs");
         Self::cmd_row("infynon pkg audit",                    "Deep recursive dependency scan with tree");

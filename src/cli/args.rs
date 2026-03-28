@@ -149,6 +149,27 @@ pub enum PkgCommands {
         /// Target package manager
         to: String,
     },
+
+    /// Eagle Eye — scheduled vulnerability monitoring with email alerts
+    #[command(name = "eagle-eye")]
+    EagleEye {
+        #[command(subcommand)]
+        action: EagleEyeAction,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum EagleEyeAction {
+    /// Interactive setup — configure SMTP, paths, risk level, schedule
+    Setup,
+    /// Start Eagle Eye monitoring (runs in foreground)
+    Start,
+    /// Show current Eagle Eye configuration and status
+    Status,
+    /// Enable Eagle Eye monitoring
+    Enable,
+    /// Disable Eagle Eye monitoring
+    Disable,
 }
 
 #[derive(Parser, Debug)]

@@ -208,6 +208,27 @@ infynon pkg clean --pkg-file package-lock.json
 
 Detects unused deps, shows a list, prompts for confirmation, then runs the appropriate uninstall command per ecosystem.
 
+### Eagle Eye — Scheduled Vulnerability Monitoring
+
+Monitor multiple projects on a timer, scan for CVEs, get email alerts.
+
+```bash
+infynon pkg eagle-eye setup           # interactive setup (SMTP, paths, risk level, interval)
+infynon pkg eagle-eye start           # start monitoring (foreground)
+infynon pkg eagle-eye status          # show current config
+infynon pkg eagle-eye enable          # enable monitoring
+infynon pkg eagle-eye disable         # disable monitoring
+```
+
+**Setup walks through:**
+1. SMTP configuration (host, port, username, password, TLS)
+2. Email addresses (from, recipients)
+3. Project paths to monitor (multiple directories)
+4. Scan interval (hours)
+5. Risk level threshold (CRITICAL only / CRITICAL+HIGH / CRITICAL+HIGH+MEDIUM / all)
+
+Config stored in `~/.infynon/eagle-eye.toml`. Sends styled HTML emails with per-project vulnerability tables, severity counts, and fix suggestions.
+
 ### Migrate
 
 Migrate your project between package managers.
