@@ -246,21 +246,13 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
 ///                    (e.g. "pip3" instead of "pip", "flutter" instead of "dart")
 ///
 /// Ecosystem-specific command shapes:
-/// - `pub`   → `<dart|flutter> pub <args>`  (pub is a sub-tool of the Dart SDK)
-/// - `hex`   → `mix <args>`                 (Elixir mix manages hex packages)
-/// - `nuget` → `dotnet <args>`              (modern .NET uses the dotnet CLI)
-/// - others  → `<actual_binary> <args>`     (binary name == command prefix)
+/// - `pub` → `<dart|flutter> pub <args>`  (pub is a sub-tool of the Dart SDK)
+/// - all others → `<actual_binary> <args>`
 fn build_proxy_cmd(ecosystem: &str, actual_binary: &str, args: &[String]) -> String {
     let suffix = args.join(" ");
     match ecosystem {
-        // pub: `dart pub add phoenix` or `flutter pub add phoenix`
-        "pub"   => format!("{} pub {}", actual_binary, suffix),
-        // hex: `mix install phoenix` → caller already uses mix-style args
-        "hex"   => format!("{} {}", actual_binary, suffix),
-        // nuget: `dotnet add package Newtonsoft.Json --version 13.0.3`
-        "nuget" => format!("{} {}", actual_binary, suffix),
-        // all others: use the resolved binary directly
-        _       => format!("{} {}", actual_binary, suffix),
+        "pub" => format!("{} pub {}", actual_binary, suffix),
+        _     => format!("{} {}", actual_binary, suffix),
     }
 }
 
