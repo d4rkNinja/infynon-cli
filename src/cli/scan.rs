@@ -219,7 +219,11 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
             let severity = osv::severity_label(detail);
             let include = fix_level.as_ref().map_or(true, |fl| fl.matches(severity));
             if include {
-                let fixed_version = osv::first_fixed_version(detail);
+                let fixed_version = osv::best_fixed_version(
+                    detail,
+                    &packages[*pkg_idx].name,
+                    &packages[*pkg_idx].ecosystem,
+                );
                 findings.push(reporter::ScanFinding {
                     package:           packages[*pkg_idx].clone(),
                     vuln:              detail.clone(),
@@ -289,19 +293,58 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
     println!();
 }
 
-/// Execute all remediation upgrade commands with live progress spinners.
+/// Execute one upgrade command per unique vulnerable package.
+/// Groups all CVE findings for the same package and picks the single best fix version,
+/// so a package affected by N CVEs results in exactly one upgrade command, not N.
 fn run_auto_fix(findings: &[reporter::ScanFinding]) {
-    use std::process::Command;
-    use std::collections::HashSet;
+    use std::collections::HashMap;
 
-    let fixable: Vec<(&reporter::ScanFinding, String)> = findings.iter()
-        .filter_map(|f| {
-            let ver = f.fixed_version.as_deref().or(f.suggested_version.as_deref());
-            ver.map(|v| (f, upgrade_cmd(&f.package, v)))
-        })
-        .collect();
+    // Key: (name, ecosystem, source)  →  (pkg reference, confirmed_fixes, suggested_fixes)
+    type Key = (String, String, String);
+    let mut pkg_map: HashMap<Key, (&crate::engine::scanner::LockedPackage, Vec<String>, Vec<String>)> =
+        HashMap::new();
 
-    if fixable.is_empty() {
+    for f in findings {
+        let key = (
+            f.package.name.clone(),
+            f.package.ecosystem.clone(),
+            f.package.source.clone(),
+        );
+        let entry = pkg_map.entry(key).or_insert_with(|| (&f.package, Vec::new(), Vec::new()));
+        if let Some(ref fv) = f.fixed_version {
+            entry.1.push(fv.clone()); // confirmed fix from CVE database
+        } else if let Some(ref sv) = f.suggested_version {
+            entry.2.push(sv.clone()); // fallback: registry latest
+        }
+    }
+
+    if pkg_map.is_empty() {
+        Logger::info("No packages have a known fixed or suggested version available.");
+        return;
+    }
+
+    // Build one command per package using the best available version
+    struct FixItem<'a> {
+        pkg:   &'a crate::engine::scanner::LockedPackage,
+        label: String,
+        cmd:   String,
+    }
+
+    let mut items: Vec<FixItem> = Vec::new();
+    for (_, (pkg, confirmed, suggested)) in &pkg_map {
+        let best = if !confirmed.is_empty() {
+            osv::max_version(confirmed)
+        } else {
+            osv::max_version(suggested)
+        };
+        if let Some(ver) = best {
+            let cmd = upgrade_cmd(pkg, &ver);
+            let label = format!("{} {} → {}", pkg.name, pkg.version, ver);
+            items.push(FixItem { pkg, label, cmd });
+        }
+    }
+
+    if items.is_empty() {
         Logger::info("No packages have a known fixed or suggested version available.");
         return;
     }
@@ -310,32 +353,13 @@ fn run_auto_fix(findings: &[reporter::ScanFinding]) {
     println!(
         "  {} {}\n",
         "⚡ Auto-Fix".bold().truecolor(255, 200, 50),
-        format!("Executing {} remediation command(s)...", fixable.len())
-            .truecolor(160, 160, 180)
+        format!("Upgrading {} package(s)...", items.len()).truecolor(160, 160, 180)
     );
 
-    // Deduplicate identical commands (e.g. same package mentioned in two CVEs)
-    let mut seen: HashSet<String> = HashSet::new();
     let mut success_count = 0usize;
     let mut fail_count    = 0usize;
 
-    for (finding, cmd) in &fixable {
-        if !seen.insert(cmd.clone()) { continue; }
-
-        let target_ver = finding.fixed_version.as_deref()
-            .or(finding.suggested_version.as_deref())
-            .unwrap_or("?");
-        let pkg_label = format!(
-            "{} {} → {}",
-            finding.package.name,
-            finding.package.version,
-            target_ver
-        );
-
-        // Parse shell command into binary + args
-        let parts: Vec<&str> = cmd.split_whitespace().collect();
-        if parts.is_empty() { continue; }
-
+    for item in &items {
         let spinner = ProgressBar::new_spinner();
         spinner.set_style(
             ProgressStyle::with_template("  {spinner:.green}  {msg}")
@@ -345,15 +369,11 @@ fn run_auto_fix(findings: &[reporter::ScanFinding]) {
         spinner.enable_steady_tick(Duration::from_millis(60));
         spinner.set_message(format!(
             "{} {}",
-            pkg_label.bold(),
-            format!("({})", cmd).truecolor(100,100,120)
+            item.label.bold(),
+            format!("({})", item.cmd).truecolor(100, 100, 120)
         ));
 
-        let result = Command::new(parts[0])
-            .args(&parts[1..])
-            .output();
-
-        match result {
+        match crate::cli::run_pkg_cmd(&item.cmd) {
             Ok(out) => {
                 spinner.finish_and_clear();
                 if out.status.success() {
@@ -361,7 +381,7 @@ fn run_auto_fix(findings: &[reporter::ScanFinding]) {
                     println!(
                         "  {}  {} {}",
                         "✔".bright_green().bold(),
-                        pkg_label.bold(),
+                        item.label.bold(),
                         "fixed".bright_green()
                     );
                 } else {
@@ -369,19 +389,17 @@ fn run_auto_fix(findings: &[reporter::ScanFinding]) {
                     println!(
                         "  {}  {} — command exited with code {}",
                         "✘".bright_red().bold(),
-                        pkg_label.bold(),
+                        item.label.bold(),
                         out.status.code().unwrap_or(-1)
                     );
-                    // Print stderr if present
                     let stderr = String::from_utf8_lossy(&out.stderr);
                     for line in stderr.lines().take(6) {
-                        println!("       {} {}", "│".truecolor(80,80,100), line.truecolor(200,80,80));
+                        println!("       {} {}", "│".truecolor(80, 80, 100), line.truecolor(200, 80, 80));
                     }
-                    // Print stdout tail if stderr empty
                     if stderr.trim().is_empty() {
                         let stdout = String::from_utf8_lossy(&out.stdout);
                         for line in stdout.lines().take(6) {
-                            println!("       {} {}", "│".truecolor(80,80,100), line.truecolor(180,180,180));
+                            println!("       {} {}", "│".truecolor(80, 80, 100), line.truecolor(180, 180, 180));
                         }
                     }
                 }
@@ -392,7 +410,7 @@ fn run_auto_fix(findings: &[reporter::ScanFinding]) {
                 println!(
                     "  {}  {} — could not run: {}",
                     "✘".bright_red().bold(),
-                    pkg_label.bold(),
+                    item.label.bold(),
                     e.to_string().truecolor(200, 80, 80)
                 );
             }
@@ -404,7 +422,7 @@ fn run_auto_fix(findings: &[reporter::ScanFinding]) {
         "  Auto-fix complete  {}  {}",
         format!("{} succeeded", success_count).bold().bright_green(),
         if fail_count > 0 { format!("{} failed", fail_count).bold().bright_red().to_string() }
-        else              { "0 failed".truecolor(100,100,120).to_string() }
+        else              { "0 failed".truecolor(100, 100, 120).to_string() }
     );
     println!();
 }
@@ -548,20 +566,19 @@ pub fn upgrade_cmd(pkg: &scanner::LockedPackage, fixed: &str) -> String {
         }
         "crates.io" => format!("cargo add {}@{}", pkg.name, fixed),
         "PyPI" => {
+            use crate::ecosystems::detector::resolve_binary;
             // Detect uv/poetry from lock file source
             match source_file {
                 "uv.lock"      => format!("uv pip install {}=={}", pkg.name, fixed),
                 "poetry.lock"  => format!("poetry add {}=={}", pkg.name, fixed),
                 _ => {
-                    // pyproject.toml or requirements.txt — detect tool from sibling lock files
                     if std::path::Path::new("uv.lock").exists() {
                         format!("uv pip install {}=={}", pkg.name, fixed)
                     } else if std::path::Path::new("poetry.lock").exists() {
                         format!("poetry add {}=={}", pkg.name, fixed)
-                    } else if cfg!(unix) {
-                        format!("pip3 install {}=={}", pkg.name, fixed)
                     } else {
-                        format!("pip install {}=={}", pkg.name, fixed)
+                        // Resolve at runtime: pip → pip3 on systems that ship only pip3
+                        format!("{} install {}=={}", resolve_binary("pip"), pkg.name, fixed)
                     }
                 }
             }
@@ -570,11 +587,18 @@ pub fn upgrade_cmd(pkg: &scanner::LockedPackage, fixed: &str) -> String {
             let ver = if fixed.starts_with('v') { fixed.to_string() } else { format!("v{}", fixed) };
             format!("go get {}@{}", pkg.name, ver)
         }
-        "RubyGems"  => format!("gem install {} -v {}", pkg.name, fixed),
+        "RubyGems"  => {
+            use crate::ecosystems::detector::resolve_binary;
+            format!("{} install {} -v {}", resolve_binary("gem"), pkg.name, fixed)
+        }
         "Packagist" => format!("composer require {}:{}", pkg.name, fixed),
         "NuGet"     => format!("dotnet add package {} --version {}", pkg.name, fixed),
         "Hex"       => format!("mix deps.update {}", pkg.name),
-        "pub.dev"   => format!("dart pub upgrade {}", pkg.name),
+        "pub.dev"   => {
+            use crate::ecosystems::detector::resolve_binary;
+            // dart or flutter — both expose `<binary> pub upgrade`
+            format!("{} pub upgrade {}", resolve_binary("dart"), pkg.name)
+        }
         _           => format!("upgrade {} to {}", pkg.name, fixed),
     }
 }
@@ -688,7 +712,7 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str) -> (bool
             match osv::fetch_vuln_detail(&vref.id) {
                 Ok(detail) => {
                     let sev      = osv::severity_label(&detail);
-                    let fixed    = osv::first_fixed_version(&detail);
+                    let fixed    = osv::best_fixed_version(&detail, pkg_name, &eco_osv);
                     let summary  = detail.summary.clone().unwrap_or_else(|| "No description available".to_string());
                     let up_cmd   = fixed.as_deref().map(|fv| install_cmd_for_ecosystem(pkg_name, fv, ecosystem));
 
@@ -774,6 +798,7 @@ pub fn escalate_severity(current: &'static str, new: &'static str) -> &'static s
 }
 
 fn install_cmd_for_ecosystem(pkg: &str, fixed: &str, ecosystem: &str) -> String {
+    use crate::ecosystems::detector::resolve_binary;
     match ecosystem {
         "npm"       => format!("npm install {}@{}", pkg, fixed),
         "yarn"      => format!("yarn add {}@{}", pkg, fixed),
@@ -783,19 +808,23 @@ fn install_cmd_for_ecosystem(pkg: &str, fixed: &str, ecosystem: &str) -> String 
         "uv"        => format!("uv pip install {}=={}", pkg, fixed),
         "poetry"    => format!("poetry add {}=={}", pkg, fixed),
         "PyPI" | "pip" | "pip3" => {
-            if cfg!(unix) { format!("pip3 install {}=={}", pkg, fixed) }
-            else           { format!("pip install {}=={}", pkg, fixed) }
+            // Resolve at runtime so Linux systems with only pip3 get the right binary
+            format!("{} install {}=={}", resolve_binary("pip"), pkg, fixed)
         }
         "Go" | "go" => {
             let ver = if fixed.starts_with('v') { fixed.to_string() } else { format!("v{}", fixed) };
             format!("go get {}@{}", pkg, ver)
-        },
-        "RubyGems" | "gem"  => format!("gem install {} -v {}", pkg, fixed),
+        }
+        "RubyGems" | "gem" => {
+            format!("{} install {} -v {}", resolve_binary("gem"), pkg, fixed)
+        }
         "Packagist" | "composer" => format!("composer require {}:{}", pkg, fixed),
-        "NuGet" | "nuget"     => format!("dotnet add package {} --version {}", pkg, fixed),
-        "Hex" | "hex"       => format!("mix deps.update {}", pkg),
-        "pub.dev" | "pub"   => format!("dart pub upgrade {}", pkg),
-        _           => format!("upgrade {} to {}", pkg, fixed),
+        "NuGet" | "nuget" => format!("dotnet add package {} --version {}", pkg, fixed),
+        "Hex" | "hex"     => format!("mix deps.update {}", pkg),
+        "pub.dev" | "pub" => {
+            format!("{} pub upgrade {}", resolve_binary("dart"), pkg)
+        }
+        _ => format!("upgrade {} to {}", pkg, fixed),
     }
 }
 

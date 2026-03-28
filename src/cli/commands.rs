@@ -110,6 +110,7 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
 
     let mut ecosystem = "auto-detected";
     let mut install_packages = vec![];
+    let mut install_action = String::new();
     let mut cmd_idx = 0;
 
     if known_ecosystems.contains(&first_arg.as_str()) {
@@ -128,18 +129,30 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
 
     if args.passthrough_args.len() > cmd_idx {
         let action = &args.passthrough_args[cmd_idx];
-        if action == "install" || action == "add" || action == "i" || action == "require" || action == "get" {
+        // Recognize all common "add a package" actions across ecosystems:
+        // install/add/i/require/get = initial install
+        // update/upgrade/up         = upgrade specific packages (also needs CVE check)
+        if matches!(action.as_str(),
+            "install" | "add" | "i" | "require" | "get" |
+            "update"  | "upgrade" | "up"
+        ) {
+            install_action = action.clone();
             install_packages = args.passthrough_args[cmd_idx + 1..].to_vec();
         }
     }
 
     // ── Binary availability check ────────────────────────────────────────
+    // Maps ecosystem identifier → the binary name to check for on PATH.
+    // nuget → dotnet  (modern .NET uses the dotnet CLI, not the legacy nuget.exe)
+    // hex   → mix     (Elixir's build tool that manages hex packages)
+    // pub   → dart    (Dart SDK ships dart; Flutter also exposes it as flutter)
     let binary_to_check = match ecosystem {
-        "poetry"  => "poetry",
-        "uv"      => "uv",
-        "hex"     => "mix",
-        "pub"     => "dart",
-        other     => other,
+        "poetry" => "poetry",
+        "uv"     => "uv",
+        "hex"    => "mix",
+        "pub"    => "dart",
+        "nuget"  => "dotnet",
+        other    => other,
     };
 
     if !detector::is_installed(binary_to_check) {
@@ -161,17 +174,20 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
         return Ok(());
     }
 
+    // Resolve the actual binary name that is present on this system.
+    // e.g. "pip" may resolve to "pip3" on Linux; "dart" may resolve to "flutter".
+    let actual_binary = detector::resolve_binary(binary_to_check);
+
     Logger::subtitle("🛡️", "INFYNON Secure Proxy", "Active");
     Logger::detail("» Ecosystem:", ecosystem);
-    Logger::success(&format!("'{}' binary found — proceeding", binary_to_check));
+    Logger::success(&format!("'{}' binary found — proceeding", actual_binary));
 
     if !install_packages.is_empty() {
         let (safe, hits) = check_packages_before_install(&install_packages, ecosystem);
 
-        if !safe {
+        let pkgs_to_install = if !safe {
             if let Some(ref strict_level) = args.strict {
                 let level = scan::FixLevel::from_str(strict_level);
-                // Check if any hit meets the strict severity threshold
                 let blocked = hits.iter().any(|h| level.matches(h.severity));
                 if blocked {
                     let level_label = if strict_level == "all" { "all severities".to_string() } else { format!("{}+", strict_level) };
@@ -184,27 +200,68 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
                     );
                     return Ok(());
                 }
-                // Hits exist but none match the strict level — allow through
             }
 
-            // Interactive decision prompt — replaces the countdown
             let final_specs = ask_vuln_decisions(&install_packages, &hits, ecosystem);
             if final_specs.is_empty() {
                 Logger::raw_dim("  All packages skipped. Nothing to install.");
                 return Ok(());
             }
-            println!();
-            crate::tui::loaders::show_stylish_install_loader(&final_specs, ecosystem);
-            return Ok(());
-        }
+            final_specs
+        } else {
+            install_packages.clone()
+        };
 
+        // Build and run the real install command in the user's working directory
+        let mut cmd_parts = vec![install_action.clone()];
+        cmd_parts.extend(pkgs_to_install.iter().cloned());
+        let cmd = build_proxy_cmd(ecosystem, &actual_binary, &cmd_parts);
         println!();
-        crate::tui::loaders::show_stylish_install_loader(&install_packages, ecosystem);
+        Logger::step(&format!("Running: {}", cmd));
+        println!();
+        if let Err(e) = crate::cli::proxy_pkg_cmd(&cmd) {
+            Logger::error(&format!("Failed to execute '{}': {}", actual_binary, e));
+        }
     } else {
-        Logger::raw_dim(&format!("» Pass-through execution for: {:?}", args.passthrough_args));
+        // Pass-through: forward all args directly to the real package manager binary.
+        // This covers non-install commands: npm run, cargo build, pip list, etc.
+        let cmd = build_proxy_cmd(ecosystem, &actual_binary, &args.passthrough_args[cmd_idx..].to_vec());
+        println!();
+        Logger::step(&format!("Running: {}", cmd));
+        println!();
+        if let Err(e) = crate::cli::proxy_pkg_cmd(&cmd) {
+            Logger::error(&format!("Failed to execute '{}': {}", actual_binary, e));
+        }
     }
 
     Ok(())
+}
+
+// ── Proxy command builder ─────────────────────────────────────────────────────
+
+/// Build the full shell command string for the real package manager.
+///
+/// `ecosystem`      — the logical identifier ("npm", "pip", "nuget", "pub", …)
+/// `actual_binary`  — the binary that was actually found on PATH
+///                    (e.g. "pip3" instead of "pip", "flutter" instead of "dart")
+///
+/// Ecosystem-specific command shapes:
+/// - `pub`   → `<dart|flutter> pub <args>`  (pub is a sub-tool of the Dart SDK)
+/// - `hex`   → `mix <args>`                 (Elixir mix manages hex packages)
+/// - `nuget` → `dotnet <args>`              (modern .NET uses the dotnet CLI)
+/// - others  → `<actual_binary> <args>`     (binary name == command prefix)
+fn build_proxy_cmd(ecosystem: &str, actual_binary: &str, args: &[String]) -> String {
+    let suffix = args.join(" ");
+    match ecosystem {
+        // pub: `dart pub add phoenix` or `flutter pub add phoenix`
+        "pub"   => format!("{} pub {}", actual_binary, suffix),
+        // hex: `mix install phoenix` → caller already uses mix-style args
+        "hex"   => format!("{} {}", actual_binary, suffix),
+        // nuget: `dotnet add package Newtonsoft.Json --version 13.0.3`
+        "nuget" => format!("{} {}", actual_binary, suffix),
+        // all others: use the resolved binary directly
+        _       => format!("{} {}", actual_binary, suffix),
+    }
 }
 
 // ── Interactive vulnerability decision prompt ─────────────────────────────────
@@ -675,17 +732,14 @@ pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonErr
             }
         }
 
-        // ── Legacy commands ─────────────────────────────────────────────
+        // ── Legacy commands (not yet implemented) ───────────────────────
         Some(FirewallCommands::Daemon) => {
             Logger::title("INFYNON FIREWALL ENGINE", "red");
-            Logger::step("Initialize background nightly intelligence service...");
-            Logger::info("Loading blocklists into memory map...");
-            Logger::success("Daemon successfully activated in background!");
+            Logger::error("Background daemon not yet implemented.");
         }
         Some(FirewallCommands::UpdateIntel) => {
             Logger::title("INFYNON FIREWALL ENGINE", "red");
-            Logger::step("Fetching upstream LLM vulnerability intel from security feeds...");
-            crate::daemon::updater::trigger_nightly_pipeline();
+            Logger::error("Intelligence update pipeline not yet implemented.");
         }
     }
     Ok(())

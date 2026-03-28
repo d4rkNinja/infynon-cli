@@ -56,10 +56,7 @@ pub fn cmd_clean(pkg_file: Option<&str>) {
             _ => continue,
         };
 
-        let parts: Vec<&str> = cmd.split_whitespace().collect();
-        if parts.is_empty() { continue; }
-
-        let result = std::process::Command::new(parts[0]).args(&parts[1..]).output();
+        let result = crate::cli::run_pkg_cmd(&cmd);
         match result {
             Ok(out) if out.status.success() => {
                 println!("  {}  {} removed ({})", "✔".bright_green(), name.bold(), cmd.truecolor(100, 100, 120));

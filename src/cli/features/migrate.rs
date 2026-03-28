@@ -137,11 +137,9 @@ pub fn cmd_migrate(from: &str, to: &str) {
                 }
             }
             MigrateStep::Run { desc, cmd } => {
-                let parts: Vec<&str> = cmd.split_whitespace().collect();
-                if parts.is_empty() { continue; }
                 let sp = spinner();
                 sp.set_message(desc.clone());
-                let result = std::process::Command::new(parts[0]).args(&parts[1..]).output();
+                let result = crate::cli::run_pkg_cmd(cmd);
                 sp.finish_and_clear();
                 match result {
                     Ok(out) if out.status.success() => println!("  {}  {}", "✔".bright_green(), desc.bold()),
