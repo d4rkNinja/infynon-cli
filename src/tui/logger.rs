@@ -3,7 +3,6 @@ use std::time::Instant;
 
 pub struct Logger;
 
-// Consistent column widths
 const LABEL_W: usize = 18;
 const CMD_W: usize   = 40;
 
@@ -54,13 +53,11 @@ impl Logger {
     }
 
     fn row(icon: &str, label: &str, value: &str) {
-        // emoji is 2-wide, pad label to LABEL_W - 2 to visually align
         let padded = format!("{:<width$}", label, width = LABEL_W - 2);
         println!("  {}  {}  {}", icon, padded.bold().truecolor(255, 170, 50), value.truecolor(180, 180, 200));
     }
 
     fn cont(value: &str) {
-        // continuation line — align to same value column (icon=1 + 2sp + label + 2sp = ~23)
         let pad = " ".repeat(LABEL_W + 5);
         println!("  {}{}", pad, value.truecolor(180, 180, 200));
     }
@@ -80,36 +77,54 @@ impl Logger {
   ██║██║ ╚████║██║        ██║   ██║ ╚████║╚██████╔╝██║ ╚████║
   ╚═╝╚═╝  ╚═══╝╚═╝        ╚═╝   ╚═╝  ╚═══╝ ╚═════╝ ╚═╝  ╚═══╝"#;
         println!("{}", banner.truecolor(0, 210, 255).bold());
-        println!("  {}\n", format!("Universal Package Security Manager  ·  v{}", env!("CARGO_PKG_VERSION")).truecolor(120, 120, 140).italic());
+        println!("  {}\n", format!("Network Firewall & Security CLI  ·  v{}", env!("CARGO_PKG_VERSION")).truecolor(120, 120, 140).italic());
 
         Self::divider();
         Self::section("⚡", "What is INFYNON?");
 
-        Self::row("🛡️", "Mission",      "Drop-in replacement for any package manager (npm, pip, cargo,");
-        Self::cont(                      "gem, go, composer, nuget, hex, pub) — intercepts every install.");
-        Self::row("🔎", "How it works", "Runs a 3-layer security pipeline before any package touches disk:");
-        Self::row("  ", "Layer 1",      "In-memory blocklist trie lookup     (<1ms, never skipped)");
-        Self::row("  ", "Layer 2",      "Static heuristic scan — scripts, age, typosquatting  (<50ms)");
-        Self::row("  ", "Layer 3",      "LLM deep-code analysis via local Ollama  (<8s, flagged only)");
-        Self::row("📦", "Ecosystems",   "npm · yarn · pnpm · bun · pip · uv · poetry · cargo · go");
-        Self::cont(                      "gem · composer · nuget · hex · pub  — auto-detected from project");
-        Self::row("🌙", "Night Daemon", "Nightly CVE/GitHub feed crawl → LLM extraction → hot-swap");
-        Self::row("🔒", "Privacy",      "Local-first. Zero data leaves machine unless API mode is opted in.");
+        Self::row("🛡️", "Firewall",     "Real-time reverse proxy WAF — sits between internet and your backend.");
+        Self::cont(                      "Inspects, filters, blocks HTTP traffic with a live TUI dashboard.");
+        Self::row("🔎", "Pipeline",     "4-stage request evaluation on every request:");
+        Self::row("  ", "Stage 1",      "IP Filter — blocklist, allowlist, CIDR, auto-reputation banning");
+        Self::row("  ", "Stage 2",      "Rate Limiter — per-IP, per-path, global sliding window");
+        Self::row("  ", "Stage 3",      "WAF Engine — SQLi, XSS, path traversal, cmd injection detection");
+        Self::row("  ", "Stage 4",      "Custom Rules — user-defined IF-THEN rules with priority ordering");
+        Self::row("🖥️", "TUI",         "7 live views: Dashboard, Feed, Blocked, IP Inspector, Rules, Stats, Config");
+        Self::row("🔧", "Config",       "TOML config editable from TUI + file. Hot-reload on file change.");
+        Self::row("🌐", "Routing",      "Multi-upstream path-based routing to different backend services.");
+        Self::row("🔒", "Maintenance",  "Toggle maintenance mode from TUI (m key) or config file.");
 
         Self::divider();
-        Self::section("📟", "Commands");
+        Self::section("📟", "Firewall Commands");
 
-        Self::cmd_row("infynon daemon",              "Start nightly intelligence pipeline daemon");
-        Self::cmd_row("infynon dashboard",           "Open real-time TUI security dashboard");
-        Self::cmd_row("infynon update-intel",        "Manually force a CVE intel refresh now");
-        Self::cmd_row("infynon pkg <pm> install <pkg>", "Secure install via any package manager");
+        Self::cmd_row("infynon init",                   "Create default infynon.toml config");
+        Self::cmd_row("infynon start",                  "Start firewall + TUI dashboard");
+        Self::cmd_row("infynon start --headless",       "Start firewall without TUI (background)");
+        Self::cmd_row("infynon monitor",                "Open TUI monitor (starts proxy too)");
+        Self::cmd_row("infynon status",                 "Show current firewall configuration");
+        Self::cmd_row("infynon block <IP>",             "Block an IP address immediately");
+        Self::cmd_row("infynon unblock <IP>",           "Remove an IP from blocklist");
+        Self::cmd_row("infynon rules list",             "List all custom rules with hit counts");
+        Self::cmd_row("infynon rules enable <name>",    "Enable a rule by name");
+        Self::cmd_row("infynon rules disable <name>",   "Disable a rule by name");
+        Self::cmd_row("infynon logs",                   "View recent firewall log entries");
+        Self::cmd_row("infynon logs --verdict block",   "Filter logs by verdict (block/allow/flag)");
+        Self::cmd_row("infynon config check",           "Validate config file");
+        Self::cmd_row("infynon config show",            "Print effective config with defaults");
 
-        Self::footer(start, "Firewall Engine", "d4rkninja", "whit3ninj4");
+        Self::divider();
+        Self::section("📦", "Package Security  (infynon pkg)");
+
+        Self::cmd_row("infynon pkg scan",               "Scan lock files for known CVEs");
+        Self::cmd_row("infynon pkg npm install <pkg>",  "Secure install via any package manager");
+        Self::cmd_row("infynon pkg audit",              "Deep recursive dependency audit");
+        Self::cmd_row("infynon pkg fix --auto",         "Auto-fix all vulnerable dependencies");
+
+        Self::footer(start, "Network Firewall + Package Security", "d4rkninja", "whit3ninj4");
     }
 
     // ── infynon pkg splash ───────────────────────────────────────────────────
     pub fn splash_pkg() {
-        // Simple styled wordmark — no ASCII art
         println!();
         println!(
             "  {} {}",
@@ -171,7 +186,8 @@ impl Logger {
         Self::cmd_row("infynon pkg --strict install <pkg>",   "Treat WARN as BLOCKED (CI mode)");
 
         println!("\n  {}\n", "── Security & Analysis ────────────────────────────────────────".truecolor(60, 60, 80));
-        Self::cmd_row("infynon pkg audit",                     "Deep recursive dependency scan with tree");
+        Self::cmd_row("infynon pkg scan",                     "Scan lock files for known CVEs");
+        Self::cmd_row("infynon pkg audit",                    "Deep recursive dependency scan with tree");
         Self::cmd_row("infynon pkg why <package>",            "Trace why a package is in your tree");
         Self::cmd_row("infynon pkg outdated",                 "Check for outdated dependencies");
         Self::cmd_row("infynon pkg diff <pkg> <v1> <v2>",     "Compare two versions of a package");
