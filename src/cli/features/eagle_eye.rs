@@ -1,17 +1,16 @@
 use crate::tui::logger::Logger;
 use crate::engine::{osv, scanner};
+use crate::firewall::config::SmtpConfig;
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-
-// ── Eagle Eye Config ────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EagleEyeConfig {
     #[serde(default)]
     pub enabled: bool,
     #[serde(default)]
-    pub smtp: EagleEyeSmtp,
+    pub smtp: SmtpConfig,
     #[serde(default)]
     pub scan_paths: Vec<String>,
     #[serde(default = "default_interval")]
@@ -33,41 +32,12 @@ impl Default for EagleEyeConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            smtp: EagleEyeSmtp::default(),
+            smtp: SmtpConfig::default(),
             scan_paths: Vec::new(),
             interval_hours: default_interval(),
             risk_levels: default_risk_levels(),
             recipients: Vec::new(),
             from: String::new(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EagleEyeSmtp {
-    #[serde(default)]
-    pub host: String,
-    #[serde(default = "default_smtp_port")]
-    pub port: u16,
-    #[serde(default)]
-    pub username: String,
-    #[serde(default)]
-    pub password: String,
-    #[serde(default = "default_tls")]
-    pub tls: bool,
-}
-
-fn default_smtp_port() -> u16 { 587 }
-fn default_tls() -> bool { true }
-
-impl Default for EagleEyeSmtp {
-    fn default() -> Self {
-        Self {
-            host: String::new(),
-            port: default_smtp_port(),
-            username: String::new(),
-            password: String::new(),
-            tls: true,
         }
     }
 }
@@ -112,7 +82,6 @@ pub fn cmd_setup() {
 
     let mut config = load_config();
 
-    // SMTP setup
     println!("  {}  {}\n", "1".bold().bright_cyan(), "SMTP Configuration".bold().white());
 
     print!("  SMTP Host [{}]: ", if config.smtp.host.is_empty() { "smtp.gmail.com" } else { &config.smtp.host });
@@ -151,7 +120,6 @@ pub fn cmd_setup() {
     if input == "no" || input == "false" || input == "n" { config.smtp.tls = false; }
     else if !input.is_empty() { config.smtp.tls = true; }
 
-    // Email addresses
     println!("\n  {}  {}\n", "2".bold().bright_cyan(), "Email Addresses".bold().white());
 
     print!("  From address [{}]: ", if config.from.is_empty() { &config.smtp.username } else { &config.from });
@@ -172,7 +140,6 @@ pub fn cmd_setup() {
         config.recipients = input.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
     }
 
-    // Scan paths
     println!("\n  {}  {}\n", "3".bold().bright_cyan(), "Project Paths to Monitor".bold().white());
     println!("  Enter full paths to project directories (one per line).");
     println!("  Eagle Eye will scan for lock files in each path.");
@@ -202,7 +169,6 @@ pub fn cmd_setup() {
         config.scan_paths.push(input.to_string());
     }
 
-    // Scan interval
     println!("\n  {}  {}\n", "4".bold().bright_cyan(), "Scan Schedule".bold().white());
     print!("  Scan interval in hours [{}]: ", config.interval_hours);
     io::stdout().flush().ok();
@@ -210,7 +176,6 @@ pub fn cmd_setup() {
     io::stdin().read_line(&mut input).ok();
     if let Ok(h) = input.trim().parse::<u32>() { config.interval_hours = h.max(1); }
 
-    // Risk level selection
     println!("\n  {}  {}\n", "5".bold().bright_cyan(), "Risk Level Threshold".bold().white());
     println!("  Select which severity levels trigger an email alert:");
     println!("  {}  CRITICAL only", "[1]".bold().bright_red());
@@ -231,10 +196,8 @@ pub fn cmd_setup() {
         _ => vec!["CRITICAL".into(), "HIGH".into()],
     };
 
-    // Enable
     config.enabled = true;
 
-    // Save
     match save_config(&config) {
         Ok(()) => {
             println!();
@@ -367,9 +330,8 @@ fn run_scan_cycle(config: &EagleEyeConfig) {
 
         println!("    {} Found {} packages", "·".truecolor(100, 100, 120), packages.len());
 
-        // Query OSV for vulnerabilities
         let queries: Vec<(String, String, String)> = packages.iter().map(|p| {
-            (p.name.clone(), scanner_eco_to_osv(&p.ecosystem), p.version.clone())
+            (p.name.clone(), p.ecosystem.clone(), p.version.clone())
         }).collect();
 
         let results = match osv::batch_query(&queries) {
@@ -382,6 +344,18 @@ fn run_scan_cycle(config: &EagleEyeConfig) {
                 continue;
             }
         };
+
+        // Collect all vuln IDs and fetch details in batch (avoids N+1 API calls)
+        let all_vuln_ids: Vec<String> = results.iter()
+            .flat_map(|refs| refs.iter().map(|r| r.id.clone()))
+            .collect();
+
+        let details_map: std::collections::HashMap<String, osv::OsvVulnDetail> =
+            osv::fetch_vuln_details_batch(&all_vuln_ids)
+                .into_iter()
+                .filter_map(|(id, result)| result.ok().map(|d| (id, d)))
+                .collect();
+
         let mut path_vulns = 0;
 
         for (i, vuln_refs) in results.iter().enumerate() {
@@ -389,9 +363,9 @@ fn run_scan_cycle(config: &EagleEyeConfig) {
             let pkg = &packages[i];
 
             for vuln_ref in vuln_refs {
-                let detail = osv::fetch_vuln_detail(&vuln_ref.id).ok();
-                let severity = detail.as_ref()
-                    .map(|d| classify_severity(d))
+                let detail = details_map.get(&vuln_ref.id);
+                let severity = detail
+                    .map(|d| osv::severity_label(d))
                     .unwrap_or("INFORMATIONAL");
 
                 if !config.risk_levels.iter().any(|r| r.eq_ignore_ascii_case(severity)) {
@@ -406,12 +380,11 @@ fn run_scan_cycle(config: &EagleEyeConfig) {
                     ecosystem: pkg.ecosystem.clone(),
                     cve_id: vuln_ref.id.clone(),
                     severity: severity.to_string(),
-                    summary: detail.as_ref()
+                    summary: detail
                         .and_then(|d| d.summary.clone())
                         .unwrap_or_else(|| "No description available".into()),
-                    fixed_version: detail.as_ref()
-                        .map(|d| osv::first_fixed_version(d))
-                        .flatten()
+                    fixed_version: detail
+                        .and_then(|d| osv::first_fixed_version(d))
                         .unwrap_or_default(),
                 });
             }
@@ -476,95 +449,30 @@ struct ScanFinding {
     fixed_version: String,
 }
 
-fn scanner_eco_to_osv(eco: &str) -> String {
-    match eco.to_lowercase().as_str() {
-        "npm" | "yarn" | "pnpm" | "bun" | "javascript" => "npm".into(),
-        "pip" | "pypi" | "python" | "uv" | "poetry" => "PyPI".into(),
-        "cargo" | "rust" | "crates.io" => "crates.io".into(),
-        "go" | "golang" => "Go".into(),
-        "gem" | "ruby" | "rubygems" => "RubyGems".into(),
-        "composer" | "php" | "packagist" => "Packagist".into(),
-        "nuget" | "dotnet" => "NuGet".into(),
-        "hex" | "elixir" => "Hex".into(),
-        "pub" | "dart" => "Pub".into(),
-        other => other.into(),
-    }
-}
-
-fn classify_severity(detail: &osv::OsvVulnDetail) -> &'static str {
-    for s in &detail.severity {
-        if let Some(ref score) = s.score {
-            if let Ok(val) = score.parse::<f64>() {
-                if val >= 9.0 { return "CRITICAL"; }
-                if val >= 7.0 { return "HIGH"; }
-                if val >= 4.0 { return "MEDIUM"; }
-                if val >= 0.1 { return "LOW"; }
-            }
-        }
-    }
-    "INFORMATIONAL"
-}
-
 // ── Email ───────────────────────────────────────────────────────────────────
 
 fn send_eagle_eye_email(config: &EagleEyeConfig, findings: &[ScanFinding]) {
-    use lettre::message::{header::ContentType, Mailbox};
-    use lettre::transport::smtp::authentication::Credentials;
-    use lettre::{Message, SmtpTransport, Transport};
-
-    if config.smtp.host.is_empty() || config.recipients.is_empty() || config.from.is_empty() {
-        return;
-    }
-
-    let from: Mailbox = match config.from.parse() {
-        Ok(m) => m,
-        Err(_) => return,
-    };
-
     let subject = format!(
-        "🦅 Eagle Eye Alert: {} vulnerabilities found across your projects",
+        "Eagle Eye Alert: {} vulnerabilities found across your projects",
         findings.len()
     );
 
     let html = build_eagle_eye_html(findings, config);
 
-    for recipient in &config.recipients {
-        let to: Mailbox = match recipient.parse() {
-            Ok(m) => m,
-            Err(_) => continue,
-        };
+    crate::utils::send_smtp_email(
+        &config.smtp.host,
+        config.smtp.port,
+        &config.smtp.username,
+        &config.smtp.password,
+        config.smtp.tls,
+        &config.from,
+        &config.recipients,
+        &subject,
+        &html,
+    );
 
-        let email = match Message::builder()
-            .from(from.clone())
-            .to(to)
-            .subject(&subject)
-            .header(ContentType::TEXT_HTML)
-            .body(html.clone())
-        {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
-
-        let creds = Credentials::new(config.smtp.username.clone(), config.smtp.password.clone());
-
-        let mailer = if config.smtp.tls {
-            SmtpTransport::starttls_relay(&config.smtp.host)
-                .ok()
-                .map(|b| b.port(config.smtp.port).credentials(creds).build())
-        } else {
-            SmtpTransport::builder_dangerous(&config.smtp.host)
-                .port(config.smtp.port)
-                .credentials(creds)
-                .build()
-                .into()
-        };
-
-        if let Some(mailer) = mailer {
-            match mailer.send(&email) {
-                Ok(_) => Logger::success(&format!("Alert email sent to {}", recipient)),
-                Err(e) => Logger::error(&format!("Failed to send email to {}: {}", recipient, e)),
-            }
-        }
+    for r in &config.recipients {
+        Logger::success(&format!("Alert email sent to {}", r));
     }
 }
 

@@ -1,8 +1,5 @@
 use std::sync::Arc;
-use chrono::{Utc, Datelike, Timelike};
-use lettre::message::{header::ContentType, Mailbox};
-use lettre::transport::smtp::authentication::Credentials;
-use lettre::{Message, SmtpTransport, Transport};
+use chrono::{Utc, Timelike};
 
 use crate::firewall::config::EmailConfig;
 use crate::firewall::stats::StatsSnapshot;
@@ -43,65 +40,25 @@ pub fn send_daily_digest(
 }
 
 fn send_email(config: &EmailConfig, subject: &str, html_body: &str) {
-    let from: Mailbox = match config.from.parse() {
-        Ok(m) => m,
-        Err(_) => return,
+    let (host, username, password, port, tls) = if config.provider == "ses" && !config.ses.region.is_empty() {
+        (
+            format!("email-smtp.{}.amazonaws.com", config.ses.region),
+            config.ses.access_key_id.clone(),
+            config.ses.secret_access_key.clone(),
+            587,
+            true,
+        )
+    } else {
+        (
+            config.smtp.host.clone(),
+            config.smtp.username.clone(),
+            config.smtp.password.clone(),
+            config.smtp.port,
+            config.smtp.tls,
+        )
     };
 
-    for recipient in &config.to {
-        let to: Mailbox = match recipient.parse() {
-            Ok(m) => m,
-            Err(_) => continue,
-        };
-
-        let email = match Message::builder()
-            .from(from.clone())
-            .to(to)
-            .subject(subject)
-            .header(ContentType::TEXT_HTML)
-            .body(html_body.to_string())
-        {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
-
-        // Send via SMTP
-        if config.provider == "smtp" || config.provider == "ses" {
-            let host = if config.provider == "ses" && !config.ses.region.is_empty() {
-                format!("email-smtp.{}.amazonaws.com", config.ses.region)
-            } else {
-                config.smtp.host.clone()
-            };
-
-            let (username, password) = if config.provider == "ses" {
-                (config.ses.access_key_id.clone(), config.ses.secret_access_key.clone())
-            } else {
-                (config.smtp.username.clone(), config.smtp.password.clone())
-            };
-
-            if host.is_empty() { return; }
-
-            let creds = Credentials::new(username, password);
-
-            let port = if config.provider == "ses" { 587 } else { config.smtp.port };
-
-            let mailer = if config.smtp.tls || config.provider == "ses" {
-                SmtpTransport::starttls_relay(&host)
-                    .ok()
-                    .map(|b| b.port(port).credentials(creds).build())
-            } else {
-                SmtpTransport::builder_dangerous(&host)
-                    .port(port)
-                    .credentials(creds)
-                    .build()
-                    .into()
-            };
-
-            if let Some(mailer) = mailer {
-                let _ = mailer.send(&email);
-            }
-        }
-    }
+    crate::utils::send_smtp_email(&host, port, &username, &password, tls, &config.from, &config.to, subject, html_body);
 }
 
 /// Spawn the daily digest scheduler. Runs forever, sends digest at configured hour.
