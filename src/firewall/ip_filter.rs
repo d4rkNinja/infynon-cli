@@ -5,10 +5,10 @@ use std::sync::Mutex;
 use std::time::Instant;
 use ipnet::IpNet;
 
-use crate::firewall::config::{IpConfig, load_ip_list};
+use crate::firewall::config::{IpConfig, IpMode, load_ip_list};
 
 pub struct IpFilter {
-    mode: String, // "blocklist" | "allowlist" | "disabled"
+    mode: IpMode,
     blocklist: HashSet<String>,
     allowlist: HashSet<String>,
     cidr_blocklist: Vec<IpNet>,
@@ -91,7 +91,7 @@ impl IpFilter {
 
     /// Returns None if allowed, Some(reason) if blocked
     pub fn check(&self, ip_str: &str) -> Option<String> {
-        if self.mode == "disabled" {
+        if self.mode == IpMode::Disabled {
             return None;
         }
 
@@ -106,7 +106,7 @@ impl IpFilter {
 
         let ip: Option<IpAddr> = ip_str.parse().ok();
 
-        if self.mode == "allowlist" {
+        if self.mode == IpMode::Allowlist {
             // In allowlist mode, everything NOT in the allowlist is blocked
             if self.allowlist.contains(ip_str) {
                 return None;

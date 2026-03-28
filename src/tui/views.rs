@@ -9,6 +9,7 @@ use ratatui::Frame;
 use crate::firewall::events::Verdict;
 use crate::tui::firewall_app::{App, FeedFilter, View};
 use crate::tui::theme;
+use crate::utils::{truncate_str, format_number, format_bytes_short};
 
 // ── Main render dispatcher ──────────────────────────────────────────────────
 
@@ -246,7 +247,7 @@ fn render_dashboard(f: &mut Frame, app: &App, area: Rect) {
         .map(|(i, (name, count))| {
             Row::new(vec![
                 Cell::from(format!("{}.", i + 1)).style(theme::dim_style()),
-                Cell::from(truncate(name, 18)).style(Style::default().fg(theme::YELLOW)),
+                Cell::from(truncate_str(name, 18)).style(Style::default().fg(theme::YELLOW)),
                 Cell::from(format_number(*count)).style(theme::stat_value()),
             ])
         })
@@ -266,9 +267,9 @@ fn render_dashboard(f: &mut Frame, app: &App, area: Rect) {
             let verdict_str = e.verdict.to_string();
             Row::new(vec![
                 Cell::from(time).style(theme::dim_style()),
-                Cell::from(truncate(&e.source_ip, 15)).style(Style::default().fg(theme::TEXT)),
+                Cell::from(truncate_str(&e.source_ip, 15)).style(Style::default().fg(theme::TEXT)),
                 Cell::from(e.method.as_str()).style(Style::default().fg(theme::PURPLE)),
-                Cell::from(truncate(&e.path, 15)).style(Style::default().fg(theme::TEXT_DIM)),
+                Cell::from(truncate_str(&e.path, 15)).style(Style::default().fg(theme::TEXT_DIM)),
                 Cell::from(verdict_str.clone()).style(theme::verdict_style(&verdict_str)),
             ])
         })
@@ -307,9 +308,9 @@ fn render_live_feed(f: &mut Frame, app: &App, area: Rect) {
                 Cell::from(time).style(theme::dim_style()),
                 Cell::from(e.source_ip.as_str()).style(Style::default().fg(theme::TEXT)),
                 Cell::from(e.method.as_str()).style(Style::default().fg(theme::PURPLE)),
-                Cell::from(truncate(&e.path, 30)).style(Style::default().fg(theme::TEXT_DIM)),
+                Cell::from(truncate_str(&e.path, 30)).style(Style::default().fg(theme::TEXT_DIM)),
                 Cell::from(verdict_str.clone()).style(theme::verdict_style(&verdict_str)),
-                Cell::from(truncate(e.blocked_by_rule.as_deref().unwrap_or("-"), 18)).style(Style::default().fg(theme::YELLOW)),
+                Cell::from(truncate_str(e.blocked_by_rule.as_deref().unwrap_or("-"), 18)).style(Style::default().fg(theme::YELLOW)),
                 Cell::from(format!("{:.1}", e.total_latency_ms)).style(theme::dim_style()),
             ])
         })
@@ -373,11 +374,11 @@ fn render_blocked(f: &mut Frame, app: &App, area: Rect) {
                 Cell::from(time).style(theme::dim_style()),
                 Cell::from(e.source_ip.as_str()).style(Style::default().fg(theme::TEXT)),
                 Cell::from(e.method.as_str()).style(Style::default().fg(theme::PURPLE)),
-                Cell::from(truncate(&e.path, 20)).style(Style::default().fg(theme::TEXT_DIM)),
+                Cell::from(truncate_str(&e.path, 20)).style(Style::default().fg(theme::TEXT_DIM)),
                 Cell::from(verdict_str.clone()).style(theme::verdict_style(&verdict_str)),
                 Cell::from(e.blocked_by_stage.as_deref().unwrap_or("-")).style(Style::default().fg(theme::ORANGE)),
-                Cell::from(truncate(e.blocked_by_rule.as_deref().unwrap_or("-"), 16)).style(Style::default().fg(theme::YELLOW)),
-                Cell::from(truncate(e.blocked_reason.as_deref().unwrap_or("-"), 30)).style(Style::default().fg(theme::TEXT_DIM)),
+                Cell::from(truncate_str(e.blocked_by_rule.as_deref().unwrap_or("-"), 16)).style(Style::default().fg(theme::YELLOW)),
+                Cell::from(truncate_str(e.blocked_reason.as_deref().unwrap_or("-"), 30)).style(Style::default().fg(theme::TEXT_DIM)),
             ])
         })
         .collect();
@@ -506,7 +507,7 @@ fn render_ip_inspector(f: &mut Frame, app: &App, area: Rect) {
                 Span::styled({
                     let mut paths: Vec<_> = path_counts.iter().collect();
                     paths.sort_by(|a, b| b.1.cmp(a.1));
-                    paths.iter().take(3).map(|(p, c)| format!("{} ({})", truncate(p, 20), c)).collect::<Vec<_>>().join(", ")
+                    paths.iter().take(3).map(|(p, c)| format!("{} ({})", truncate_str(p, 20), c)).collect::<Vec<_>>().join(", ")
                 }, theme::dim_style()),
             ]),
         ];
@@ -524,9 +525,9 @@ fn render_ip_inspector(f: &mut Frame, app: &App, area: Rect) {
                 Row::new(vec![
                     Cell::from(time).style(theme::dim_style()),
                     Cell::from(e.method.as_str()).style(Style::default().fg(theme::PURPLE)),
-                    Cell::from(truncate(&e.path, 25)).style(Style::default().fg(theme::TEXT_DIM)),
+                    Cell::from(truncate_str(&e.path, 25)).style(Style::default().fg(theme::TEXT_DIM)),
                     Cell::from(verdict_str.clone()).style(theme::verdict_style(&verdict_str)),
-                    Cell::from(truncate(e.blocked_by_rule.as_deref().unwrap_or("-"), 18)).style(Style::default().fg(theme::YELLOW)),
+                    Cell::from(truncate_str(e.blocked_by_rule.as_deref().unwrap_or("-"), 18)).style(Style::default().fg(theme::YELLOW)),
                     Cell::from(format!("{:.1}ms", e.total_latency_ms)).style(theme::dim_style()),
                 ])
             })
@@ -572,8 +573,8 @@ fn render_rules(f: &mut Frame, app: &App, area: Rect) {
                 Style::default()
             };
             Row::new(vec![
-                Cell::from(truncate(name, 22)).style(Style::default().fg(theme::CYAN)),
-                Cell::from(truncate(desc, 30)).style(Style::default().fg(theme::TEXT_DIM)),
+                Cell::from(truncate_str(name, 22)).style(Style::default().fg(theme::CYAN)),
+                Cell::from(truncate_str(desc, 30)).style(Style::default().fg(theme::TEXT_DIM)),
                 Cell::from(if *enabled { "ON" } else { "OFF" }).style(if *enabled {
                     Style::default().fg(theme::GREEN)
                 } else {
@@ -712,7 +713,7 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
         .map(|(i, (path, count))| {
             Row::new(vec![
                 Cell::from(format!("{}.", i + 1)).style(theme::dim_style()),
-                Cell::from(truncate(path, 30)).style(Style::default().fg(theme::TEXT)),
+                Cell::from(truncate_str(path, 30)).style(Style::default().fg(theme::TEXT)),
                 Cell::from(format_number(*count)).style(theme::stat_value()),
             ])
         })
@@ -866,26 +867,6 @@ fn render_search_bar(f: &mut Frame, input: &str, area: Rect) {
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-
-fn truncate(s: &str, max: usize) -> String {
-    if s.len() > max {
-        format!("{}...", &s[..max.saturating_sub(3)])
-    } else {
-        s.to_string()
-    }
-}
-
-fn format_number(n: u64) -> String {
-    if n >= 1_000_000 { format!("{:.1}M", n as f64 / 1_000_000.0) }
-    else if n >= 1_000 { format!("{:.1}K", n as f64 / 1_000.0) }
-    else { n.to_string() }
-}
-
-fn format_bytes_short(bytes: u64) -> String {
-    if bytes >= 1_048_576 { format!("{:.0}MB", bytes as f64 / 1_048_576.0) }
-    else if bytes >= 1024 { format!("{:.0}KB", bytes as f64 / 1024.0) }
-    else { format!("{}B", bytes) }
-}
 
 fn status_badge(enabled: bool) -> Span<'static> {
     if enabled {

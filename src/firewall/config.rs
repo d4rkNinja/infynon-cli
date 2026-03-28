@@ -1,6 +1,66 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::fmt;
+
+// ── Enums for stringly-typed fields ─────────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum IpMode {
+    Blocklist,
+    Allowlist,
+    Disabled,
+}
+
+impl Default for IpMode {
+    fn default() -> Self { IpMode::Blocklist }
+}
+
+impl fmt::Display for IpMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            IpMode::Blocklist => write!(f, "blocklist"),
+            IpMode::Allowlist => write!(f, "allowlist"),
+            IpMode::Disabled => write!(f, "disabled"),
+        }
+    }
+}
+
+impl IpMode {
+    pub fn from_str_loose(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "blocklist" => Some(IpMode::Blocklist),
+            "allowlist" => Some(IpMode::Allowlist),
+            "disabled" => Some(IpMode::Disabled),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RuleActionType {
+    Block,
+    Allow,
+    Flag,
+    RateLimit,
+}
+
+impl Default for RuleActionType {
+    fn default() -> Self { RuleActionType::Block }
+}
+
+impl fmt::Display for RuleActionType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RuleActionType::Block => write!(f, "block"),
+            RuleActionType::Allow => write!(f, "allow"),
+            RuleActionType::Flag => write!(f, "flag"),
+            RuleActionType::RateLimit => write!(f, "rate_limit"),
+        }
+    }
+}
 
 // ── Top-level config ────────────────────────────────────────────────────────
 
@@ -148,8 +208,8 @@ pub struct TlsConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IpConfig {
-    #[serde(default = "default_ip_mode")]
-    pub mode: String, // "blocklist" | "allowlist" | "disabled"
+    #[serde(default)]
+    pub mode: IpMode,
     #[serde(default)]
     pub blocklist_file: Option<String>,
     #[serde(default)]
@@ -162,12 +222,10 @@ pub struct IpConfig {
     pub auto_reputation: AutoReputationConfig,
 }
 
-fn default_ip_mode() -> String { "blocklist".to_string() }
-
 impl Default for IpConfig {
     fn default() -> Self {
         Self {
-            mode: default_ip_mode(),
+            mode: IpMode::default(),
             blocklist_file: None,
             allowlist_file: None,
             blocklist: Vec::new(),
@@ -394,8 +452,8 @@ pub struct RuleConditionConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuleActionConfig {
-    #[serde(default = "default_action_type", rename = "type")]
-    pub action_type: String, // "block" | "allow" | "flag" | "rate_limit"
+    #[serde(default, rename = "type")]
+    pub action_type: RuleActionType,
     #[serde(default = "default_block_status")]
     pub status: u16,
     #[serde(default)]
@@ -409,13 +467,12 @@ pub struct RuleActionConfig {
     pub window_seconds: Option<u32>,
 }
 
-fn default_action_type() -> String { "block".to_string() }
 fn default_block_status() -> u16 { 403 }
 
 impl Default for RuleActionConfig {
     fn default() -> Self {
         Self {
-            action_type: default_action_type(),
+            action_type: RuleActionType::default(),
             status: default_block_status(),
             message: "Access denied".to_string(),
             tag: None,

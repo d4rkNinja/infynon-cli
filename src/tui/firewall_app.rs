@@ -1,9 +1,11 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
+use crate::firewall::config::IpMode;
 use crate::firewall::events::{FirewallEvent, Verdict};
 use crate::firewall::server::SharedState;
 use crate::firewall::stats::StatsSnapshot;
+use crate::utils::format_bytes;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View {
@@ -423,7 +425,7 @@ impl App {
             3 => cfg.upstream.port.to_string(),
             4 => cfg.waf.enabled.to_string(),
             5 => cfg.rate_limit.enabled.to_string(),
-            6 => cfg.ip.mode.clone(),
+            6 => cfg.ip.mode.to_string(),
             7 => cfg.waf.block_empty_user_agent.to_string(),
             8 => cfg.waf.max_body_size.to_string(),
             9 => cfg.waf.max_url_length.to_string(),
@@ -466,7 +468,7 @@ impl App {
                 return;
             }
         }
-        if is_mode_field && val != "blocklist" && val != "allowlist" && val != "disabled" {
+        if is_mode_field && IpMode::from_str_loose(&val).is_none() {
             self.notify("Enter: blocklist, allowlist, or disabled");
             return;
         }
@@ -480,7 +482,7 @@ impl App {
                 3 => { cfg.upstream.port = val.parse().unwrap(); }
                 4 => { cfg.waf.enabled = val.parse().unwrap(); }
                 5 => { cfg.rate_limit.enabled = val.parse().unwrap(); }
-                6 => { cfg.ip.mode = val; }
+                6 => { cfg.ip.mode = IpMode::from_str_loose(&val).unwrap(); }
                 7 => { cfg.waf.block_empty_user_agent = val.parse().unwrap(); }
                 8 => { cfg.waf.max_body_size = val.parse().unwrap(); }
                 9 => { cfg.waf.max_url_length = val.parse().unwrap(); }
@@ -518,7 +520,7 @@ impl App {
             ("Upstream Port", cfg.upstream.port.to_string()),
             ("WAF Enabled", cfg.waf.enabled.to_string()),
             ("Rate Limit Enabled", cfg.rate_limit.enabled.to_string()),
-            ("IP Filter Mode", cfg.ip.mode.clone()),
+            ("IP Filter Mode", cfg.ip.mode.to_string()),
             ("Block Empty UA", cfg.waf.block_empty_user_agent.to_string()),
             ("Max Body Size", format_bytes(cfg.waf.max_body_size as u64)),
             ("Max URL Length", cfg.waf.max_url_length.to_string()),
@@ -536,9 +538,3 @@ impl App {
     }
 }
 
-fn format_bytes(bytes: u64) -> String {
-    if bytes >= 1_073_741_824 { format!("{:.1} GB", bytes as f64 / 1_073_741_824.0) }
-    else if bytes >= 1_048_576 { format!("{:.1} MB", bytes as f64 / 1_048_576.0) }
-    else if bytes >= 1024 { format!("{:.1} KB", bytes as f64 / 1024.0) }
-    else { format!("{} B", bytes) }
-}

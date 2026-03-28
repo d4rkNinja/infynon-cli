@@ -7,6 +7,7 @@ use crate::tui::logger::Logger;
 use crate::ecosystems::detector;
 use std::path::Path;
 use owo_colors::OwoColorize;
+use crate::utils::truncate_str;
 
 pub fn execute_pkg_mode() -> Result<(), InfynonError> {
     // When invoked as `infynon pkg ...`, strip the "pkg" arg before clap parses
@@ -433,11 +434,6 @@ pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonErr
         // ── Start: run the reverse proxy + TUI ──────────────────────────
         Some(FirewallCommands::Start { config, port, upstream, headless }) => {
             use crate::firewall::config::load_firewall_config;
-            use crate::firewall::server::SharedState;
-            use crate::firewall::pipeline::Pipeline;
-            use crate::firewall::stats::Stats;
-            use crate::firewall::logger::EventLogger;
-            use std::sync::Arc;
 
             Logger::title("INFYNON FIREWALL", "red");
             Logger::step("Loading configuration...");
@@ -460,59 +456,10 @@ pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonErr
             Logger::detail("  Upstream:", &upstream_addr);
             Logger::detail("  WAF:", if cfg.waf.enabled { "enabled" } else { "disabled" });
             Logger::detail("  Rate Limit:", if cfg.rate_limit.enabled { "enabled" } else { "disabled" });
-            Logger::detail("  IP Mode:", &cfg.ip.mode);
+            Logger::detail("  IP Mode:", &cfg.ip.mode.to_string());
             Logger::detail("  Rules:", &format!("{} custom rules loaded", cfg.rules.len()));
 
-            let pipeline = Pipeline::new(&cfg);
-            let stats = Stats::new();
-            let logger = EventLogger::new(&cfg.logging.access_log, &cfg.logging.blocked_log);
-            let maintenance = cfg.server.maintenance_mode;
-
-            let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
-
-            // Build tokio runtime
-            let rt = tokio::runtime::Builder::new_multi_thread()
-                .enable_all()
-                .build()
-                .map_err(|e| InfynonError::System(format!("Failed to create runtime: {}", e)))?;
-
-            let max_events = cfg.tui.max_events_in_memory;
-
-            // Spawn the logger on the runtime
-            let event_tx = rt.block_on(async { logger.spawn() });
-
-            let state = Arc::new(SharedState {
-                pipeline: std::sync::RwLock::new(pipeline),
-                stats,
-                config: std::sync::RwLock::new(cfg),
-                event_tx,
-                recent_events: std::sync::Mutex::new(std::collections::VecDeque::new()),
-                max_recent: max_events,
-                shutdown: shutdown_rx,
-                config_path: config.clone(),
-                maintenance_mode: std::sync::atomic::AtomicBool::new(maintenance),
-                start_time: std::time::Instant::now(),
-            });
-
-            // Start proxy server in background
-            let server_state = state.clone();
-            let server_handle = rt.spawn(async move {
-                if let Err(e) = crate::firewall::server::run_proxy(server_state).await {
-                    eprintln!("Proxy server error: {}", e);
-                }
-            });
-
-            // Start periodic cleanup
-            let cleanup_state = state.clone();
-            rt.spawn(async move {
-                let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
-                loop {
-                    interval.tick().await;
-                    if let Ok(pipeline) = cleanup_state.pipeline.read() {
-                        pipeline.cleanup();
-                    }
-                }
-            });
+            let (state, rt, shutdown_tx) = bootstrap_firewall(cfg, config.clone())?;
 
             // Start config file watcher (hot-reload)
             let watch_state = state.clone();
@@ -525,7 +472,6 @@ pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonErr
 
             if headless {
                 Logger::info("Running in headless mode. Press Ctrl+C to stop.");
-                // Block on Ctrl+C
                 rt.block_on(async {
                     let _ = tokio::signal::ctrl_c().await;
                 });
@@ -533,18 +479,13 @@ pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonErr
             } else {
                 Logger::info("Starting TUI monitor... (press 'q' to quit, '?' for help)");
                 println!();
-
-                // Run TUI on main thread
                 run_firewall_tui(state.clone());
                 let _ = shutdown_tx.send(true);
             }
 
             // Give server time to shut down gracefully
             rt.block_on(async {
-                let _ = tokio::time::timeout(
-                    std::time::Duration::from_secs(2),
-                    server_handle,
-                ).await;
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             });
 
             Logger::success("Firewall stopped.");
@@ -553,61 +494,11 @@ pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonErr
         // ── Monitor: TUI only (starts its own proxy) ────────────────────
         Some(FirewallCommands::Monitor { config, view: _ }) => {
             use crate::firewall::config::load_firewall_config;
-            use crate::firewall::server::SharedState;
-            use crate::firewall::pipeline::Pipeline;
-            use crate::firewall::stats::Stats;
-            use crate::firewall::logger::EventLogger;
-            use std::sync::Arc;
 
             let cfg = load_firewall_config(config.as_deref())
                 .map_err(|e| InfynonError::System(e))?;
 
-            let pipeline = Pipeline::new(&cfg);
-            let stats = Stats::new();
-            let logger = EventLogger::new(&cfg.logging.access_log, &cfg.logging.blocked_log);
-            let maintenance = cfg.server.maintenance_mode;
-
-            let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
-
-            let rt = tokio::runtime::Builder::new_multi_thread()
-                .enable_all()
-                .build()
-                .map_err(|e| InfynonError::System(format!("Failed to create runtime: {}", e)))?;
-
-            let max_events = cfg.tui.max_events_in_memory;
-            let event_tx = rt.block_on(async { logger.spawn() });
-
-            let state = Arc::new(SharedState {
-                pipeline: std::sync::RwLock::new(pipeline),
-                stats,
-                config: std::sync::RwLock::new(cfg),
-                event_tx,
-                recent_events: std::sync::Mutex::new(std::collections::VecDeque::new()),
-                max_recent: max_events,
-                shutdown: shutdown_rx,
-                config_path: config.clone(),
-                maintenance_mode: std::sync::atomic::AtomicBool::new(maintenance),
-                start_time: std::time::Instant::now(),
-            });
-
-            let server_state = state.clone();
-            rt.spawn(async move {
-                if let Err(e) = crate::firewall::server::run_proxy(server_state).await {
-                    eprintln!("Proxy server error: {}", e);
-                }
-            });
-
-            let cleanup_state = state.clone();
-            rt.spawn(async move {
-                let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
-                loop {
-                    interval.tick().await;
-                    if let Ok(pipeline) = cleanup_state.pipeline.read() {
-                        pipeline.cleanup();
-                    }
-                }
-            });
-
+            let (state, _rt, _shutdown_tx) = bootstrap_firewall(cfg, config.clone())?;
             run_firewall_tui(state);
         }
 
@@ -622,7 +513,7 @@ pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonErr
                     Logger::detail("  Upstream:", &format!("{}:{}", cfg.upstream.address, cfg.upstream.port));
                     Logger::detail("  WAF:", if cfg.waf.enabled { "enabled" } else { "disabled" });
                     Logger::detail("  Rate Limit:", if cfg.rate_limit.enabled { "enabled" } else { "disabled" });
-                    Logger::detail("  IP Mode:", &cfg.ip.mode);
+                    Logger::detail("  IP Mode:", &cfg.ip.mode.to_string());
                     Logger::detail("  Rules:", &format!("{} custom rules", cfg.rules.len()));
                     Logger::detail("  Maintenance:", if cfg.server.maintenance_mode { "ON" } else { "OFF" });
                     Logger::detail("  SQLi:", if cfg.waf.sqli_protection { "ON" } else { "OFF" });
@@ -789,6 +680,73 @@ pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonErr
     Ok(())
 }
 
+/// Build the shared firewall state, tokio runtime, and spawn proxy + cleanup tasks.
+/// Returns (state, runtime, shutdown_sender) for the caller to use.
+fn bootstrap_firewall(
+    cfg: crate::firewall::config::FirewallConfig,
+    config_path: Option<String>,
+) -> Result<(
+    std::sync::Arc<crate::firewall::server::SharedState>,
+    tokio::runtime::Runtime,
+    tokio::sync::watch::Sender<bool>,
+), InfynonError> {
+    use crate::firewall::server::SharedState;
+    use crate::firewall::pipeline::Pipeline;
+    use crate::firewall::stats::Stats;
+    use crate::firewall::logger::EventLogger;
+    use std::sync::Arc;
+
+    let pipeline = Pipeline::new(&cfg);
+    let stats = Stats::new();
+    let logger = EventLogger::new(&cfg.logging.access_log, &cfg.logging.blocked_log);
+    let maintenance = cfg.server.maintenance_mode;
+    let max_events = cfg.tui.max_events_in_memory;
+
+    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| InfynonError::System(format!("Failed to create runtime: {}", e)))?;
+
+    let event_tx = rt.block_on(async { logger.spawn() });
+
+    let state = Arc::new(SharedState {
+        pipeline: std::sync::RwLock::new(pipeline),
+        stats,
+        config: std::sync::RwLock::new(cfg),
+        event_tx,
+        recent_events: std::sync::Mutex::new(std::collections::VecDeque::new()),
+        max_recent: max_events,
+        shutdown: shutdown_rx,
+        config_path,
+        maintenance_mode: std::sync::atomic::AtomicBool::new(maintenance),
+        start_time: std::time::Instant::now(),
+    });
+
+    // Spawn proxy server
+    let server_state = state.clone();
+    rt.spawn(async move {
+        if let Err(e) = crate::firewall::server::run_proxy(server_state).await {
+            eprintln!("Proxy server error: {}", e);
+        }
+    });
+
+    // Spawn periodic cleanup
+    let cleanup_state = state.clone();
+    rt.spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            if let Ok(pipeline) = cleanup_state.pipeline.read() {
+                pipeline.cleanup();
+            }
+        }
+    });
+
+    Ok((state, rt, shutdown_tx))
+}
+
 /// Toggle a rule's enabled status in the config file
 fn toggle_rule(name: &str, enabled: bool) {
     use crate::firewall::config::{load_firewall_config, save_firewall_config};
@@ -824,14 +782,14 @@ async fn config_watch_loop(
     config_path: Option<String>,
 ) {
     let path = crate::firewall::config::config_path_for(config_path.as_deref());
-    let mut last_modified = std::fs::metadata(&path)
+    let mut last_modified = tokio::fs::metadata(&path).await
         .and_then(|m| m.modified())
         .ok();
 
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
-        let current_modified = std::fs::metadata(&path)
+        let current_modified = tokio::fs::metadata(&path).await
             .and_then(|m| m.modified())
             .ok();
 
@@ -905,10 +863,3 @@ fn run_firewall_tui(state: std::sync::Arc<crate::firewall::server::SharedState>)
     let _ = terminal.show_cursor();
 }
 
-fn truncate_str(s: &str, max: usize) -> String {
-    if s.len() > max {
-        format!("{}...", &s[..max.saturating_sub(3)])
-    } else {
-        s.to_string()
-    }
-}

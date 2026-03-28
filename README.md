@@ -37,7 +37,7 @@
   <a href="#-firewall-mode-v020">Firewall</a> •
   <a href="#-installation">Install</a> •
   <a href="#-development-channel">Dev Channel</a> •
-  <a href="docs/commands.md">Commands</a>
+  <a href="https://cli.infynon.com/docs">Docs</a>
 </p>
 
 ---

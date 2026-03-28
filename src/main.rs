@@ -11,6 +11,7 @@ mod error;
 mod firewall;
 mod models;
 mod tui;
+mod utils;
 
 use std::env;
 use std::path::Path;

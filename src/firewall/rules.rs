@@ -3,7 +3,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use regex::Regex;
 
-use crate::firewall::config::{RuleConfig, load_ip_list};
+use crate::firewall::config::{RuleConfig, RuleActionType, load_ip_list};
 
 pub struct CompiledRule {
     pub name: String,
@@ -116,16 +116,16 @@ impl CompiledRule {
         }
 
         // Action
-        let action = match config.action.action_type.as_str() {
-            "allow" => RuleAction::Allow,
-            "flag" => RuleAction::Flag {
+        let action = match config.action.action_type {
+            RuleActionType::Allow => RuleAction::Allow,
+            RuleActionType::Flag => RuleAction::Flag {
                 tag: config.action.tag.clone().unwrap_or_else(|| config.name.clone()),
             },
-            "rate_limit" => RuleAction::RateLimit {
+            RuleActionType::RateLimit => RuleAction::RateLimit {
                 requests: config.action.requests.unwrap_or(10),
                 window_seconds: config.action.window_seconds.unwrap_or(60),
             },
-            _ => RuleAction::Block {
+            RuleActionType::Block => RuleAction::Block {
                 status: config.action.status,
                 message: config.action.message.clone(),
             },
