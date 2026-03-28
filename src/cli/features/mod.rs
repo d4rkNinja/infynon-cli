@@ -8,6 +8,7 @@ mod search;
 mod fix;
 mod clean;
 mod migrate;
+pub mod eagle_eye;
 
 pub use audit::cmd_audit_deep;
 pub use why_cmd::cmd_why;

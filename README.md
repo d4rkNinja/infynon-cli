@@ -221,6 +221,10 @@ infynon pkg --strict npm install express
 | `infynon pkg search <query>` | Cross-ecosystem search (npm, crates, PyPI, …) |
 | `infynon pkg clean` | Find and remove unused dependencies |
 | `infynon pkg migrate <from> <to>` | Migrate between package managers |
+| `infynon pkg eagle-eye setup` | Interactive setup for scheduled CVE monitoring |
+| `infynon pkg eagle-eye start` | Start Eagle Eye scheduled vulnerability scanner |
+| `infynon pkg eagle-eye status` | Show Eagle Eye configuration and status |
+| `infynon pkg eagle-eye enable/disable` | Toggle Eagle Eye monitoring |
 
 ---
 
@@ -477,6 +481,33 @@ tls = true
 ```
 
 Emails are sent with styled HTML templates showing top blocked IPs, triggered rules, and traffic statistics.
+
+### Eagle Eye — Scheduled Package Monitoring
+
+Eagle Eye is a scheduled vulnerability scanner for `infynon pkg`. It monitors multiple project directories on a timer, scans all lock files for CVEs, and sends email alerts when vulnerabilities matching your risk threshold are found.
+
+```bash
+# Interactive setup — configure SMTP, paths, risk level, schedule
+infynon pkg eagle-eye setup
+
+# Start monitoring (runs in foreground)
+infynon pkg eagle-eye start
+
+# Check current configuration
+infynon pkg eagle-eye status
+
+# Enable/disable monitoring
+infynon pkg eagle-eye enable
+infynon pkg eagle-eye disable
+```
+
+**Features:**
+- Monitor multiple project directories simultaneously
+- Configurable scan interval (default: every 24 hours)
+- Risk level threshold: choose which severities trigger alerts (CRITICAL, HIGH, MEDIUM, LOW, ALL)
+- SMTP email alerts with styled HTML templates showing per-project vulnerability breakdown
+- Enable/disable toggle without losing configuration
+- Config stored in `~/.infynon/eagle-eye.toml`
 
 ---
 
