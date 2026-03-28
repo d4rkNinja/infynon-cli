@@ -318,31 +318,22 @@ fn run_auto_fix(findings: &[reporter::ScanFinding]) {
         }
     }
 
-    if pkg_map.is_empty() {
-        Logger::info("No packages have a known fixed or suggested version available.");
-        return;
-    }
-
     // Build one command per package using the best available version
-    struct FixItem<'a> {
-        pkg:   &'a crate::engine::scanner::LockedPackage,
-        label: String,
-        cmd:   String,
-    }
+    struct FixItem { label: String, cmd: String }
 
-    let mut items: Vec<FixItem> = Vec::new();
-    for (_, (pkg, confirmed, suggested)) in &pkg_map {
-        let best = if !confirmed.is_empty() {
-            osv::max_version(confirmed)
-        } else {
-            osv::max_version(suggested)
-        };
-        if let Some(ver) = best {
-            let cmd = upgrade_cmd(pkg, &ver);
-            let label = format!("{} {} → {}", pkg.name, pkg.version, ver);
-            items.push(FixItem { pkg, label, cmd });
-        }
-    }
+    let items: Vec<FixItem> = pkg_map.values()
+        .filter_map(|(pkg, confirmed, suggested)| {
+            let best = if !confirmed.is_empty() {
+                osv::max_version(confirmed)
+            } else {
+                osv::max_version(suggested)
+            }?;
+            Some(FixItem {
+                label: format!("{} {} → {}", pkg.name, pkg.version, best),
+                cmd:   upgrade_cmd(pkg, &best),
+            })
+        })
+        .collect();
 
     if items.is_empty() {
         Logger::info("No packages have a known fixed or suggested version available.");

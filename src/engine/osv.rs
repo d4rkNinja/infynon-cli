@@ -106,35 +106,10 @@ pub struct OsvVulnDetail {
     pub affected:    Vec<OsvAffected>,
 }
 
-/// Collect all 'fixed' versions from affected entries that match `pkg_name`.
-/// Pass an empty string to collect from all affected entries regardless of package.
-fn fixed_versions_for(detail: &OsvVulnDetail, pkg_name: &str) -> Vec<String> {
-    let mut versions = Vec::new();
-    for affected in &detail.affected {
-        if !pkg_name.is_empty() && !affected.package.name.is_empty()
-            && affected.package.name != pkg_name
-        {
-            continue; // skip entries for a different module/package
-        }
-        for range in &affected.ranges {
-            if range.kind == "SEMVER" || range.kind == "ECOSYSTEM" {
-                for event in &range.events {
-                    if let Some(ref fixed) = event.fixed {
-                        if !fixed.is_empty() && fixed != "0" {
-                            versions.push(fixed.clone());
-                        }
-                    }
-                }
-            }
-        }
-    }
-    versions
-}
 
 /// For Go modules, extract the required major version from the module path (/vN suffix).
 /// Returns `None` if no major suffix is present (v0/v1 modules).
 fn go_module_major(pkg_name: &str) -> Option<u64> {
-    // Find the last /vN segment where N is all digits
     let mut parts = pkg_name.rsplitn(2, '/');
     if let Some(last) = parts.next() {
         if last.starts_with('v') {
@@ -162,10 +137,9 @@ fn go_version_compatible(pkg_name: &str, version: &str) -> bool {
 /// Compare two version strings, handling Go pseudo-versions and standard semver.
 /// Returns Ordering: Less / Equal / Greater.
 fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
-    // Go pseudo-version: vX.Y.Z-YYYYMMDDHHMMSS-commit  (14-digit timestamp is canonical)
+    // Go pseudo-versions use a 14-digit timestamp as the canonical sort key
     let pseudo_ts = |v: &str| -> Option<u64> {
         let v = v.trim_start_matches('v');
-        // Skip the base semver part, find "-TIMESTAMP-"
         let after_first_dash = v.find('-').map(|i| &v[i + 1..])?;
         let ts_part = after_first_dash.split('-').next()?;
         if ts_part.len() >= 14 && ts_part.chars().all(|c| c.is_ascii_digit()) {
@@ -185,9 +159,6 @@ fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
         (None, None)         => {}
     }
 
-    // Parse numeric parts and optional pre-release label.
-    // e.g. "1.2.3-alpha.1" → ((1,2,3), Some("alpha.1"))
-    //      "1.2.3"          → ((1,2,3), None)
     let parse = |v: &str| -> ((u64, u64, u64), Option<String>) {
         let v = v.trim_start_matches('v');
         let mut parts = v.splitn(3, '.');
@@ -208,20 +179,17 @@ fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
     let (na, pre_a) = parse(a);
     let (nb, pre_b) = parse(b);
 
-    // First compare numeric parts
     let num_ord = na.cmp(&nb);
     if num_ord != std::cmp::Ordering::Equal {
         return num_ord;
     }
 
-    // Same numeric version: stable release beats any pre-release label
-    // e.g. 1.2.3 > 1.2.3-alpha > 1.2.3-beta (stable wins; among pre-releases, lex order)
+    // At equal numeric version, stable > rc > beta > alpha
     match (pre_a, pre_b) {
         (None,     None)     => std::cmp::Ordering::Equal,
         (None,     Some(_))  => std::cmp::Ordering::Greater, // stable > pre-release
         (Some(_),  None)     => std::cmp::Ordering::Less,
         (Some(pa), Some(pb)) => {
-            // Both pre-release: prefer rc over beta over alpha, fall back to lex
             let rank = |s: &str| -> u8 {
                 let s = s.to_ascii_lowercase();
                 if s.starts_with("rc")    { 3 }
@@ -244,30 +212,41 @@ pub fn max_version(versions: &[String]) -> Option<String> {
 }
 
 /// Return the single best fixed version for a specific package from an OSV vuln detail.
-/// - Filters affected entries by exact package name (avoids jwt/v4 fixes leaking into jwt/v5).
-/// - Applies Go major version compatibility filter for Go modules.
-/// - Returns the highest valid version across all matching CVE ranges.
+///
+/// Single pass over `affected`: collects versions from exact-name-matching entries
+/// (`matched`) and from all entries (`all`) simultaneously. Uses `matched` when
+/// non-empty so jwt/v4 fixes don't leak into jwt/v5. Falls back to `all` for older
+/// CVEs that omit the package name. Go major-version filter applied to both.
 pub fn best_fixed_version(detail: &OsvVulnDetail, pkg_name: &str, ecosystem: &str) -> Option<String> {
-    let mut candidates = fixed_versions_for(detail, pkg_name);
+    let is_go = ecosystem == "Go" && !pkg_name.is_empty();
 
-    if ecosystem == "Go" && !pkg_name.is_empty() {
-        candidates.retain(|v| go_version_compatible(pkg_name, v));
-    }
+    let mut matched: Vec<String> = Vec::new(); // from entries whose name == pkg_name
+    let mut all:     Vec<String> = Vec::new(); // from every entry (fallback)
 
-    if candidates.is_empty() {
-        // Fallback: no package-filtered entries found — collect all
-        candidates = fixed_versions_for(detail, "");
-        if ecosystem == "Go" && !pkg_name.is_empty() {
-            candidates.retain(|v| go_version_compatible(pkg_name, v));
+    for affected in &detail.affected {
+        let name_matches = pkg_name.is_empty()
+            || affected.package.name.is_empty()
+            || affected.package.name == pkg_name;
+
+        for range in &affected.ranges {
+            if range.kind != "SEMVER" && range.kind != "ECOSYSTEM" { continue; }
+            for event in &range.events {
+                if let Some(ref fixed) = event.fixed {
+                    if fixed.is_empty() || fixed == "0" { continue; }
+                    if is_go && !go_version_compatible(pkg_name, fixed) { continue; }
+                    if name_matches { matched.push(fixed.clone()); }
+                    all.push(fixed.clone());
+                }
+            }
         }
     }
 
-    max_version(&candidates)
+    max_version(if !matched.is_empty() { &matched } else { &all })
 }
 
-/// Extract the first 'fixed' version from OSV affected ranges (legacy helper, kept for compatibility).
+/// Extract the best fixed version without package-name filtering (legacy compatibility).
 pub fn first_fixed_version(detail: &OsvVulnDetail) -> Option<String> {
-    max_version(&fixed_versions_for(detail, ""))
+    best_fixed_version(detail, "", "")
 }
 
 // ── Shared HTTP client (reused across all calls) ─────────────────────────────
