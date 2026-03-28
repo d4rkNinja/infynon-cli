@@ -28,3 +28,65 @@ pub fn format_number(n: u64) -> String {
     else if n >= 1_000 { format!("{:.1}K", n as f64 / 1_000.0) }
     else { n.to_string() }
 }
+
+/// Send an HTML email via SMTP. Used by both firewall mailer and Eagle Eye.
+pub fn send_smtp_email(
+    host: &str,
+    port: u16,
+    username: &str,
+    password: &str,
+    tls: bool,
+    from: &str,
+    recipients: &[String],
+    subject: &str,
+    html_body: &str,
+) {
+    use lettre::message::{header::ContentType, Mailbox};
+    use lettre::transport::smtp::authentication::Credentials;
+    use lettre::{Message, SmtpTransport, Transport};
+
+    if host.is_empty() || recipients.is_empty() || from.is_empty() {
+        return;
+    }
+
+    let from_mailbox: Mailbox = match from.parse() {
+        Ok(m) => m,
+        Err(_) => return,
+    };
+
+    for recipient in recipients {
+        let to: Mailbox = match recipient.parse() {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+
+        let email = match Message::builder()
+            .from(from_mailbox.clone())
+            .to(to)
+            .subject(subject)
+            .header(ContentType::TEXT_HTML)
+            .body(html_body.to_string())
+        {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+
+        let creds = Credentials::new(username.to_string(), password.to_string());
+
+        let mailer = if tls {
+            SmtpTransport::starttls_relay(host)
+                .ok()
+                .map(|b| b.port(port).credentials(creds).build())
+        } else {
+            SmtpTransport::builder_dangerous(host)
+                .port(port)
+                .credentials(creds)
+                .build()
+                .into()
+        };
+
+        if let Some(mailer) = mailer {
+            let _ = mailer.send(&email);
+        }
+    }
+}
