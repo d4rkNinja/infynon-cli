@@ -155,7 +155,7 @@ pub enum PkgCommands {
 #[command(
     name = "infynon",
     version,
-    about = "INFYNON — Universal Security Manager For Your Any Backend",
+    about = "INFYNON — Universal Security Firewall & Package Manager",
     styles = get_styles()
 )]
 pub struct FirewallArgs {
@@ -165,10 +165,119 @@ pub struct FirewallArgs {
 
 #[derive(Subcommand, Debug)]
 pub enum FirewallCommands {
+    /// Initialize firewall configuration (creates infynon.toml)
+    Init {
+        /// Listen port for the firewall proxy
+        #[arg(long, default_value = "8080")]
+        port: u16,
+        /// Upstream backend address
+        #[arg(long, default_value = "127.0.0.1")]
+        upstream: String,
+        /// Upstream backend port
+        #[arg(long, default_value = "3000")]
+        upstream_port: u16,
+    },
+
+    /// Start the firewall reverse proxy
+    Start {
+        /// Path to configuration file
+        #[arg(long, value_name = "FILE")]
+        config: Option<String>,
+        /// Override listen port
+        #[arg(long)]
+        port: Option<u16>,
+        /// Override upstream address:port
+        #[arg(long, value_name = "HOST:PORT")]
+        upstream: Option<String>,
+        /// Start without TUI (headless mode)
+        #[arg(long)]
+        headless: bool,
+    },
+
+    /// Open the real-time TUI monitor (connects to running firewall)
+    Monitor {
+        /// Path to configuration file
+        #[arg(long, value_name = "FILE")]
+        config: Option<String>,
+        /// Start on a specific view: dashboard | feed | blocked | ips | rules | stats | config
+        #[arg(long, default_value = "dashboard")]
+        view: String,
+    },
+
+    /// Show firewall status
+    Status {
+        /// Path to configuration file
+        #[arg(long, value_name = "FILE")]
+        config: Option<String>,
+    },
+
+    /// Block an IP address immediately
+    #[command(name = "block")]
+    BlockIp {
+        /// IP address to block
+        ip: String,
+    },
+
+    /// Unblock an IP address
+    #[command(name = "unblock")]
+    UnblockIp {
+        /// IP address to unblock
+        ip: String,
+    },
+
+    /// Manage firewall rules
+    Rules {
+        #[command(subcommand)]
+        action: RulesAction,
+    },
+
+    /// View and export firewall logs
+    Logs {
+        /// Follow mode (stream new events)
+        #[arg(long)]
+        follow: bool,
+        /// Filter by verdict: allow | block | flag | rate_limited
+        #[arg(long)]
+        verdict: Option<String>,
+        /// Filter by source IP
+        #[arg(long)]
+        ip: Option<String>,
+        /// Show events from last duration (e.g. 1h, 24h, 7d)
+        #[arg(long)]
+        since: Option<String>,
+        /// Number of recent entries to show
+        #[arg(long, default_value = "50")]
+        count: usize,
+    },
+
+    /// Validate and display the current configuration
+    #[command(name = "config")]
+    ConfigCmd {
+        #[command(subcommand)]
+        action: Option<ConfigAction>,
+    },
+
     /// Start the background nightly intelligence pipeline
     Daemon,
-    /// Open the real-time TUI dashboard
-    Dashboard,
+
     /// Manually trigger nightly intelligence pipeline immediately
     UpdateIntel,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum RulesAction {
+    /// List all active rules with hit counts
+    List,
+    /// Enable a rule by name
+    Enable { name: String },
+    /// Disable a rule by name
+    Disable { name: String },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ConfigAction {
+    /// Validate the configuration file
+    Check,
+    /// Show the effective configuration (with defaults)
+    Show,
 }
