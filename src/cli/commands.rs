@@ -744,6 +744,23 @@ fn bootstrap_firewall(
         }
     });
 
+    // Spawn daily digest email scheduler
+    let digest_state = state.clone();
+    rt.spawn(async move {
+        crate::firewall::mailer::daily_digest_loop(digest_state).await;
+    });
+
+    // Spawn periodic alert checker (every 30 seconds)
+    let alert_state = state.clone();
+    rt.spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+        loop {
+            interval.tick().await;
+            let snapshot = alert_state.stats.snapshot();
+            crate::firewall::mailer::check_and_alert(&alert_state, &snapshot);
+        }
+    });
+
     Ok((state, rt, shutdown_tx))
 }
 

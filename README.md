@@ -18,7 +18,7 @@
   </a>
   <img src="https://img.shields.io/badge/ecosystems-14-blue?style=for-the-badge" />
   <img src="https://img.shields.io/badge/lockfiles-15-purple?style=for-the-badge" />
-  <img src="https://img.shields.io/badge/version-0.2.0--beta.3-orange?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/version-0.2.0--beta.4-orange?style=for-the-badge" />
   <a href="https://github.com/d4rkNinja/infynon-cli/tree/development">
     <img src="https://img.shields.io/badge/channel-development-blueviolet?style=for-the-badge" />
   </a>
@@ -377,6 +377,7 @@ infynon rules disable my-rule
 | **TUI Dashboard** | 7 real-time views: Dashboard, Live Feed, Blocked, IP Inspector, Rules, Stats, Config |
 | **Live Config Editing** | Edit all firewall settings directly from the TUI with instant apply |
 | **Hot Config Reload** | Edit `infynon.toml` — changes auto-detected and applied within seconds |
+| **Email Alerts** | SMTP/AWS SES notifications on suspicious activity + daily digest reports |
 | **JSONL Logging** | Structured event logging with separate blocked request log |
 | **Cross-Platform** | Works on Linux, macOS, and Windows |
 
@@ -448,8 +449,34 @@ Run `infynon init` for interactive setup, or create `infynon.toml` manually. The
 - **Logging**: JSONL access/blocked/alert logs with rotation
 - **TUI**: refresh rate, default view, theme, max events in memory
 - **Responses**: custom block/rate-limit/maintenance pages
+- **Email**: SMTP or AWS SES notifications — alert on block threshold, IP ban, daily digest
 
 Config can be edited from the TUI (view 7) or directly in the file. Changes to the file are auto-detected and hot-reloaded within seconds.
+
+### Email Notifications
+
+Configure email alerts to get notified about suspicious activity:
+
+```toml
+[email]
+enabled = true
+provider = "smtp"                      # "smtp" or "ses"
+from = "firewall@example.com"
+to = ["admin@example.com"]
+alert_on_block_threshold = 100         # Alert when blocks/min > 100
+alert_on_ip_ban = true                 # Alert when IP is auto-banned
+daily_digest = true                    # Daily summary at 8:00 UTC
+daily_digest_hour = 8
+
+[email.smtp]
+host = "smtp.gmail.com"
+port = 587
+username = "your-email@gmail.com"
+password = "your-app-password"
+tls = true
+```
+
+Emails are sent with styled HTML templates showing top blocked IPs, triggered rules, and traffic statistics.
 
 ---
 

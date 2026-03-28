@@ -169,3 +169,33 @@ max_events_in_memory = 10000
 # block_page_json = "responses/block.json"
 # ratelimit_page_html = "responses/ratelimit.html"
 # maintenance_page_html = "responses/maintenance.html"
+
+# --- EMAIL NOTIFICATIONS ---
+# Sends alert emails on suspicious activity and daily digest reports.
+# Supports SMTP and AWS SES providers.
+[email]
+enabled = false
+provider = "smtp"                      # "smtp" or "ses"
+from = "firewall@example.com"
+to = ["admin@example.com"]
+
+# Alert triggers
+alert_on_block_threshold = 100         # Send alert when blocks/min exceeds this (0 = disabled)
+alert_window_minutes = 5               # Window for threshold calculation
+alert_on_ip_ban = true                 # Send alert when an IP is auto-banned
+daily_digest = true                    # Send daily summary email
+daily_digest_hour = 8                  # Hour (UTC) to send daily digest (0-23)
+
+[email.smtp]
+host = "smtp.gmail.com"
+port = 587
+username = "your-email@gmail.com"
+password = "your-app-password"
+tls = true
+
+# AWS SES (alternative to SMTP)
+# Set provider = "ses" and configure:
+[email.ses]
+region = "us-east-1"
+access_key_id = ""
+secret_access_key = ""

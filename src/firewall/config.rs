@@ -89,6 +89,8 @@ pub struct FirewallConfig {
     pub tui: TuiConfig,
     #[serde(default)]
     pub responses: ResponsesConfig,
+    #[serde(default)]
+    pub email: EmailConfig,
 }
 
 impl Default for FirewallConfig {
@@ -105,6 +107,7 @@ impl Default for FirewallConfig {
             logging: default_logging(),
             tui: TuiConfig::default(),
             responses: ResponsesConfig::default(),
+            email: EmailConfig::default(),
         }
     }
 }
@@ -565,6 +568,94 @@ pub struct ResponsesConfig {
     pub ratelimit_page_html: Option<String>,
     #[serde(default)]
     pub maintenance_page_html: Option<String>,
+}
+
+// ── Email / Notifications ───────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmailConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_email_provider")]
+    pub provider: String,
+    #[serde(default)]
+    pub smtp: SmtpConfig,
+    #[serde(default)]
+    pub ses: SesConfig,
+    #[serde(default)]
+    pub from: String,
+    #[serde(default)]
+    pub to: Vec<String>,
+    #[serde(default)]
+    pub alert_on_block_threshold: u32,
+    #[serde(default = "default_alert_window")]
+    pub alert_window_minutes: u32,
+    #[serde(default)]
+    pub alert_on_ip_ban: bool,
+    #[serde(default)]
+    pub daily_digest: bool,
+    #[serde(default = "default_digest_hour")]
+    pub daily_digest_hour: u32,
+}
+
+fn default_email_provider() -> String { "smtp".to_string() }
+fn default_alert_window() -> u32 { 5 }
+fn default_digest_hour() -> u32 { 8 }
+
+impl Default for EmailConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            provider: default_email_provider(),
+            smtp: SmtpConfig::default(),
+            ses: SesConfig::default(),
+            from: String::new(),
+            to: Vec::new(),
+            alert_on_block_threshold: 0,
+            alert_window_minutes: default_alert_window(),
+            alert_on_ip_ban: false,
+            daily_digest: false,
+            daily_digest_hour: default_digest_hour(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SmtpConfig {
+    #[serde(default)]
+    pub host: String,
+    #[serde(default = "default_smtp_port")]
+    pub port: u16,
+    #[serde(default)]
+    pub username: String,
+    #[serde(default)]
+    pub password: String,
+    #[serde(default = "default_true")]
+    pub tls: bool,
+}
+
+fn default_smtp_port() -> u16 { 587 }
+
+impl Default for SmtpConfig {
+    fn default() -> Self {
+        Self {
+            host: String::new(),
+            port: default_smtp_port(),
+            username: String::new(),
+            password: String::new(),
+            tls: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SesConfig {
+    #[serde(default)]
+    pub region: String,
+    #[serde(default)]
+    pub access_key_id: String,
+    #[serde(default)]
+    pub secret_access_key: String,
 }
 
 // ── Load / Save ─────────────────────────────────────────────────────────────

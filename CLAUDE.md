@@ -51,6 +51,7 @@ The single `infynon` binary operates in two modes, determined at startup in `mai
   - `events.rs` — `FirewallEvent` struct (request metadata + verdict + timing) and `Verdict` enum (Allow, Block, RateLimited, Flagged)
   - `stats.rs` — Rolling statistics with ring buffers (60s traffic/blocks sparklines), atomic counters, top-N trackers (IPs, paths, rules), `StatsSnapshot` for TUI consumption
   - `logger.rs` — Async JSONL file logger via tokio channel, writes to access.jsonl and blocked.jsonl
+  - `mailer.rs` — Email notification system: SMTP/AWS SES transport, HTML-templated alert emails (block threshold, IP ban alerts), daily digest reports with full traffic stats. Runs as async tasks (30s alert checker + daily digest scheduler)
 - **`tui/`** — Terminal UI:
   - `firewall_app.rs` — TUI app state machine with 7 views (Dashboard, LiveFeed, Blocked, IpInspector, Rules, Stats, Config), keyboard handling, feed filtering, IP search, config editing via RwLock, notifications, help overlay, maintenance mode toggle
   - `views.rs` — All ratatui rendering: tab bar with maintenance indicator, status line with notifications, dashboard (sparklines, tables), live feed with search overlay, blocked requests, IP inspector (search + block/unblock + per-IP stats), rules (custom + WAF status), stats (verdicts, status codes, top paths), config editor (20 editable fields with save/reload)
@@ -124,4 +125,5 @@ Key crates:
 - **HTTP**: `reqwest` (blocking client for pkg mode), `hyper` + `hyper-util` + `http-body-util` (async server/proxy for firewall), `tokio` (async runtime)
 - **Data**: `serde` + `serde_json` (serialization), `toml` (config), `chrono` (timestamps), `regex` (WAF patterns), `ipnet` (CIDR), `bytes` (buffers)
 - **Output**: `printpdf` (PDF export)
+- **Email**: `lettre` (SMTP/STARTTLS transport, email builder)
 - **Error**: `thiserror`

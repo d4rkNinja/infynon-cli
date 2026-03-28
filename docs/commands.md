@@ -226,11 +226,127 @@ Runs a vulnerability scan after migration completes.
 
 ---
 
-## Firewall Engine Mode (Upcoming)
+## Firewall Mode
+
+### Init
+
+Create a default `infynon.toml` configuration file.
 
 ```bash
-infynon                                       # show project info
-infynon daemon                                # start background CVE intelligence
-infynon dashboard                             # open TUI security dashboard
-infynon update-intel                          # manually refresh CVE intel
+infynon init                                  # default: port 8080, upstream 127.0.0.1:3000
+infynon init --port 9090                      # custom listen port
+infynon init --upstream 10.0.0.1              # custom upstream address
+infynon init --upstream-port 8000             # custom upstream port
 ```
+
+### Start
+
+Start the firewall reverse proxy with TUI dashboard.
+
+```bash
+infynon start                                 # start with TUI dashboard
+infynon start --headless                      # start without TUI (background mode)
+infynon start --config /path/to/infynon.toml  # use specific config file
+infynon start --port 9090                     # override listen port
+infynon start --upstream 10.0.0.1:8000        # override upstream
+```
+
+### Monitor
+
+Open the TUI dashboard (starts its own proxy instance).
+
+```bash
+infynon monitor                               # open TUI monitor
+infynon monitor --config /path/to/config.toml # with specific config
+```
+
+### Status
+
+Show current firewall configuration and status.
+
+```bash
+infynon status                                # show config summary
+infynon status --config /path/to/config.toml  # from specific config
+```
+
+### Block / Unblock IP
+
+```bash
+infynon block 203.0.113.50                    # block an IP immediately
+infynon unblock 203.0.113.50                  # remove from blocklist
+```
+
+### Rules Management
+
+```bash
+infynon rules list                            # list all rules with hit counts
+infynon rules enable my-rule                  # enable a disabled rule
+infynon rules disable my-rule                 # disable a rule
+```
+
+### Logs
+
+```bash
+infynon logs                                  # show last 50 log entries
+infynon logs --count 200                      # show last 200 entries
+infynon logs --verdict block                  # filter: block | allow | flag | rate_limited
+infynon logs --ip 203.0.113.50                # filter by source IP
+```
+
+### Config
+
+```bash
+infynon config check                          # validate config file
+infynon config show                           # print effective config with defaults
+```
+
+### TUI Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `1-7` | Switch views (Dashboard/Feed/Blocked/IPs/Rules/Stats/Config) |
+| `q` | Quit TUI |
+| `/` | Search/filter |
+| `?` | Help overlay |
+| `r` | Reload config from file |
+| `m` | Toggle maintenance mode |
+| `p` | Pause/resume live feed |
+| `f` | Cycle feed filter |
+| `b` | Block selected IP (IP Inspector) |
+| `u` | Unblock selected IP (IP Inspector) |
+| `Enter` | Edit config field (Config view) |
+| `s` | Save config to file (Config view) |
+
+### Email Notifications
+
+Configure in `infynon.toml` under `[email]`:
+
+```toml
+[email]
+enabled = true
+provider = "smtp"                     # "smtp" or "ses"
+from = "firewall@example.com"
+to = ["admin@example.com"]
+alert_on_block_threshold = 100        # blocks/min to trigger alert
+alert_on_ip_ban = true                # alert on auto-ban
+daily_digest = true                   # daily summary email
+daily_digest_hour = 8                 # UTC hour for digest
+
+[email.smtp]
+host = "smtp.gmail.com"
+port = 587
+username = "user@gmail.com"
+password = "app-password"
+tls = true
+
+# Or use AWS SES:
+# provider = "ses"
+# [email.ses]
+# region = "us-east-1"
+# access_key_id = "AKIA..."
+# secret_access_key = "..."
+```
+
+Email types:
+- **Alert emails**: Sent when block rate exceeds threshold or an IP is auto-banned. Contains top blocked IPs and triggered rules.
+- **Daily digest**: Comprehensive daily report with total requests, blocks, rate limits, top IPs, top paths, top rules, and verdict breakdown.

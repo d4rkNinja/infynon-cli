@@ -69,12 +69,15 @@ fn render_tabs(f: &mut Frame, app: &App, area: Rect) {
         maint_indicator,
     ];
 
+    let selected_idx = View::all().iter().position(|v| *v == app.current_view).unwrap_or(0);
+
     let tabs = Tabs::new(titles)
         .block(Block::default()
             .borders(Borders::BOTTOM)
             .border_style(theme::border_style())
             .title(Line::from(title_spans)))
-        .highlight_style(Style::default().fg(theme::CYAN))
+        .select(selected_idx)
+        .highlight_style(Style::default().fg(theme::CYAN).add_modifier(Modifier::BOLD))
         .divider(Span::styled(" | ", theme::dim_style()));
 
     f.render_widget(tabs, area);
@@ -776,45 +779,64 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
 fn render_config(f: &mut Frame, app: &App, area: Rect) {
     let fields = app.config_fields();
 
-    let header = Row::new(vec![
-        Cell::from("SETTING").style(theme::header_style()),
-        Cell::from("VALUE").style(theme::header_style()),
-    ]).height(1);
+    // Group fields into sections with headers
+    let section_breaks: &[(usize, &str)] = &[
+        (0, "SERVER"),
+        (4, "SECURITY"),
+        (8, "LIMITS"),
+        (11, "PROTECTIONS"),
+        (17, "AUTO-REPUTATION"),
+    ];
 
-    let rows: Vec<Row> = fields.iter().enumerate()
-        .map(|(i, (label, value))| {
-            let is_selected = i == app.config_selected;
-            let label_style = if is_selected { theme::selected_style() } else { Style::default().fg(theme::TEXT) };
-            let value_style = if is_selected && app.config_editing {
-                Style::default().fg(theme::CYAN).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
-            } else if is_selected {
-                theme::selected_style()
-            } else if value == "true" {
-                Style::default().fg(theme::GREEN)
-            } else if value == "false" {
-                Style::default().fg(theme::RED)
-            } else {
-                theme::stat_value()
-            };
+    let mut rows: Vec<Row> = Vec::new();
 
-            let display_value = if is_selected && app.config_editing {
-                format!("{}|", app.config_edit_buf)
-            } else {
-                value.clone()
-            };
+    for (i, (label, value)) in fields.iter().enumerate() {
+        // Insert section header if needed
+        for &(break_at, section_name) in section_breaks {
+            if i == break_at {
+                rows.push(Row::new(vec![
+                    Cell::from(format!("  {}", section_name))
+                        .style(Style::default().fg(theme::CYAN).add_modifier(Modifier::BOLD)),
+                    Cell::from("").style(theme::dim_style()),
+                ]).height(1));
+            }
+        }
 
-            Row::new(vec![
-                Cell::from(*label).style(label_style),
-                Cell::from(display_value).style(value_style),
-            ])
-        })
-        .collect();
+        let is_selected = i == app.config_selected;
+        let pointer = if is_selected { " >" } else { "  " };
+        let label_style = if is_selected {
+            Style::default().fg(theme::CYAN).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(theme::TEXT)
+        };
+        let value_style = if is_selected && app.config_editing {
+            Style::default().fg(theme::CYAN).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
+        } else if is_selected {
+            Style::default().fg(theme::WHITE).add_modifier(Modifier::BOLD)
+        } else if value == "true" {
+            Style::default().fg(theme::GREEN)
+        } else if value == "false" {
+            Style::default().fg(theme::RED)
+        } else {
+            theme::stat_value()
+        };
 
-    let table = Table::new(rows, [Constraint::Length(25), Constraint::Min(20)])
-        .header(header)
+        let display_value = if is_selected && app.config_editing {
+            format!("{}|", app.config_edit_buf)
+        } else {
+            value.clone()
+        };
+
+        rows.push(Row::new(vec![
+            Cell::from(format!("{} {}", pointer, label)).style(label_style),
+            Cell::from(display_value).style(value_style),
+        ]));
+    }
+
+    let table = Table::new(rows, [Constraint::Length(28), Constraint::Min(20)])
         .block(Block::default()
             .title(Span::styled(
-                " Config -- [Enter]edit [s]save [r]reload [Up/Dn]navigate ",
+                " Configuration ",
                 theme::title_style(),
             ))
             .borders(Borders::ALL)
@@ -822,27 +844,41 @@ fn render_config(f: &mut Frame, app: &App, area: Rect) {
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(0), Constraint::Length(5)])
+        .constraints([Constraint::Min(0), Constraint::Length(4)])
         .split(area);
 
     f.render_widget(table, chunks[0]);
 
-    // Help text at bottom
+    // Context-sensitive help at bottom
     let config_path = app.state.config_path.as_deref().unwrap_or("infynon.toml");
-    let help = Paragraph::new(vec![
-        Line::from(Span::styled(
-            format!("  Config file: {} (or ~/.infynon/infynon.toml)", config_path),
-            theme::dim_style(),
-        )),
-        Line::from(Span::styled(
-            "  Edit values here (Enter to edit, Esc to cancel) and save (s) to persist.",
-            theme::dim_style(),
-        )),
-        Line::from(Span::styled(
-            "  Changes to listen/upstream require restart. WAF/rate-limit changes apply immediately.",
-            theme::dim_style(),
-        )),
-    ])
+    let file_info = format!("  file: {}", config_path);
+    let help_text = if app.config_editing {
+        vec![
+            Line::from(vec![
+                Span::styled("  Editing: ", theme::stat_label()),
+                Span::styled("Type new value, Enter to apply, Esc to cancel", Style::default().fg(theme::CYAN)),
+            ]),
+        ]
+    } else {
+        vec![
+            Line::from(vec![
+                Span::styled("  Enter", theme::stat_value()),
+                Span::styled(" edit  ", theme::dim_style()),
+                Span::styled("s", theme::stat_value()),
+                Span::styled(" save  ", theme::dim_style()),
+                Span::styled("r", theme::stat_value()),
+                Span::styled(" reload  ", theme::dim_style()),
+                Span::styled("Up/Dn", theme::stat_value()),
+                Span::styled(" navigate  ", theme::dim_style()),
+                Span::styled(&file_info, theme::dim_style()),
+            ]),
+            Line::from(Span::styled(
+                "  Server changes require restart. WAF/rate-limit changes apply immediately.",
+                theme::dim_style(),
+            )),
+        ]
+    };
+    let help = Paragraph::new(help_text)
         .block(Block::default().borders(Borders::TOP).border_style(theme::border_style()));
     f.render_widget(help, chunks[1]);
 }

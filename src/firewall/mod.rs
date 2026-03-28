@@ -8,3 +8,4 @@ pub mod pipeline;
 pub mod stats;
 pub mod server;
 pub mod logger;
+pub mod mailer;
