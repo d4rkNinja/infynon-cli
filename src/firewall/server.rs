@@ -19,14 +19,16 @@ use crate::firewall::pipeline::Pipeline;
 use crate::firewall::stats::Stats;
 
 pub struct SharedState {
-    pub pipeline: Pipeline,
+    pub pipeline: std::sync::RwLock<Pipeline>,
     pub stats: Stats,
-    pub config: FirewallConfig,
+    pub config: std::sync::RwLock<FirewallConfig>,
     pub event_tx: mpsc::UnboundedSender<FirewallEvent>,
-    // Ring buffer of recent events for TUI
-    pub recent_events: std::sync::Mutex<Vec<FirewallEvent>>,
+    pub recent_events: std::sync::Mutex<std::collections::VecDeque<FirewallEvent>>,
     pub max_recent: usize,
     pub shutdown: tokio::sync::watch::Receiver<bool>,
+    pub config_path: Option<String>,
+    pub maintenance_mode: std::sync::atomic::AtomicBool,
+    pub start_time: std::time::Instant,
 }
 
 impl SharedState {
@@ -46,25 +48,84 @@ impl SharedState {
         // Store in recent events ring
         if let Ok(mut recent) = self.recent_events.lock() {
             if recent.len() >= self.max_recent {
-                recent.remove(0);
+                recent.pop_front();
             }
-            recent.push(event);
+            recent.push_back(event);
         }
     }
 
     pub fn recent_events_snapshot(&self) -> Vec<FirewallEvent> {
         self.recent_events.lock()
-            .map(|r| r.clone())
+            .map(|r| r.iter().cloned().collect())
             .unwrap_or_default()
     }
+
+    /// Get only the last N events (avoids cloning the entire ring buffer).
+    pub fn recent_events_tail(&self, n: usize) -> Vec<FirewallEvent> {
+        self.recent_events.lock()
+            .map(|r| r.iter().rev().take(n).cloned().collect::<Vec<_>>().into_iter().rev().collect())
+            .unwrap_or_default()
+    }
+
+    /// Count events matching a predicate (avoids cloning).
+    pub fn count_events(&self, predicate: impl Fn(&FirewallEvent) -> bool) -> usize {
+        self.recent_events.lock()
+            .map(|r| r.iter().filter(|e| predicate(e)).count())
+            .unwrap_or(0)
+    }
+
+    /// Rebuild the pipeline from current config. Call after config changes.
+    pub fn rebuild_pipeline(&self) {
+        // Clone config first, then drop the read lock before building pipeline.
+        // This avoids holding a nested lock (config read + pipeline write).
+        let cfg_clone = match self.config.read() {
+            Ok(cfg) => cfg.clone(),
+            Err(_) => return,
+        };
+        let new_pipeline = Pipeline::new(&cfg_clone);
+        if let Ok(mut pipeline) = self.pipeline.write() {
+            *pipeline = new_pipeline;
+        }
+    }
+}
+
+/// Resolve which upstream to use based on request path and configured routes.
+/// Returns (upstream_addr, optional_rewritten_path).
+fn resolve_upstream(state: &SharedState, path: &str) -> (String, Option<String>) {
+    if let Ok(cfg) = state.config.read() {
+        // Check extra upstreams first (path-prefix routing)
+        for route in &cfg.upstreams {
+            if path.starts_with(&route.path_prefix) {
+                let addr = format!("{}:{}", route.address, route.port);
+                let stripped = if route.strip_prefix {
+                    let s = path.strip_prefix(&route.path_prefix).unwrap_or(path);
+                    // Ensure the forwarded path always starts with /
+                    if s.is_empty() || !s.starts_with('/') {
+                        Some(format!("/{}", s.trim_start_matches('/')))
+                    } else {
+                        Some(s.to_string())
+                    }
+                } else {
+                    None
+                };
+                return (addr, stripped);
+            }
+        }
+        // Default upstream
+        let addr = format!("{}:{}", cfg.upstream.address, cfg.upstream.port);
+        return (addr, None);
+    }
+    ("127.0.0.1:3000".to_string(), None)
 }
 
 /// Start the reverse proxy server. Runs until shutdown signal.
 pub async fn run_proxy(state: Arc<SharedState>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let addr = format!("{}:{}", state.config.server.listen_address, state.config.server.listen_port);
+    let addr = {
+        let cfg = state.config.read()
+            .map_err(|e| format!("Config lock poisoned: {}", e))?;
+        format!("{}:{}", cfg.server.listen_address, cfg.server.listen_port)
+    };
     let listener = TcpListener::bind(&addr).await?;
-
-    let upstream_addr = format!("{}:{}", state.config.upstream.address, state.config.upstream.port);
     let client: Client<hyper_util::client::legacy::connect::HttpConnector, Full<Bytes>> =
         Client::builder(TokioExecutor::new()).build_http();
 
@@ -76,7 +137,6 @@ pub async fn run_proxy(state: Arc<SharedState>) -> Result<(), Box<dyn std::error
                 match result {
                     Ok((stream, addr)) => {
                         let state = state.clone();
-                        let upstream = upstream_addr.clone();
                         let client = client.clone();
                         state.stats.conn_open();
 
@@ -84,10 +144,9 @@ pub async fn run_proxy(state: Arc<SharedState>) -> Result<(), Box<dyn std::error
                             let io = TokioIo::new(stream);
                             let svc = service_fn(move |req: Request<Incoming>| {
                                 let state = state.clone();
-                                let upstream = upstream.clone();
                                 let client = client.clone();
                                 async move {
-                                    handle_request(req, addr, state, &upstream, client).await
+                                    handle_request(req, addr, state, client).await
                                 }
                             });
 
@@ -98,7 +157,6 @@ pub async fn run_proxy(state: Arc<SharedState>) -> Result<(), Box<dyn std::error
                             if let Err(_e) = conn.await {
                                 // Connection error — client disconnected, etc.
                             }
-                            // Note: conn_close happens per-request in handle_request
                         });
                     }
                     Err(_e) => {
@@ -119,9 +177,13 @@ async fn handle_request(
     req: Request<Incoming>,
     addr: SocketAddr,
     state: Arc<SharedState>,
-    upstream: &str,
     client: Client<hyper_util::client::legacy::connect::HttpConnector, Full<Bytes>>,
 ) -> Result<Response<Full<Bytes>>, hyper::Error> {
+    // Check maintenance mode before anything else
+    if state.maintenance_mode.load(std::sync::atomic::Ordering::Relaxed) {
+        return Ok(build_maintenance_response());
+    }
+
     let start = Instant::now();
     let ip = addr.ip().to_string();
     let port = addr.port();
@@ -168,8 +230,13 @@ async fn handle_request(
         None
     };
 
-    // ── Run pipeline ────────────────────────────────────────────────────────
-    let allowed = state.pipeline.evaluate(&mut event, &headers, body_preview);
+    // ── Run pipeline (behind RwLock) ─────────────────────────────────────────
+    let allowed = if let Ok(pipeline) = state.pipeline.read() {
+        pipeline.evaluate(&mut event, &headers, body_preview)
+    } else {
+        // Pipeline lock poisoned — fail open to avoid blocking all traffic
+        true
+    };
 
     if !allowed {
         event.total_latency_ms = start.elapsed().as_secs_f64() * 1000.0;
@@ -187,10 +254,15 @@ async fn handle_request(
 
     // ── Forward to upstream ─────────────────────────────────────────────────
     let upstream_start = Instant::now();
+    // Resolve upstream based on path-prefix routing
+    let (resolved_upstream, stripped_path) = resolve_upstream(&state, &event.path);
+    let forward_path = stripped_path.as_deref().unwrap_or(&event.path);
+    let forward_path = if forward_path.is_empty() { "/" } else { forward_path };
+
     let uri_string = if let Some(ref q) = event.query {
-        format!("http://{}{}?{}", upstream, event.path, q)
+        format!("http://{}{}?{}", resolved_upstream, forward_path, q)
     } else {
-        format!("http://{}{}", upstream, event.path)
+        format!("http://{}{}", resolved_upstream, forward_path)
     };
 
     let uri: hyper::Uri = match uri_string.parse() {
@@ -273,6 +345,30 @@ async fn handle_request(
             Ok(build_error_response(StatusCode::BAD_GATEWAY, "Upstream unavailable"))
         }
     }
+}
+
+fn build_maintenance_response() -> Response<Full<Bytes>> {
+    let body = r#"<!DOCTYPE html>
+<html><head><title>Maintenance - INFYNON</title>
+<style>
+body{font-family:system-ui;background:#0a0a0a;color:#e0e0e0;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0}
+.c{text-align:center;max-width:500px;padding:40px}
+h1{color:#00d2ff;font-size:2em;margin-bottom:10px}
+p{color:#888;line-height:1.6}
+.badge{display:inline-block;background:#1a1a2e;border:1px solid #333;border-radius:4px;padding:4px 12px;font-size:0.8em;color:#00d2ff;margin-top:20px}
+</style></head>
+<body><div class="c">
+<h1>Under Maintenance</h1>
+<p>We'll be back shortly. The system is currently undergoing scheduled maintenance.</p>
+<div class="badge">Protected by INFYNON</div>
+</div></body></html>"#;
+
+    Response::builder()
+        .status(StatusCode::SERVICE_UNAVAILABLE)
+        .header("content-type", "text/html; charset=utf-8")
+        .header("retry-after", "300")
+        .body(Full::new(Bytes::from(body)))
+        .unwrap_or_else(|_| Response::new(Full::new(Bytes::from("Maintenance"))))
 }
 
 fn build_block_response() -> Response<Full<Bytes>> {

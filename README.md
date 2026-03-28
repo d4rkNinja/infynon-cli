@@ -18,15 +18,15 @@
   </a>
   <img src="https://img.shields.io/badge/ecosystems-14-blue?style=for-the-badge" />
   <img src="https://img.shields.io/badge/lockfiles-15-purple?style=for-the-badge" />
-  <img src="https://img.shields.io/badge/version-0.2.0--beta.1-orange?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/version-0.2.0--beta.3-orange?style=for-the-badge" />
   <a href="https://github.com/d4rkNinja/infynon-cli/tree/development">
     <img src="https://img.shields.io/badge/channel-development-blueviolet?style=for-the-badge" />
   </a>
 </p>
 
 <p align="center">
-  <strong>🚫 Traditional tools scan AFTER install</strong><br/>
-  <strong>✅ INFYNON blocks vulnerabilities BEFORE install</strong>
+  <strong>🚫 AI generates code, installs packages — you don't know what's compromised</strong><br/>
+  <strong>✅ INFYNON catches it before it touches your system</strong>
 </p>
 
 <p align="center">
@@ -44,34 +44,41 @@
 
 ## ⚡ What is INFYNON?
 
-INFYNON is a **dual-mode security tool** written in Rust:
+INFYNON is a **security CLI** written in Rust with two modes:
 
-1. **`infynon` (Firewall Mode)** — A real-time reverse proxy WAF that sits between the internet and your backend, inspecting and filtering every HTTP request with a beautiful TUI dashboard.
-2. **`infynon pkg` (Package Manager Mode)** — A universal pre-installation firewall for dependencies across 14 ecosystems.
+1. **`infynon` — Network Firewall**: A real-time reverse proxy WAF that sits between the internet and your backend. Inspects, filters, and blocks HTTP traffic with a TUI dashboard. Self-hosted Cloudflare alternative.
+2. **`infynon pkg` — Package Security**: A pre-installation firewall for dependencies across 14 ecosystems. Stops compromised packages before they touch your system.
 
-### Firewall Mode (NEW in v0.2.0)
+### The Problem INFYNON Solves
+
+**In the age of vibe coding and AI-generated code**, developers and AI tools install packages without knowing if they're compromised. An AI assistant writes `npm install some-package` — but that package could be:
+
+- **Typosquatted** (looks like a real package, isn't)
+- **Supply-chain attacked** (legitimate package, now hijacked)
+- **Carrying known CVEs** that nobody checked
+
+By the time `npm audit` tells you something is wrong, it's already on your disk. **INFYNON intercepts the install command itself** — scanning before the package ever reaches your machine.
+
+### `infynon` — Network Firewall (v0.2.0)
 
 ```
 Internet → INFYNON Firewall → Nginx / App Server → Your Application
 ```
 
-INFYNON acts as a **self-hosted Cloudflare WAF** — IP filtering, rate limiting, SQL injection detection, XSS protection, custom rules, all with a real-time TUI monitor.
+A self-hosted Cloudflare WAF — IP filtering, rate limiting, SQL injection detection, XSS protection, custom rules, maintenance mode, multi-upstream routing, all with a real-time TUI monitor.
 
-### Package Manager Mode
+### `infynon pkg` — Package Security
 
-INFYNON is also a **universal package security CLI** that acts as a **pre-installation firewall for dependencies**.
+A **pre-installation firewall for dependencies**.
 
-Modern development relies heavily on third-party packages — but every install introduces risk.
+Traditional tools like `npm audit`, `pip audit`, or Dependabot:
+- scan **after installation** — the damage is already done
+- notify you **after exposure** — too late
+- require manual remediation — wastes your time
 
-Most tools like `npm audit`, `pip audit`, or Dependabot:
-- scan **after installation**
-- notify you **after exposure**
-- require manual remediation
-
-INFYNON changes this workflow.
-
-> It **intercepts package installation**, analyzes dependencies in real-time,  
+> `infynon pkg` **intercepts the install command**, analyzes dependencies in real-time,
 > and blocks or fixes vulnerabilities *before they enter your system*.
+> Whether you typed the command or an AI did — INFYNON has your back.
 
 ---
 
@@ -79,25 +86,27 @@ INFYNON changes this workflow.
 
 ### The Problem
 
-- Developers install packages blindly
-- Vulnerabilities are discovered **too late**
-- Supply chain attacks are increasing (typosquatting, malicious updates)
-- Existing tools are **reactive, not preventive**
+- **AI tools generate install commands** — developers approve without checking
+- **Vibe coding** means moving fast, not verifying every dependency
+- Supply chain attacks are increasing (typosquatting, malicious updates, hijacked packages)
+- Traditional tools are **reactive** — they tell you AFTER the compromise
+- Your server is exposed to scanners, bots, and attacks 24/7 without a WAF
 
 ---
 
 ### The Shift
 
-INFYNON introduces a **"shift-left security model"**:
+INFYNON introduces **preventive security** at two levels:
 
-| Traditional Flow | INFYNON Flow |
+| Without INFYNON | With INFYNON |
 |-----------------|-------------|
-| Install → Scan → Fix | Scan → Decide → Install |
+| AI runs `npm install x` → compromised package installed → `npm audit` finds it later | AI runs `infynon pkg npm install x` → CVE detected → blocked before install |
+| Internet → Your server → attacked | Internet → INFYNON WAF → filtered → Your server |
 
-This simple shift prevents:
-- vulnerable dependencies entering your codebase
+This prevents:
+- compromised packages entering your codebase (whether installed by you or AI)
+- SQL injection, XSS, and bot attacks hitting your backend
 - production risks caused by unnoticed CVEs
-- wasted time on post-install fixes
 
 ---
 
@@ -148,10 +157,10 @@ This simple shift prevents:
 Supports **14 ecosystems**:
 
 ```
-npm • yarn • pnpm • bun  
-pip • uv • poetry  
-cargo • go  
-gem • composer • nuget  
+npm • yarn • pnpm • bun
+pip • uv • poetry
+cargo • go
+gem • composer • nuget
 hex • pub
 ```
 
@@ -310,9 +319,9 @@ cargo install --git https://github.com/d4rkNinja/infynon-cli
 
 INFYNON ensures that:
 
-* every dependency is verified
-* every install is intentional
-* every project remains secure by design
+* every dependency is verified — whether installed by you or an AI
+* every HTTP request is inspected before reaching your backend
+* every project remains secure by design, not by afterthought
 
 ---
 
@@ -343,6 +352,14 @@ infynon logs --verdict block --count 100
 
 # Validate config
 infynon config check
+
+# Show effective config
+infynon config show
+
+# Enable/disable rules
+infynon rules list
+infynon rules enable my-rule
+infynon rules disable my-rule
 ```
 
 ### Firewall Features
@@ -350,32 +367,89 @@ infynon config check
 | Feature | Description |
 |---------|-------------|
 | **Reverse Proxy** | Sits between internet and your backend, forwards clean traffic |
+| **Multi-Upstream Routing** | Route requests to different backends based on path prefix |
 | **IP Filtering** | Blocklist, allowlist, CIDR range blocking |
 | **Auto-Reputation** | Automatically bans IPs that get blocked too many times |
 | **Rate Limiting** | Per-IP, per-path, and global rate limits with sliding window |
-| **WAF Engine** | SQL injection, XSS, path traversal, command injection detection |
+| **WAF Engine** | SQL injection, XSS, path traversal, command injection, header injection detection |
 | **Custom Rules** | IF-THEN rules with combinable conditions and priority ordering |
+| **Maintenance Mode** | Toggle maintenance page for all visitors (from TUI or config) |
 | **TUI Dashboard** | 7 real-time views: Dashboard, Live Feed, Blocked, IP Inspector, Rules, Stats, Config |
+| **Live Config Editing** | Edit all firewall settings directly from the TUI with instant apply |
+| **Hot Config Reload** | Edit `infynon.toml` — changes auto-detected and applied within seconds |
 | **JSONL Logging** | Structured event logging with separate blocked request log |
-| **Config from TUI** | Edit firewall settings directly from the terminal UI |
-| **Hot Config** | Edit `infynon.toml` — changes apply on restart |
 | **Cross-Platform** | Works on Linux, macOS, and Windows |
+
+### Multi-Upstream Routing
+
+Route different paths to different backend services:
+
+```toml
+# Default upstream (catches everything not matched by routes)
+[upstream]
+address = "127.0.0.1"
+port = 3000
+
+# Additional upstreams for path-based routing
+[[upstreams]]
+name = "api-server"
+path_prefix = "/api"
+address = "127.0.0.1"
+port = 4000
+strip_prefix = false
+
+[[upstreams]]
+name = "static-server"
+path_prefix = "/static"
+address = "127.0.0.1"
+port = 5000
+strip_prefix = true
+```
 
 ### TUI Views
 
 | Key | View | Description |
 |-----|------|-------------|
 | `1` | Dashboard | Live stats, sparklines, top IPs, top rules, recent events |
-| `2` | Live Feed | All requests in real time with filtering |
-| `3` | Blocked | Blocked requests with rule and reason details |
-| `4` | IP Inspector | Search any IP — see full history, block/unblock |
-| `5` | Rules | Custom rules with hit counts, enable/disable |
-| `6` | Stats | Traffic breakdown, status codes, top paths |
-| `7` | Config | Edit settings directly from TUI |
+| `2` | Live Feed | All requests in real time with search and filtering |
+| `3` | Blocked | Blocked requests with rule, stage, and reason details |
+| `4` | IP Inspector | Search any IP — see full history, block/unblock from TUI |
+| `5` | Rules | Custom rules with hit counts + built-in WAF status |
+| `6` | Stats | Traffic breakdown, verdicts, status codes, top paths |
+| `7` | Config | Edit all settings directly — save to file with `s` |
+
+### TUI Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `1-7` | Switch between views |
+| `q` | Quit TUI (firewall keeps running in headless mode) |
+| `/` | Search/filter events |
+| `?` | Show help overlay |
+| `r` | Reload config from file |
+| `m` | Toggle maintenance mode |
+| `p` | Pause/resume live feed auto-scroll |
+| `f` | Cycle feed filter (All/Blocked/Allowed/Flagged) |
+| `b` | Block selected IP (in IP Inspector) |
+| `u` | Unblock selected IP (in IP Inspector) |
+| `Enter` | Edit config field (in Config view) |
+| `s` | Save config to file (in Config view) |
 
 ### Configuration
 
-Copy `infynon.example.toml` to `infynon.toml` and customize, or run `infynon init` for interactive setup. The config is also editable from the TUI Config view.
+Run `infynon init` for interactive setup, or create `infynon.toml` manually. The config supports:
+
+- **Server**: listen address, port, max connections, timeouts, maintenance mode
+- **Upstream**: default backend + multiple path-based upstreams
+- **IP Filtering**: blocklist/allowlist modes, CIDR ranges, auto-reputation banning
+- **Rate Limiting**: global, per-IP, per-path sliding window limits
+- **WAF**: SQLi, XSS, path traversal, command injection, header injection detection
+- **Custom Rules**: named rules with conditions (IP, path, method, header, body, content-type, size) and actions (block, allow, flag, rate_limit)
+- **Logging**: JSONL access/blocked/alert logs with rotation
+- **TUI**: refresh rate, default view, theme, max events in memory
+- **Responses**: custom block/rate-limit/maintenance pages
+
+Config can be edited from the TUI (view 7) or directly in the file. Changes to the file are auto-detected and hot-reloaded within seconds.
 
 ---
 
@@ -383,7 +457,7 @@ Copy `infynon.example.toml` to `infynon.toml` and customize, or run `infynon ini
 
 INFYNON currently focuses on:
 
-* **Firewall**: Reverse proxy WAF with real-time TUI monitoring
+* **Firewall**: Reverse proxy WAF with real-time TUI monitoring, multi-upstream routing, maintenance mode
 * **Package Security**: Known vulnerabilities (CVE-based detection), pre-install interception
 * **Cross-platform**: Single binary for Linux, macOS, Windows
 
@@ -426,5 +500,4 @@ The `development` branch contains:
 * AI-powered anomaly detection and rule suggestion
 * SBOM generation (CycloneDX) after every install
 * TLS termination support
-* Maintenance mode
-
+* Health check endpoints

@@ -2,7 +2,7 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{
-    Block, Borders, Cell, Paragraph, Row, Sparkline, Table, Tabs, Wrap,
+    Block, Borders, Cell, Clear, Paragraph, Row, Sparkline, Table, Tabs, Wrap,
 };
 use ratatui::Frame;
 
@@ -35,6 +35,11 @@ pub fn render(f: &mut Frame, app: &App) {
     }
 
     render_status_line(f, app, chunks[2]);
+
+    // Help overlay
+    if app.show_help {
+        render_help_overlay(f, f.size());
+    }
 }
 
 // ── Tab bar ─────────────────────────────────────────────────────────────────
@@ -52,11 +57,22 @@ fn render_tabs(f: &mut Frame, app: &App, area: Rect) {
         })
         .collect();
 
+    let maint_indicator = if app.is_maintenance() {
+        Span::styled(" [MAINTENANCE] ", Style::default().fg(theme::ORANGE).add_modifier(Modifier::BOLD))
+    } else {
+        Span::raw("")
+    };
+
+    let title_spans = vec![
+        Span::styled(" INFYNON FIREWALL ", theme::title_style()),
+        maint_indicator,
+    ];
+
     let tabs = Tabs::new(titles)
         .block(Block::default()
             .borders(Borders::BOTTOM)
             .border_style(theme::border_style())
-            .title(Span::styled(" INFYNON FIREWALL ", theme::title_style())))
+            .title(Line::from(title_spans)))
         .highlight_style(Style::default().fg(theme::CYAN))
         .divider(Span::styled(" | ", theme::dim_style()));
 
@@ -67,16 +83,68 @@ fn render_tabs(f: &mut Frame, app: &App, area: Rect) {
 
 fn render_status_line(f: &mut Frame, app: &App, area: Rect) {
     let snap = app.stats_snapshot();
+
+    // Show notification if active
+    if let Some(notif) = app.active_notification() {
+        let p = Paragraph::new(format!(" {} ", notif))
+            .style(Style::default().fg(theme::GREEN).bg(theme::BG_HIGHLIGHT).add_modifier(Modifier::BOLD));
+        f.render_widget(p, area);
+        return;
+    }
+
     let status = format!(
-        " {} | {:.0} req/s | {:.0} block/s | {} conn | q:quit /:search {}",
+        " {} | {:.0} req/s | {:.0} block/s | {} conn | q:quit /:search ?:help {}{}",
         app.current_view.label(),
         snap.requests_per_second,
         snap.blocks_per_second,
         snap.active_connections,
-        if app.paused { "| PAUSED" } else { "" },
+        if app.paused { "| PAUSED " } else { "" },
+        if app.is_maintenance() { "| MAINT " } else { "" },
     );
     let p = Paragraph::new(status).style(Style::default().fg(theme::TEXT_DIM).bg(theme::BG_HIGHLIGHT));
     f.render_widget(p, area);
+}
+
+// ── Help Overlay ────────────────────────────────────────────────────────────
+
+fn render_help_overlay(f: &mut Frame, area: Rect) {
+    let help_area = centered_rect(60, 70, area);
+    f.render_widget(Clear, help_area);
+
+    let help_text = vec![
+        Line::from(Span::styled(" KEYBOARD SHORTCUTS ", Style::default().fg(theme::CYAN).add_modifier(Modifier::BOLD))),
+        Line::from(""),
+        Line::from(vec![Span::styled(" Global Keys", Style::default().fg(theme::YELLOW).add_modifier(Modifier::BOLD))]),
+        Line::from(vec![Span::styled("  1-7    ", theme::stat_value()), Span::styled("Switch between views", theme::dim_style())]),
+        Line::from(vec![Span::styled("  q      ", theme::stat_value()), Span::styled("Quit TUI (firewall keeps running)", theme::dim_style())]),
+        Line::from(vec![Span::styled("  /      ", theme::stat_value()), Span::styled("Search/filter", theme::dim_style())]),
+        Line::from(vec![Span::styled("  ?      ", theme::stat_value()), Span::styled("Toggle this help", theme::dim_style())]),
+        Line::from(vec![Span::styled("  r      ", theme::stat_value()), Span::styled("Reload config from file", theme::dim_style())]),
+        Line::from(vec![Span::styled("  m      ", theme::stat_value()), Span::styled("Toggle maintenance mode", theme::dim_style())]),
+        Line::from(""),
+        Line::from(vec![Span::styled(" Live Feed / Blocked", Style::default().fg(theme::YELLOW).add_modifier(Modifier::BOLD))]),
+        Line::from(vec![Span::styled("  p      ", theme::stat_value()), Span::styled("Pause/resume auto-scroll", theme::dim_style())]),
+        Line::from(vec![Span::styled("  f      ", theme::stat_value()), Span::styled("Cycle filter (All/Blocked/Allowed/Flagged)", theme::dim_style())]),
+        Line::from(vec![Span::styled("  Up/Dn  ", theme::stat_value()), Span::styled("Scroll", theme::dim_style())]),
+        Line::from(""),
+        Line::from(vec![Span::styled(" IP Inspector", Style::default().fg(theme::YELLOW).add_modifier(Modifier::BOLD))]),
+        Line::from(vec![Span::styled("  b      ", theme::stat_value()), Span::styled("Block selected IP", theme::dim_style())]),
+        Line::from(vec![Span::styled("  u      ", theme::stat_value()), Span::styled("Unblock selected IP", theme::dim_style())]),
+        Line::from(""),
+        Line::from(vec![Span::styled(" Config", Style::default().fg(theme::YELLOW).add_modifier(Modifier::BOLD))]),
+        Line::from(vec![Span::styled("  Enter  ", theme::stat_value()), Span::styled("Edit selected field", theme::dim_style())]),
+        Line::from(vec![Span::styled("  s      ", theme::stat_value()), Span::styled("Save config to file", theme::dim_style())]),
+        Line::from(""),
+        Line::from(Span::styled(" Press any key to close ", theme::dim_style())),
+    ];
+
+    let help_p = Paragraph::new(help_text)
+        .block(Block::default()
+            .title(Span::styled(" Help ", theme::title_style()))
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme::CYAN)))
+        .wrap(Wrap { trim: false });
+    f.render_widget(help_p, help_area);
 }
 
 // ── Dashboard View ──────────────────────────────────────────────────────────
@@ -94,11 +162,19 @@ fn render_dashboard(f: &mut Frame, app: &App, area: Rect) {
         .split(area);
 
     // Status bar
+    let uptime = snap.format_uptime();
+    let maint_span = if app.is_maintenance() {
+        Span::styled("  MAINTENANCE", Style::default().fg(theme::ORANGE).add_modifier(Modifier::BOLD))
+    } else {
+        Span::raw("")
+    };
+
     let status_text = vec![
         Span::styled("  Status: ", theme::stat_label()),
-        Span::styled("● RUNNING", theme::status_running()),
+        Span::styled("RUNNING", theme::status_running()),
+        maint_span,
         Span::styled("    Uptime: ", theme::stat_label()),
-        Span::styled(snap.format_uptime(), theme::stat_value()),
+        Span::styled(uptime, theme::stat_value()),
         Span::styled("    Requests: ", theme::stat_label()),
         Span::styled(format_number(snap.total_requests), theme::stat_value()),
         Span::styled("    Blocked: ", theme::stat_label()),
@@ -170,7 +246,7 @@ fn render_dashboard(f: &mut Frame, app: &App, area: Rect) {
         .map(|(i, (name, count))| {
             Row::new(vec![
                 Cell::from(format!("{}.", i + 1)).style(theme::dim_style()),
-                Cell::from(name.as_str()).style(Style::default().fg(theme::YELLOW)),
+                Cell::from(truncate(name, 18)).style(Style::default().fg(theme::YELLOW)),
                 Cell::from(format_number(*count)).style(theme::stat_value()),
             ])
         })
@@ -182,17 +258,18 @@ fn render_dashboard(f: &mut Frame, app: &App, area: Rect) {
             .border_style(theme::border_style()));
     f.render_widget(rule_table, bottom_chunks[1]);
 
-    // Recent events
-    let events = app.recent_events();
-    let event_rows: Vec<Row> = events.iter().rev().take(10)
+    // Recent events (only fetch last 10, not entire buffer)
+    let events = app.state.recent_events_tail(10);
+    let event_rows: Vec<Row> = events.iter().rev()
         .map(|e| {
             let time = e.timestamp.format("%H:%M:%S").to_string();
+            let verdict_str = e.verdict.to_string();
             Row::new(vec![
                 Cell::from(time).style(theme::dim_style()),
-                Cell::from(e.source_ip.as_str()).style(Style::default().fg(theme::TEXT)),
+                Cell::from(truncate(&e.source_ip, 15)).style(Style::default().fg(theme::TEXT)),
                 Cell::from(e.method.as_str()).style(Style::default().fg(theme::PURPLE)),
                 Cell::from(truncate(&e.path, 15)).style(Style::default().fg(theme::TEXT_DIM)),
-                Cell::from(e.verdict.to_string()).style(theme::verdict_style(&e.verdict.to_string())),
+                Cell::from(verdict_str.clone()).style(theme::verdict_style(&verdict_str)),
             ])
         })
         .collect();
@@ -221,7 +298,8 @@ fn render_live_feed(f: &mut Frame, app: &App, area: Rect) {
         Cell::from("MS").style(theme::header_style()),
     ]).height(1);
 
-    let rows: Vec<Row> = events.iter().rev().skip(app.scroll_offset).take(area.height as usize - 3)
+    let visible_height = area.height.saturating_sub(3) as usize;
+    let rows: Vec<Row> = events.iter().rev().skip(app.scroll_offset).take(visible_height)
         .map(|e| {
             let time = e.timestamp.format("%H:%M:%S").to_string();
             let verdict_str = e.verdict.to_string();
@@ -231,15 +309,23 @@ fn render_live_feed(f: &mut Frame, app: &App, area: Rect) {
                 Cell::from(e.method.as_str()).style(Style::default().fg(theme::PURPLE)),
                 Cell::from(truncate(&e.path, 30)).style(Style::default().fg(theme::TEXT_DIM)),
                 Cell::from(verdict_str.clone()).style(theme::verdict_style(&verdict_str)),
-                Cell::from(e.blocked_by_rule.as_deref().unwrap_or("-")).style(Style::default().fg(theme::YELLOW)),
+                Cell::from(truncate(e.blocked_by_rule.as_deref().unwrap_or("-"), 18)).style(Style::default().fg(theme::YELLOW)),
                 Cell::from(format!("{:.1}", e.total_latency_ms)).style(theme::dim_style()),
             ])
         })
         .collect();
 
+    let search_hint = if !app.search_input.is_empty() {
+        format!(" search:'{}' ", app.search_input)
+    } else {
+        String::new()
+    };
+
     let title = format!(
-        " Live Feed — Filter: {} — [p]ause [f]ilter [/]search ",
-        app.feed_filter.label()
+        " Live Feed -- {} -- {} events{} -- [p]ause [f]ilter [/]search ",
+        app.feed_filter.label(),
+        events.len(),
+        search_hint,
     );
 
     let table = Table::new(rows, [
@@ -253,6 +339,11 @@ fn render_live_feed(f: &mut Frame, app: &App, area: Rect) {
             .border_style(theme::border_style()));
 
     f.render_widget(table, area);
+
+    // Search input overlay
+    if app.search_active {
+        render_search_bar(f, &app.search_input, area);
+    }
 }
 
 // ── Blocked View ────────────────────────────────────────────────────────────
@@ -273,7 +364,8 @@ fn render_blocked(f: &mut Frame, app: &App, area: Rect) {
         Cell::from("REASON").style(theme::header_style()),
     ]).height(1);
 
-    let rows: Vec<Row> = events.iter().rev().skip(app.scroll_offset).take(area.height as usize - 3)
+    let visible_height = area.height.saturating_sub(3) as usize;
+    let rows: Vec<Row> = events.iter().rev().skip(app.scroll_offset).take(visible_height)
         .map(|e| {
             let time = e.timestamp.format("%H:%M:%S").to_string();
             let verdict_str = e.verdict.to_string();
@@ -284,7 +376,7 @@ fn render_blocked(f: &mut Frame, app: &App, area: Rect) {
                 Cell::from(truncate(&e.path, 20)).style(Style::default().fg(theme::TEXT_DIM)),
                 Cell::from(verdict_str.clone()).style(theme::verdict_style(&verdict_str)),
                 Cell::from(e.blocked_by_stage.as_deref().unwrap_or("-")).style(Style::default().fg(theme::ORANGE)),
-                Cell::from(e.blocked_by_rule.as_deref().unwrap_or("-")).style(Style::default().fg(theme::YELLOW)),
+                Cell::from(truncate(e.blocked_by_rule.as_deref().unwrap_or("-"), 16)).style(Style::default().fg(theme::YELLOW)),
                 Cell::from(truncate(e.blocked_reason.as_deref().unwrap_or("-"), 30)).style(Style::default().fg(theme::TEXT_DIM)),
             ])
         })
@@ -297,7 +389,9 @@ fn render_blocked(f: &mut Frame, app: &App, area: Rect) {
     ])
         .header(header)
         .block(Block::default()
-            .title(Span::styled(" Blocked Requests ", Style::default().fg(theme::RED).add_modifier(Modifier::BOLD)))
+            .title(Span::styled(
+                format!(" Blocked Requests ({}) ", events.len()),
+                Style::default().fg(theme::RED).add_modifier(Modifier::BOLD)))
             .borders(Borders::ALL)
             .border_style(theme::border_style()));
 
@@ -321,7 +415,7 @@ fn render_ip_inspector(f: &mut Frame, app: &App, area: Rect) {
     } else if app.ip_search.is_empty() {
         "  Press / to search an IP address".to_string()
     } else {
-        format!("  IP: {}  [b]lock [u]nblock [/]search", app.ip_search)
+        format!("  IP: {}  [b]lock [u]nblock [/]new search", app.ip_search)
     };
     let search_p = Paragraph::new(search_text)
         .style(if app.ip_search_active {
@@ -339,12 +433,13 @@ fn render_ip_inspector(f: &mut Frame, app: &App, area: Rect) {
         let rows: Vec<Row> = snap.top_ips.iter().take(20)
             .map(|(ip, count)| {
                 let blocked = snap.top_blocked_ips.iter().find(|(i, _)| i == ip).map(|(_, c)| *c).unwrap_or(0);
+                let block_pct = if *count > 0 { blocked as f64 / *count as f64 * 100.0 } else { 0.0 };
+                let pct_color = if block_pct > 50.0 { theme::RED } else if block_pct > 20.0 { theme::YELLOW } else { theme::GREEN };
                 Row::new(vec![
                     Cell::from(ip.as_str()).style(Style::default().fg(theme::TEXT)),
                     Cell::from(format_number(*count)).style(theme::stat_value()),
                     Cell::from(format_number(blocked)).style(Style::default().fg(theme::RED)),
-                    Cell::from(if blocked > 0 { format!("{:.1}%", blocked as f64 / *count as f64 * 100.0) } else { "0%".to_string() })
-                        .style(theme::dim_style()),
+                    Cell::from(format!("{:.1}%", block_pct)).style(Style::default().fg(pct_color)),
                 ])
             })
             .collect();
@@ -370,23 +465,50 @@ fn render_ip_inspector(f: &mut Frame, app: &App, area: Rect) {
         let events = app.events_for_ip(&app.ip_search);
         let total = events.len();
         let blocked = events.iter().filter(|e| matches!(e.verdict, Verdict::Block | Verdict::RateLimited)).count();
+        let first_seen = events.first().map(|e| e.timestamp.format("%Y-%m-%d %H:%M:%S").to_string()).unwrap_or_else(|| "N/A".to_string());
+        let last_seen = events.last().map(|e| e.timestamp.format("%Y-%m-%d %H:%M:%S").to_string()).unwrap_or_else(|| "N/A".to_string());
 
         let info_chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Length(6), Constraint::Min(0)])
+            .constraints([Constraint::Length(8), Constraint::Min(0)])
             .split(chunks[1]);
+
+        // Collect top paths for this IP
+        let mut path_counts: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+        let mut rule_counts: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+        for e in &events {
+            *path_counts.entry(e.path.clone()).or_insert(0) += 1;
+            if let Some(ref r) = e.blocked_by_rule {
+                *rule_counts.entry(r.clone()).or_insert(0) += 1;
+            }
+        }
 
         let info = vec![
             Line::from(vec![
                 Span::styled("  IP: ", theme::stat_label()),
                 Span::styled(&app.ip_search, theme::stat_value()),
-                Span::styled("    Total: ", theme::stat_label()),
+                Span::styled("    First Seen: ", theme::stat_label()),
+                Span::styled(&first_seen, theme::dim_style()),
+            ]),
+            Line::from(vec![
+                Span::styled("  Total: ", theme::stat_label()),
                 Span::styled(format_number(total as u64), theme::stat_value()),
-                Span::styled("    Blocked: ", theme::stat_label()),
+                Span::styled("    Last Seen: ", theme::stat_label()),
+                Span::styled(&last_seen, theme::dim_style()),
+            ]),
+            Line::from(vec![
+                Span::styled("  Blocked: ", theme::stat_label()),
                 Span::styled(format_number(blocked as u64), Style::default().fg(theme::RED).add_modifier(Modifier::BOLD)),
                 Span::styled(format!("  ({:.1}%)", if total > 0 { blocked as f64 / total as f64 * 100.0 } else { 0.0 }), theme::dim_style()),
             ]),
-            Line::from(""),
+            Line::from(vec![
+                Span::styled("  Top paths: ", theme::stat_label()),
+                Span::styled({
+                    let mut paths: Vec<_> = path_counts.iter().collect();
+                    paths.sort_by(|a, b| b.1.cmp(a.1));
+                    paths.iter().take(3).map(|(p, c)| format!("{} ({})", truncate(p, 20), c)).collect::<Vec<_>>().join(", ")
+                }, theme::dim_style()),
+            ]),
         ];
         let info_p = Paragraph::new(info)
             .block(Block::default().borders(Borders::ALL).border_style(theme::border_style())
@@ -394,7 +516,8 @@ fn render_ip_inspector(f: &mut Frame, app: &App, area: Rect) {
         f.render_widget(info_p, info_chunks[0]);
 
         // Event history
-        let rows: Vec<Row> = events.iter().rev().take(info_chunks[1].height as usize - 2)
+        let visible_height = info_chunks[1].height.saturating_sub(2) as usize;
+        let rows: Vec<Row> = events.iter().rev().skip(app.scroll_offset).take(visible_height)
             .map(|e| {
                 let time = e.timestamp.format("%H:%M:%S").to_string();
                 let verdict_str = e.verdict.to_string();
@@ -403,7 +526,7 @@ fn render_ip_inspector(f: &mut Frame, app: &App, area: Rect) {
                     Cell::from(e.method.as_str()).style(Style::default().fg(theme::PURPLE)),
                     Cell::from(truncate(&e.path, 25)).style(Style::default().fg(theme::TEXT_DIM)),
                     Cell::from(verdict_str.clone()).style(theme::verdict_style(&verdict_str)),
-                    Cell::from(e.blocked_by_rule.as_deref().unwrap_or("-")).style(Style::default().fg(theme::YELLOW)),
+                    Cell::from(truncate(e.blocked_by_rule.as_deref().unwrap_or("-"), 18)).style(Style::default().fg(theme::YELLOW)),
                     Cell::from(format!("{:.1}ms", e.total_latency_ms)).style(theme::dim_style()),
                 ])
             })
@@ -424,13 +547,20 @@ fn render_ip_inspector(f: &mut Frame, app: &App, area: Rect) {
 // ── Rules View ──────────────────────────────────────────────────────────────
 
 fn render_rules(f: &mut Frame, app: &App, area: Rect) {
-    let rules = app.state.pipeline.rule_stats();
+    let rules = app.state.pipeline.read()
+        .map(|p| p.rule_stats())
+        .unwrap_or_default();
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(0), Constraint::Length(10)])
+        .split(area);
 
     let header = Row::new(vec![
         Cell::from("NAME").style(theme::header_style()),
         Cell::from("DESCRIPTION").style(theme::header_style()),
-        Cell::from("ENABLED").style(theme::header_style()),
-        Cell::from("PRIORITY").style(theme::header_style()),
+        Cell::from("STATUS").style(theme::header_style()),
+        Cell::from("PRI").style(theme::header_style()),
         Cell::from("HITS").style(theme::header_style()),
     ]).height(1);
 
@@ -442,7 +572,7 @@ fn render_rules(f: &mut Frame, app: &App, area: Rect) {
                 Style::default()
             };
             Row::new(vec![
-                Cell::from(name.as_str()).style(Style::default().fg(theme::CYAN)),
+                Cell::from(truncate(name, 22)).style(Style::default().fg(theme::CYAN)),
                 Cell::from(truncate(desc, 30)).style(Style::default().fg(theme::TEXT_DIM)),
                 Cell::from(if *enabled { "ON" } else { "OFF" }).style(if *enabled {
                     Style::default().fg(theme::GREEN)
@@ -455,42 +585,63 @@ fn render_rules(f: &mut Frame, app: &App, area: Rect) {
         })
         .collect();
 
-    // WAF built-in rules as extra info
-    let waf_info = if rules.is_empty() {
-        "\n  No custom rules defined. Built-in WAF rules are active.\n  Add rules in infynon.toml [[rules]] sections."
-    } else {
-        ""
-    };
-
     let table = Table::new(rows, [
-        Constraint::Length(25), Constraint::Min(20), Constraint::Length(8),
-        Constraint::Length(10), Constraint::Length(10),
+        Constraint::Length(24), Constraint::Min(20), Constraint::Length(8),
+        Constraint::Length(6), Constraint::Length(10),
     ])
         .header(header)
         .block(Block::default()
-            .title(Span::styled(" Rules — [e]nable/disable [Enter]details ", theme::title_style()))
+            .title(Span::styled(
+                format!(" Custom Rules ({}) ", rules.len()),
+                theme::title_style(),
+            ))
             .borders(Borders::ALL)
             .border_style(theme::border_style()));
+    f.render_widget(table, chunks[0]);
 
-    if !waf_info.is_empty() {
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-            .split(area);
-
-        f.render_widget(table, chunks[0]);
-
-        let info = Paragraph::new(waf_info)
-            .style(theme::dim_style())
-            .wrap(Wrap { trim: false })
-            .block(Block::default()
-                .title(Span::styled(" Built-in WAF Protections ", theme::title_style()))
-                .borders(Borders::ALL)
-                .border_style(theme::border_style()));
-        f.render_widget(info, chunks[1]);
+    // WAF built-in status
+    let waf_status = if let Ok(cfg) = app.state.config.read() {
+        vec![
+            Line::from(vec![
+                Span::styled("  Built-in WAF Protections:", Style::default().fg(theme::YELLOW).add_modifier(Modifier::BOLD)),
+            ]),
+            Line::from(vec![
+                Span::styled("  SQLi: ", theme::stat_label()),
+                status_badge(cfg.waf.sqli_protection),
+                Span::styled("  XSS: ", theme::stat_label()),
+                status_badge(cfg.waf.xss_protection),
+                Span::styled("  Path Traversal: ", theme::stat_label()),
+                status_badge(cfg.waf.path_traversal_protection),
+            ]),
+            Line::from(vec![
+                Span::styled("  Cmd Injection: ", theme::stat_label()),
+                status_badge(cfg.waf.command_injection_protection),
+                Span::styled("  Header Injection: ", theme::stat_label()),
+                status_badge(cfg.waf.header_injection_protection),
+                Span::styled("  Empty UA Block: ", theme::stat_label()),
+                status_badge(cfg.waf.block_empty_user_agent),
+            ]),
+            Line::from(vec![
+                Span::styled("  Max URL: ", theme::stat_label()),
+                Span::styled(cfg.waf.max_url_length.to_string(), theme::stat_value()),
+                Span::styled("  Max Body: ", theme::stat_label()),
+                Span::styled(format_bytes_short(cfg.waf.max_body_size as u64), theme::stat_value()),
+                Span::styled("  Blocked paths: ", theme::stat_label()),
+                Span::styled(cfg.waf.blocked_paths.len().to_string(), theme::stat_value()),
+                Span::styled("  Blocked UAs: ", theme::stat_label()),
+                Span::styled(cfg.waf.blocked_user_agents.len().to_string(), theme::stat_value()),
+            ]),
+        ]
     } else {
-        f.render_widget(table, area);
-    }
+        vec![Line::from(Span::styled("  Unable to read config", theme::dim_style()))]
+    };
+
+    let waf_p = Paragraph::new(waf_status)
+        .block(Block::default()
+            .title(Span::styled(" WAF Engine ", theme::title_style()))
+            .borders(Borders::ALL)
+            .border_style(theme::border_style()));
+    f.render_widget(waf_p, chunks[1]);
 }
 
 // ── Stats View ──────────────────────────────────────────────────────────────
@@ -501,7 +652,7 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(7),  // Summary
+            Constraint::Length(8),  // Summary
             Constraint::Min(0),    // Tables
         ])
         .split(area);
@@ -514,6 +665,10 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
     };
 
     let summary = vec![
+        Line::from(vec![
+            Span::styled("  Uptime:          ", theme::stat_label()),
+            Span::styled(snap.format_uptime(), theme::stat_value()),
+        ]),
         Line::from(vec![
             Span::styled("  Total Requests:  ", theme::stat_label()),
             Span::styled(format_number(snap.total_requests), theme::stat_value()),
@@ -533,6 +688,10 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
             Span::styled("    Avg block/s:  ", theme::stat_label()),
             Span::styled(format!("{:.1}", snap.blocks_per_second), Style::default().fg(theme::RED)),
         ]),
+        Line::from(vec![
+            Span::styled("  Active Conns:    ", theme::stat_label()),
+            Span::styled(snap.active_connections.to_string(), theme::stat_value()),
+        ]),
     ];
     let summary_p = Paragraph::new(summary)
         .block(Block::default()
@@ -541,10 +700,10 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
             .border_style(theme::border_style()));
     f.render_widget(summary_p, chunks[0]);
 
-    // Tables: Top paths + Status codes
+    // Tables: Top paths + Verdict + Status codes
     let table_chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+        .constraints([Constraint::Percentage(40), Constraint::Percentage(30), Constraint::Percentage(30)])
         .split(chunks[1]);
 
     // Top paths
@@ -553,20 +712,41 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
         .map(|(i, (path, count))| {
             Row::new(vec![
                 Cell::from(format!("{}.", i + 1)).style(theme::dim_style()),
-                Cell::from(truncate(path, 40)).style(Style::default().fg(theme::TEXT)),
+                Cell::from(truncate(path, 30)).style(Style::default().fg(theme::TEXT)),
                 Cell::from(format_number(*count)).style(theme::stat_value()),
             ])
         })
         .collect();
-    let path_table = Table::new(path_rows, [Constraint::Length(4), Constraint::Min(20), Constraint::Length(12)])
+    let path_table = Table::new(path_rows, [Constraint::Length(4), Constraint::Min(15), Constraint::Length(10)])
         .block(Block::default()
             .title(Span::styled(" Top Paths ", theme::title_style()))
             .borders(Borders::ALL)
             .border_style(theme::border_style()));
     f.render_widget(path_table, table_chunks[0]);
 
-    // Status code + verdict distribution
-    let status_rows: Vec<Row> = snap.status_codes.iter()
+    // Verdict distribution
+    let mut verdict_rows: Vec<Row> = Vec::new();
+    for (verdict, count) in &snap.verdict_counts {
+        verdict_rows.push(Row::new(vec![
+            Cell::from(verdict.as_str()).style(theme::verdict_style(verdict)),
+            Cell::from(format_number(*count)).style(theme::stat_value()),
+            Cell::from({
+                let pct = if snap.total_requests > 0 { *count as f64 / snap.total_requests as f64 * 100.0 } else { 0.0 };
+                format!("{:.1}%", pct)
+            }).style(theme::dim_style()),
+        ]));
+    }
+    let verdict_table = Table::new(verdict_rows, [Constraint::Length(12), Constraint::Length(10), Constraint::Min(8)])
+        .block(Block::default()
+            .title(Span::styled(" Verdicts ", theme::title_style()))
+            .borders(Borders::ALL)
+            .border_style(theme::border_style()));
+    f.render_widget(verdict_table, table_chunks[1]);
+
+    // Status code distribution
+    let mut status_entries: Vec<_> = snap.status_codes.iter().collect();
+    status_entries.sort_by_key(|(code, _)| *code);
+    let status_rows: Vec<Row> = status_entries.iter()
         .map(|(code, count)| {
             let color = match code {
                 200..=299 => theme::GREEN,
@@ -577,18 +757,17 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
             };
             Row::new(vec![
                 Cell::from(code.to_string()).style(Style::default().fg(color)),
-                Cell::from(format_number(*count)).style(theme::stat_value()),
+                Cell::from(format_number(**count)).style(theme::stat_value()),
             ])
         })
         .collect();
-    // Status rows are already in HashMap arbitrary order — fine for display
 
     let status_table = Table::new(status_rows, [Constraint::Length(8), Constraint::Min(10)])
         .block(Block::default()
             .title(Span::styled(" Status Codes ", theme::title_style()))
             .borders(Borders::ALL)
             .border_style(theme::border_style()));
-    f.render_widget(status_table, table_chunks[1]);
+    f.render_widget(status_table, table_chunks[2]);
 }
 
 // ── Config View ─────────────────────────────────────────────────────────────
@@ -609,6 +788,10 @@ fn render_config(f: &mut Frame, app: &App, area: Rect) {
                 Style::default().fg(theme::CYAN).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
             } else if is_selected {
                 theme::selected_style()
+            } else if value == "true" {
+                Style::default().fg(theme::GREEN)
+            } else if value == "false" {
+                Style::default().fg(theme::RED)
             } else {
                 theme::stat_value()
             };
@@ -630,7 +813,7 @@ fn render_config(f: &mut Frame, app: &App, area: Rect) {
         .header(header)
         .block(Block::default()
             .title(Span::styled(
-                " Config — [Enter]edit [s]ave to file [Up/Down]navigate ",
+                " Config -- [Enter]edit [s]save [r]reload [Up/Dn]navigate ",
                 theme::title_style(),
             ))
             .borders(Borders::ALL)
@@ -638,24 +821,48 @@ fn render_config(f: &mut Frame, app: &App, area: Rect) {
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(0), Constraint::Length(4)])
+        .constraints([Constraint::Min(0), Constraint::Length(5)])
         .split(area);
 
     f.render_widget(table, chunks[0]);
 
-    // Help text
+    // Help text at bottom
+    let config_path = app.state.config_path.as_deref().unwrap_or("infynon.toml");
     let help = Paragraph::new(vec![
         Line::from(Span::styled(
-            "  Config file: infynon.toml (or ~/.infynon/infynon.toml). Changes saved here also apply on file edit.",
+            format!("  Config file: {} (or ~/.infynon/infynon.toml)", config_path),
             theme::dim_style(),
         )),
         Line::from(Span::styled(
-            "  Edit the file directly or use this TUI. Restart required for server settings.",
+            "  Edit values here (Enter to edit, Esc to cancel) and save (s) to persist.",
+            theme::dim_style(),
+        )),
+        Line::from(Span::styled(
+            "  Changes to listen/upstream require restart. WAF/rate-limit changes apply immediately.",
             theme::dim_style(),
         )),
     ])
         .block(Block::default().borders(Borders::TOP).border_style(theme::border_style()));
     f.render_widget(help, chunks[1]);
+}
+
+// ── Search bar overlay ──────────────────────────────────────────────────────
+
+fn render_search_bar(f: &mut Frame, input: &str, area: Rect) {
+    let bar_area = Rect {
+        x: area.x + 1,
+        y: area.y + area.height.saturating_sub(3),
+        width: area.width.saturating_sub(2),
+        height: 3,
+    };
+    f.render_widget(Clear, bar_area);
+    let search_p = Paragraph::new(format!(" Search: {}|", input))
+        .style(Style::default().fg(theme::CYAN))
+        .block(Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme::CYAN))
+            .title(Span::styled(" Filter ", Style::default().fg(theme::CYAN).add_modifier(Modifier::BOLD))));
+    f.render_widget(search_p, bar_area);
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -672,4 +879,37 @@ fn format_number(n: u64) -> String {
     if n >= 1_000_000 { format!("{:.1}M", n as f64 / 1_000_000.0) }
     else if n >= 1_000 { format!("{:.1}K", n as f64 / 1_000.0) }
     else { n.to_string() }
+}
+
+fn format_bytes_short(bytes: u64) -> String {
+    if bytes >= 1_048_576 { format!("{:.0}MB", bytes as f64 / 1_048_576.0) }
+    else if bytes >= 1024 { format!("{:.0}KB", bytes as f64 / 1024.0) }
+    else { format!("{}B", bytes) }
+}
+
+fn status_badge(enabled: bool) -> Span<'static> {
+    if enabled {
+        Span::styled("ON", Style::default().fg(theme::GREEN).add_modifier(Modifier::BOLD))
+    } else {
+        Span::styled("OFF", Style::default().fg(theme::RED).add_modifier(Modifier::BOLD))
+    }
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
 }

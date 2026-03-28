@@ -95,14 +95,14 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
 
     let first_arg = &args.passthrough_args[0];
     let known_ecosystems = vec!["npm", "yarn", "pnpm", "bun", "pip", "uv", "poetry", "cargo", "go", "gem", "composer", "nuget", "hex", "pub"];
-    
+
     let mut ecosystem = "auto-detected";
     let mut install_packages = vec![];
     let mut cmd_idx = 0;
 
     if known_ecosystems.contains(&first_arg.as_str()) {
         ecosystem = first_arg;
-        cmd_idx = 1; 
+        cmd_idx = 1;
     } else {
         if Path::new("package.json").exists() { ecosystem = "npm"; }
         else if Path::new("Cargo.toml").exists() { ecosystem = "cargo"; }
@@ -191,7 +191,7 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
     } else {
         Logger::raw_dim(&format!("» Pass-through execution for: {:?}", args.passthrough_args));
     }
-    
+
     Ok(())
 }
 
@@ -421,8 +421,9 @@ pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonErr
                     Logger::success("Created infynon.toml with default configuration");
                     Logger::detail("  Listen:", &format!("{}:{}", config.server.listen_address, config.server.listen_port));
                     Logger::detail("  Upstream:", &format!("{}:{}", config.upstream.address, config.upstream.port));
-                    Logger::detail("  WAF:", "enabled (SQLi, XSS, path traversal, cmd injection)");
-                    Logger::detail("  Rate limit:", "100 req/min per IP");
+                    Logger::detail("  WAF:", "enabled (SQLi, XSS, path traversal, cmd injection, header injection)");
+                    Logger::detail("  Rate limit:", "100 req/min per IP, 1000 req/s global");
+                    Logger::detail("  IP filtering:", "blocklist mode (auto-reputation enabled)");
                     Logger::info("Edit infynon.toml to customize. Run `infynon start` to begin.");
                 }
                 Err(e) => Logger::error(&format!("Failed to create config: {}", e)),
@@ -465,6 +466,7 @@ pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonErr
             let pipeline = Pipeline::new(&cfg);
             let stats = Stats::new();
             let logger = EventLogger::new(&cfg.logging.access_log, &cfg.logging.blocked_log);
+            let maintenance = cfg.server.maintenance_mode;
 
             let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
 
@@ -480,13 +482,16 @@ pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonErr
             let event_tx = rt.block_on(async { logger.spawn() });
 
             let state = Arc::new(SharedState {
-                pipeline,
+                pipeline: std::sync::RwLock::new(pipeline),
                 stats,
-                config: cfg,
+                config: std::sync::RwLock::new(cfg),
                 event_tx,
-                recent_events: std::sync::Mutex::new(Vec::new()),
+                recent_events: std::sync::Mutex::new(std::collections::VecDeque::new()),
                 max_recent: max_events,
                 shutdown: shutdown_rx,
+                config_path: config.clone(),
+                maintenance_mode: std::sync::atomic::AtomicBool::new(maintenance),
+                start_time: std::time::Instant::now(),
             });
 
             // Start proxy server in background
@@ -503,8 +508,17 @@ pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonErr
                 let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
                 loop {
                     interval.tick().await;
-                    cleanup_state.pipeline.cleanup();
+                    if let Ok(pipeline) = cleanup_state.pipeline.read() {
+                        pipeline.cleanup();
+                    }
                 }
+            });
+
+            // Start config file watcher (hot-reload)
+            let watch_state = state.clone();
+            let watch_config_path = config.clone();
+            rt.spawn(async move {
+                config_watch_loop(watch_state, watch_config_path).await;
             });
 
             Logger::success(&format!("Firewall running on {}", listen_addr));
@@ -517,7 +531,7 @@ pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonErr
                 });
                 let _ = shutdown_tx.send(true);
             } else {
-                Logger::info("Starting TUI monitor... (press 'q' to quit)");
+                Logger::info("Starting TUI monitor... (press 'q' to quit, '?' for help)");
                 println!();
 
                 // Run TUI on main thread
@@ -551,6 +565,7 @@ pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonErr
             let pipeline = Pipeline::new(&cfg);
             let stats = Stats::new();
             let logger = EventLogger::new(&cfg.logging.access_log, &cfg.logging.blocked_log);
+            let maintenance = cfg.server.maintenance_mode;
 
             let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
 
@@ -563,13 +578,16 @@ pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonErr
             let event_tx = rt.block_on(async { logger.spawn() });
 
             let state = Arc::new(SharedState {
-                pipeline,
+                pipeline: std::sync::RwLock::new(pipeline),
                 stats,
-                config: cfg,
+                config: std::sync::RwLock::new(cfg),
                 event_tx,
-                recent_events: std::sync::Mutex::new(Vec::new()),
+                recent_events: std::sync::Mutex::new(std::collections::VecDeque::new()),
                 max_recent: max_events,
                 shutdown: shutdown_rx,
+                config_path: config.clone(),
+                maintenance_mode: std::sync::atomic::AtomicBool::new(maintenance),
+                start_time: std::time::Instant::now(),
             });
 
             let server_state = state.clone();
@@ -584,7 +602,9 @@ pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonErr
                 let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
                 loop {
                     interval.tick().await;
-                    cleanup_state.pipeline.cleanup();
+                    if let Ok(pipeline) = cleanup_state.pipeline.read() {
+                        pipeline.cleanup();
+                    }
                 }
             });
 
@@ -604,6 +624,10 @@ pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonErr
                     Logger::detail("  Rate Limit:", if cfg.rate_limit.enabled { "enabled" } else { "disabled" });
                     Logger::detail("  IP Mode:", &cfg.ip.mode);
                     Logger::detail("  Rules:", &format!("{} custom rules", cfg.rules.len()));
+                    Logger::detail("  Maintenance:", if cfg.server.maintenance_mode { "ON" } else { "OFF" });
+                    Logger::detail("  SQLi:", if cfg.waf.sqli_protection { "ON" } else { "OFF" });
+                    Logger::detail("  XSS:", if cfg.waf.xss_protection { "ON" } else { "OFF" });
+                    Logger::detail("  Path Traversal:", if cfg.waf.path_traversal_protection { "ON" } else { "OFF" });
                 }
                 Err(e) => Logger::error(&format!("Config error: {}", e)),
             }
@@ -622,7 +646,7 @@ pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonErr
                     use std::io::Write;
                     let _ = writeln!(f, "{}", ip);
                     Logger::success(&format!("Blocked IP: {}", ip));
-                    Logger::info("Restart firewall or edit config for immediate effect.");
+                    Logger::info("IP added to blocklist file. Active on next config reload or restart.");
                 }
                 Err(e) => Logger::error(&format!("Failed to write blocklist: {}", e)),
             }
@@ -653,14 +677,17 @@ pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonErr
                         Ok(cfg) => {
                             if cfg.rules.is_empty() {
                                 Logger::info("No custom rules defined. Add [[rules]] sections to infynon.toml.");
+                                Logger::info("Built-in WAF rules are always active when WAF is enabled.");
                             } else {
+                                println!("  {:<5} {:<30} {:<8} {}", "PRI", "NAME", "STATUS", "DESCRIPTION");
+                                println!("  {}", "-".repeat(75));
                                 for rule in &cfg.rules {
-                                    let status = if rule.enabled { "ON " } else { "OFF" };
+                                    let status = if rule.enabled { "ON" } else { "OFF" };
                                     println!(
-                                        "  [{}] {:3} {:<30} {}",
-                                        if rule.enabled { status } else { status },
+                                        "  {:<5} {:<30} {:<8} {}",
                                         rule.priority,
                                         rule.name,
+                                        status,
                                         rule.description,
                                     );
                                 }
@@ -670,10 +697,10 @@ pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonErr
                     }
                 }
                 RulesAction::Enable { ref name } => {
-                    Logger::info(&format!("Enabling rule '{}' — edit infynon.toml to persist.", name));
+                    toggle_rule(name, true);
                 }
                 RulesAction::Disable { ref name } => {
-                    Logger::info(&format!("Disabling rule '{}' — edit infynon.toml to persist.", name));
+                    toggle_rule(name, false);
                 }
             }
         }
@@ -686,6 +713,7 @@ pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonErr
                 Ok(content) => {
                     let lines: Vec<&str> = content.lines().collect();
                     let start = if lines.len() > count { lines.len() - count } else { 0 };
+                    let mut shown = 0;
                     for line in &lines[start..] {
                         if let Ok(event) = serde_json::from_str::<crate::firewall::events::FirewallEvent>(line) {
                             // Apply filters
@@ -696,7 +724,7 @@ pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonErr
                                 if &event.source_ip != filter_ip { continue; }
                             }
                             println!(
-                                "  {} {} {:<6} {:<30} {:<12} {}",
+                                "  {} {:<16} {:<6} {:<30} {:<12} {}",
                                 event.timestamp.format("%H:%M:%S"),
                                 event.source_ip,
                                 event.method,
@@ -704,7 +732,11 @@ pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonErr
                                 event.verdict,
                                 event.blocked_reason.as_deref().unwrap_or("-"),
                             );
+                            shown += 1;
                         }
+                    }
+                    if shown == 0 {
+                        Logger::info("No matching log entries found.");
                     }
                 }
                 Err(_) => Logger::info("No log file found. Start the firewall first."),
@@ -718,7 +750,12 @@ pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonErr
             match action {
                 Some(ConfigAction::Check) | None => {
                     match load_firewall_config(None) {
-                        Ok(_) => Logger::success("Configuration is valid."),
+                        Ok(cfg) => {
+                            Logger::success("Configuration is valid.");
+                            Logger::detail("  Server:", &format!("{}:{}", cfg.server.listen_address, cfg.server.listen_port));
+                            Logger::detail("  Upstream:", &format!("{}:{}", cfg.upstream.address, cfg.upstream.port));
+                            Logger::detail("  Rules:", &format!("{} custom rules", cfg.rules.len()));
+                        }
                         Err(e) => Logger::error(&format!("Configuration error: {}", e)),
                     }
                 }
@@ -750,6 +787,67 @@ pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonErr
         }
     }
     Ok(())
+}
+
+/// Toggle a rule's enabled status in the config file
+fn toggle_rule(name: &str, enabled: bool) {
+    use crate::firewall::config::{load_firewall_config, save_firewall_config};
+    match load_firewall_config(None) {
+        Ok(mut cfg) => {
+            let mut found = false;
+            for rule in &mut cfg.rules {
+                if rule.name == name {
+                    rule.enabled = enabled;
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                Logger::error(&format!("Rule '{}' not found in config.", name));
+                return;
+            }
+            match save_firewall_config(&cfg, None) {
+                Ok(()) => {
+                    let action = if enabled { "Enabled" } else { "Disabled" };
+                    Logger::success(&format!("{} rule '{}'", action, name));
+                }
+                Err(e) => Logger::error(&format!("Failed to save config: {}", e)),
+            }
+        }
+        Err(e) => Logger::error(&format!("Config error: {}", e)),
+    }
+}
+
+/// Config file watcher — polls for file changes and reloads config
+async fn config_watch_loop(
+    state: std::sync::Arc<crate::firewall::server::SharedState>,
+    config_path: Option<String>,
+) {
+    let path = crate::firewall::config::config_path_for(config_path.as_deref());
+    let mut last_modified = std::fs::metadata(&path)
+        .and_then(|m| m.modified())
+        .ok();
+
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+        let current_modified = std::fs::metadata(&path)
+            .and_then(|m| m.modified())
+            .ok();
+
+        if current_modified != last_modified {
+            if let Ok(new_cfg) = crate::firewall::config::load_firewall_config(config_path.as_deref()) {
+                let maint = new_cfg.server.maintenance_mode;
+                if let Ok(mut cfg) = state.config.write() {
+                    *cfg = new_cfg;
+                }
+                state.maintenance_mode.store(maint, std::sync::atomic::Ordering::Relaxed);
+                // Rebuild pipeline so new rules/WAF/rate-limit settings take effect
+                state.rebuild_pipeline();
+            }
+            last_modified = current_modified;
+        }
+    }
 }
 
 fn run_firewall_tui(state: std::sync::Arc<crate::firewall::server::SharedState>) {
@@ -814,4 +912,3 @@ fn truncate_str(s: &str, max: usize) -> String {
         s.to_string()
     }
 }
-

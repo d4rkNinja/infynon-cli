@@ -10,6 +10,9 @@ pub struct FirewallConfig {
     pub server: ServerConfig,
     #[serde(default = "default_upstream")]
     pub upstream: UpstreamConfig,
+    /// Additional upstreams for path-based routing to multiple backends
+    #[serde(default)]
+    pub upstreams: Vec<UpstreamRouteConfig>,
     #[serde(default)]
     pub tls: TlsConfig,
     #[serde(default)]
@@ -33,6 +36,7 @@ impl Default for FirewallConfig {
         Self {
             server: default_server(),
             upstream: default_upstream(),
+            upstreams: Vec::new(),
             tls: TlsConfig::default(),
             ip: IpConfig::default(),
             rate_limit: RateLimitConfig::default(),
@@ -59,6 +63,8 @@ pub struct ServerConfig {
     pub request_timeout_seconds: u64,
     #[serde(default = "default_worker_threads")]
     pub worker_threads: usize,
+    #[serde(default)]
+    pub maintenance_mode: bool,
 }
 
 fn default_listen_address() -> String { "0.0.0.0".to_string() }
@@ -73,6 +79,7 @@ fn default_server() -> ServerConfig {
         max_connections: default_max_connections(),
         request_timeout_seconds: default_request_timeout(),
         worker_threads: default_worker_threads(),
+        maintenance_mode: false,
     }
 }
 
@@ -105,6 +112,24 @@ fn default_upstream() -> UpstreamConfig {
         health_check_interval_seconds: default_health_interval(),
         forward_timeout_seconds: default_forward_timeout(),
     }
+}
+
+// ── Upstream Routes (multi-backend) ─────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpstreamRouteConfig {
+    /// Name for this upstream (for logging/TUI display)
+    pub name: String,
+    /// Path prefix to match (e.g. "/api", "/static")
+    pub path_prefix: String,
+    /// Backend address
+    #[serde(default = "default_upstream_address")]
+    pub address: String,
+    /// Backend port
+    pub port: u16,
+    /// Whether to strip the path prefix before forwarding
+    #[serde(default)]
+    pub strip_prefix: bool,
 }
 
 // ── TLS ─────────────────────────────────────────────────────────────────────
@@ -262,6 +287,8 @@ pub struct WafConfig {
     pub block_empty_user_agent: bool,
     #[serde(default = "default_blocked_user_agents")]
     pub blocked_user_agents: Vec<String>,
+    #[serde(default = "default_allowed_content_types")]
+    pub allowed_content_types: Vec<String>,
 }
 
 fn default_max_url() -> usize { 4096 }
@@ -285,6 +312,16 @@ fn default_blocked_user_agents() -> Vec<String> {
     vec!["sqlmap", "nikto", "nmap", "dirbuster", "gobuster", "masscan", "ZmEu"]
         .into_iter().map(String::from).collect()
 }
+fn default_allowed_content_types() -> Vec<String> {
+    vec![
+        "application/json",
+        "application/x-www-form-urlencoded",
+        "multipart/form-data",
+        "text/plain",
+        "text/html",
+        "application/xml",
+    ].into_iter().map(String::from).collect()
+}
 
 impl Default for WafConfig {
     fn default() -> Self {
@@ -303,6 +340,7 @@ impl Default for WafConfig {
             blocked_paths: default_blocked_paths(),
             block_empty_user_agent: true,
             blocked_user_agents: default_blocked_user_agents(),
+            allowed_content_types: default_allowed_content_types(),
         }
     }
 }
@@ -468,6 +506,8 @@ pub struct ResponsesConfig {
     pub block_page_json: Option<String>,
     #[serde(default)]
     pub ratelimit_page_html: Option<String>,
+    #[serde(default)]
+    pub maintenance_page_html: Option<String>,
 }
 
 // ── Load / Save ─────────────────────────────────────────────────────────────
@@ -530,6 +570,14 @@ pub fn init_config(listen_port: u16, upstream_addr: &str, upstream_port: u16) ->
     config.upstream.address = upstream_addr.to_string();
     config.upstream.port = upstream_port;
     config
+}
+
+/// Returns the actual config file path that would be used, given an optional explicit path.
+pub fn config_path_for(path: Option<&str>) -> PathBuf {
+    match path {
+        Some(p) => PathBuf::from(p),
+        None => default_config_path(),
+    }
 }
 
 pub fn load_ip_list(path: &Path) -> Vec<String> {
