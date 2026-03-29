@@ -18,7 +18,7 @@
   </a>
   <img src="https://img.shields.io/badge/ecosystems-14-blue?style=for-the-badge" />
   <img src="https://img.shields.io/badge/lockfiles-15-purple?style=for-the-badge" />
-  <img src="https://img.shields.io/badge/version-0.2.0--beta.5-orange?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/version-0.2.0--beta.6-orange?style=for-the-badge" />
   <a href="https://github.com/d4rkNinja/infynon-cli/tree/development">
     <img src="https://img.shields.io/badge/channel-development-blueviolet?style=for-the-badge" />
   </a>
