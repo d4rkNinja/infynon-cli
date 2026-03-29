@@ -18,7 +18,10 @@
   </a>
   <img src="https://img.shields.io/badge/ecosystems-14-blue?style=for-the-badge" />
   <img src="https://img.shields.io/badge/lockfiles-15-purple?style=for-the-badge" />
-  <img src="https://img.shields.io/badge/version-0.2.0--beta.6-orange?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/version-0.2.0--beta.6.1-orange?style=for-the-badge" />
+  <a href="https://www.npmjs.com/package/infynon">
+    <img src="https://img.shields.io/npm/v/infynon?style=for-the-badge&logo=npm&label=npm" />
+  </a>
   <a href="https://github.com/d4rkNinja/infynon-cli/tree/development">
     <img src="https://img.shields.io/badge/channel-development-blueviolet?style=for-the-badge" />
   </a>
@@ -296,7 +299,23 @@ infynon pkg --strict npm install express
 
 ## 🔥 Installation
 
-### Linux / macOS
+### npm (recommended — works on all platforms)
+
+```bash
+npm install -g infynon
+```
+
+Downloads the right pre-built binary for your OS and architecture automatically. Requires Node.js 14+.
+
+To uninstall completely (removes binary + all config files from `~/.infynon/`):
+
+```bash
+npm uninstall -g infynon
+```
+
+---
+
+### Linux / macOS (shell script)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/d4rkNinja/infynon-cli/main/scripts/install.sh | bash
@@ -308,7 +327,7 @@ curl -fsSL https://raw.githubusercontent.com/d4rkNinja/infynon-cli/main/scripts/
 irm https://raw.githubusercontent.com/d4rkNinja/infynon-cli/main/scripts/install.ps1 | iex
 ```
 
-### Using Cargo
+### Using Cargo (build from source)
 
 ```bash
 cargo install --git https://github.com/d4rkNinja/infynon-cli

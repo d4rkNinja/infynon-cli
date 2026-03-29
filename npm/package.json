@@ -1,0 +1,41 @@
+{
+  "name": "infynon",
+  "version": "0.2.0-beta.6.1",
+  "description": "Universal package security manager & network firewall — intercepts installs across npm, pip, cargo, go, gem and more with 3-layer CVE verification, plus a real-time reverse proxy WAF with TUI dashboard",
+  "bin": {
+    "infynon": "./run.js",
+    "infynon-pkg": "./run.js"
+  },
+  "scripts": {
+    "postinstall": "node postinstall.js",
+    "preuninstall": "node preuninstall.js"
+  },
+  "files": [
+    "run.js",
+    "postinstall.js",
+    "preuninstall.js"
+  ],
+  "engines": {
+    "node": ">=14"
+  },
+  "keywords": [
+    "security",
+    "package-manager",
+    "vulnerability",
+    "firewall",
+    "waf",
+    "cve",
+    "pentest",
+    "supply-chain"
+  ],
+  "author": "d4rkNinja",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/d4rkNinja/infynon-cli"
+  },
+  "bugs": {
+    "url": "https://github.com/d4rkNinja/infynon-cli/issues"
+  },
+  "homepage": "https://github.com/d4rkNinja/infynon-cli#readme"
+}
