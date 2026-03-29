@@ -2,6 +2,19 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Version Management — CRITICAL RULE
+
+**All three version references must always be identical.** When bumping the version, update all of them in the same commit before tagging:
+
+| File | Field | Current |
+|------|-------|---------|
+| `Cargo.toml` | `version = "..."` | `0.2.0-beta.6.2` |
+| `npm/package.json` | `"version": "..."` | `0.2.0-beta.6.2` |
+| `README.md` | version badge `shields.io/badge/version-...` | `0.2.0-beta.6.2` |
+
+The git tag must also match: `v<version>` (e.g. `v0.2.0-beta.6.2`).
+The CI `publish-npm` job auto-syncs the npm version from the tag, so the tag is the source of truth.
+
 ## Project Overview
 
 Infynon CLI is a Rust-based dual-mode security tool:
