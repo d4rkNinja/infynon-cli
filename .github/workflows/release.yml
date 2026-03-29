@@ -89,7 +89,7 @@ jobs:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Sync version from tag and copy README
+      - name: Sync version from tag
         shell: bash
         run: |
           TAG="${GITHUB_REF_NAME#v}"
@@ -99,7 +99,6 @@ jobs:
             pkg.version = '$TAG';
             require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2) + '\n');
           "
-          cp ../README.md ./README.md
           echo "Publishing version $TAG"
 
       - name: Publish
