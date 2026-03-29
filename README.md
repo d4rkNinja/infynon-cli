@@ -18,7 +18,7 @@
   </a>
   <img src="https://img.shields.io/badge/ecosystems-14-blue?style=for-the-badge" />
   <img src="https://img.shields.io/badge/lockfiles-15-purple?style=for-the-badge" />
-  <img src="https://img.shields.io/badge/version-0.2.0--beta.4-orange?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/version-0.2.0--beta.5-orange?style=for-the-badge" />
   <a href="https://github.com/d4rkNinja/infynon-cli/tree/development">
     <img src="https://img.shields.io/badge/channel-development-blueviolet?style=for-the-badge" />
   </a>
@@ -546,6 +546,43 @@ The `development` branch contains:
 > **Note**: The development branch may have breaking changes. For production use, stick to tagged releases on `main`.
 
 **Watch the branch** for updates: [github.com/d4rkNinja/infynon-cli/tree/development](https://github.com/d4rkNinja/infynon-cli/tree/development)
+
+---
+
+## 🤖 Claude Code Plugin
+
+INFYNON integrates with [Claude Code](https://claude.ai/code) via official plugins. Once installed, Claude Code automatically knows how to help you use every INFYNON command — scanning, fixing, firewall setup, rule authoring, and more.
+
+### Install the Plugin
+
+```bash
+# 1. Add the Code Guardian marketplace
+/plugin marketplace add d4rkNinja/code-guardian
+
+# 2. Install INFYNON plugins
+/plugin install infynon-pkg@d4rkNinja
+/plugin install infynon-firewall@d4rkNinja
+
+# 3. Reload to activate
+/reload-plugins
+```
+
+### What You Get
+
+| Plugin | What Claude Code Learns |
+|--------|------------------------|
+| **infynon-pkg** | All `infynon pkg` commands — scan, fix, audit, why, outdated, diff, doctor, size, search, clean, migrate, eagle-eye. Auto-triggers when it detects lock files in your project. |
+| **infynon-firewall** | All `infynon` firewall commands — init, start, monitor, block/unblock, rules, logs, config. Full `infynon.toml` configuration guide, TUI shortcuts. Auto-triggers when it detects `infynon.toml`. |
+
+Once installed, just ask Claude Code things like:
+- *"Scan my project for vulnerabilities"*
+- *"Set up a firewall for my Express backend on port 3000"*
+- *"Fix all critical CVEs in this project"*
+- *"Help me write a custom WAF rule to block scanners"*
+
+Claude Code will recommend and explain the right `infynon` commands.
+
+> **Plugin source**: [github.com/d4rkNinja/code-guardian](https://github.com/d4rkNinja/code-guardian)
 
 ---
 
