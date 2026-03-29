@@ -560,11 +560,11 @@ pub fn upgrade_cmd(pkg: &scanner::LockedPackage, fixed: &str) -> String {
             use crate::ecosystems::detector::resolve_binary;
             // Detect uv/poetry from lock file source
             match source_file {
-                "uv.lock"      => format!("uv pip install {}=={}", pkg.name, fixed),
+                "uv.lock"      => format!("uv add {}=={}", pkg.name, fixed),
                 "poetry.lock"  => format!("poetry add {}=={}", pkg.name, fixed),
                 _ => {
                     if std::path::Path::new("uv.lock").exists() {
-                        format!("uv pip install {}=={}", pkg.name, fixed)
+                        format!("uv add {}=={}", pkg.name, fixed)
                     } else if std::path::Path::new("poetry.lock").exists() {
                         format!("poetry add {}=={}", pkg.name, fixed)
                     } else {
@@ -796,7 +796,7 @@ fn install_cmd_for_ecosystem(pkg: &str, fixed: &str, ecosystem: &str) -> String 
         "pnpm"      => format!("pnpm add {}@{}", pkg, fixed),
         "bun"       => format!("bun add {}@{}", pkg, fixed),
         "crates.io" | "cargo" => format!("cargo add {}@{}", pkg, fixed),
-        "uv"        => format!("uv pip install {}=={}", pkg, fixed),
+        "uv"        => format!("uv add {}=={}", pkg, fixed),
         "poetry"    => format!("poetry add {}=={}", pkg, fixed),
         "PyPI" | "pip" | "pip3" => {
             // Resolve at runtime so Linux systems with only pip3 get the right binary
