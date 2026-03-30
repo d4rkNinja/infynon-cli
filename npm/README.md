@@ -1,8 +1,12 @@
 # INFYNON
 
-**🔥 Stop installing vulnerable dependencies blindly**
+**Stop trusting installs, traffic, and API flows blindly.**
 
-A security-first CLI: pre-install CVE scanner for 14 ecosystems + reverse proxy WAF + node-based API flow tester with security probes.
+A security-first CLI — one binary, three shields:
+
+- 📦 **Dependency Firewall** — pre-install CVE scanner across 14 ecosystems
+- 🛡️ **Network Firewall** — reverse proxy WAF with real-time TUI dashboard
+- 🧪 **API Flow Tester** — node-based integration testing with security probes
 
 [![npm](https://img.shields.io/npm/v/infynon?style=flat-square&logo=npm)](https://www.npmjs.com/package/infynon)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/d4rkNinja/infynon-cli/blob/main/LICENSE)
@@ -10,7 +14,7 @@ A security-first CLI: pre-install CVE scanner for 14 ecosystems + reverse proxy 
 
 > ⚠️ AI installs packages. You don't verify them. That's the risk.
 > **INFYNON fixes that — blocks threats before they reach your system.**
-> Use `--agent` for structured JSON output when running inside AI agents or CI pipelines.
+> Use `--agent` for structured JSON output inside AI agents or CI pipelines.
 
 ---
 
@@ -24,19 +28,13 @@ Downloads the right pre-built native binary for your OS and architecture automat
 
 **Supported platforms:** Windows x64 · Linux x64 · Linux ARM64 · macOS x64 · macOS ARM64
 
-To uninstall and clean up all config files:
-
 ```bash
-npm uninstall -g infynon
+npm uninstall -g infynon    # uninstall and clean up all config files
 ```
 
 ---
 
-## What is INFYNON?
-
-A single binary with three modes:
-
-### 1. `infynon pkg` — Package Security
+## Module 1 — `infynon pkg` · Dependency Firewall
 
 Intercepts install commands across **14 ecosystems** and runs a 3-layer CVE check before anything touches your disk.
 
@@ -44,10 +42,8 @@ Intercepts install commands across **14 ecosystems** and runs a 3-layer CVE chec
 # Scan your project's lock files for CVEs
 infynon pkg scan
 
-# Secure install — intercepts and checks before running npm
+# Secure install — drop-in wrapper around your package manager
 infynon pkg npm install express
-
-# Works with any ecosystem
 infynon pkg cargo add serde
 infynon pkg pip install requests
 infynon pkg yarn add lodash
@@ -58,55 +54,23 @@ infynon pkg fix --auto
 # Deep audit with full dependency tree
 infynon pkg audit
 
-# CI / non-interactive flags (no prompts)
-infynon pkg npm install express --strict high      # fail build on critical/high (exit 3)
-infynon pkg npm install express --auto-fix         # auto-upgrade to safe versions
-infynon pkg npm install express --skip-vulnerable  # skip bad packages silently
-infynon pkg npm install express --yes              # install everything (audit-only CI)
+# CI / non-interactive flags
+infynon pkg npm install express --strict high       # fail on critical/high (exit 3)
+infynon pkg npm install express --auto-fix          # auto-upgrade to safe versions
+infynon pkg npm install express --skip-vulnerable   # skip bad packages silently
+infynon pkg npm install express --yes               # install everything (audit-only CI)
 
-# AI agent mode — structured JSON output for AI tools and CI parsers
-infynon pkg scan --agent                           # JSON: status/vulnerabilities/summary
-infynon pkg npm install express --agent --strict high   # JSON: installed/blocked/vulns
-infynon pkg uv add fastapi --agent --auto-fix      # any ecosystem, machine-readable
+# AI agent mode — structured JSON for AI tools and CI parsers
+infynon pkg scan --agent
+infynon pkg npm install express --agent --strict high
+infynon pkg uv add fastapi --agent --auto-fix
 ```
 
 **Ecosystems:** npm · yarn · pnpm · bun · pip · uv · poetry · cargo · go · gem · composer · nuget · hex · pub
 
-### 2. `infynon weave` — API Flow Testing
-
-Test your entire API as a connected flow. Model endpoints as a directed graph — authentication tokens and extracted values thread automatically between nodes.
-
-```bash
-# Set your API base URL once
-infynon weave env set BASE_URL http://localhost:8001
-
-# Create nodes from natural language
-infynon weave node create --ai "POST /auth/login with email and password, extracts token"
-infynon weave node create --ai "POST /orders — creates order, extracts order_id"
-
-# Wire into a flow and run
-infynon weave flow create "checkout" --ai "login then create order"
-infynon weave flow run checkout
-
-# Run security probes (auth bypass, rate limit, SQL injection)
-infynon weave ai probe checkout
-
-# Open the 10-tab TUI dashboard
-infynon weave tui
-```
-
-**Runtime prompt inputs** — pause and ask for OTPs, passwords, and dynamic values mid-flow, with 4 types:
-```bash
-infynon weave node prompt verify-otp add otp_code --label "OTP Code" --secret
-infynon weave node prompt create-order add env --type select --options "staging,production,dev"
-infynon weave node prompt confirm-delete add confirm --type boolean --default false
-```
-
-**CI ready** — use `--default` values or `--set KEY=val` for fully non-interactive runs.
-
 ---
 
-### 3. `infynon` — Network Firewall
+## Module 2 — `infynon` · Network Firewall
 
 A reverse proxy WAF with a real-time TUI dashboard. Sits between the internet and your backend.
 
@@ -131,18 +95,61 @@ infynon logs --verdict block
 
 ---
 
-## How It Works (Package Security)
+## Module 3 — `infynon weave` · API Flow Testing
 
-1. You (or an AI agent) runs `infynon pkg npm install express`
-2. INFYNON resolves the latest version and queries **OSV.dev** for CVEs
-3. With `--agent`: emits JSON + structured exit code — AI agents parse and react
-4. With `--strict high`: blocks installation if critical/high CVEs are found (exit `3`)
-5. With `--auto-fix`: silently upgrades to the nearest safe version
-6. Only approved packages get installed
+Test your entire API as a connected flow. Model endpoints as a directed graph — authentication tokens and extracted values thread automatically between nodes.
+
+```bash
+# Set your API base URL once
+infynon weave env set BASE_URL http://localhost:8001
+
+# Create nodes from natural language
+infynon weave node create --ai "POST /auth/login with email and password, extracts token"
+infynon weave node create --ai "POST /orders — creates order, extracts order_id"
+
+# Wire into a flow and run
+infynon weave flow create "checkout" --ai "login then create order"
+infynon weave flow run checkout
+
+# Run security probes (auth bypass, rate limit, SQL injection)
+infynon weave ai probe checkout
+
+# Open the 10-tab TUI dashboard
+infynon weave tui
+```
+
+**Runtime prompt inputs** — pause and ask for OTPs, passwords, and dynamic values mid-flow:
+
+```bash
+infynon weave node prompt verify-otp add otp_code --label "OTP Code" --secret
+infynon weave node prompt create-order add env --type select --options "staging,production,dev"
+infynon weave node prompt confirm-delete add confirm --type boolean --default false
+infynon weave node prompt create-token add scopes --type multiselect --options "read,write,admin"
+```
+
+**Prompt types:** `text · boolean · select · multiselect`
+
+**CI ready** — use `--default` values or `--set KEY=val` for fully non-interactive runs:
+
+```bash
+infynon weave flow run auth-flow --set email=ci@example.com --set password=Test@1234
+```
 
 ---
 
-## More Commands
+## Traditional Testing vs INFYNON Weave
+
+| | Traditional (Postman / pytest) | INFYNON Weave |
+|---|---|---|
+| **Token handling** | Manual copy-paste between requests | Automatic — extracted values thread forward |
+| **Dynamic inputs** | Hardcoded env vars | Runtime prompts (OTP, 2FA, password) |
+| **Security testing** | Separate tool (Burp, manual) | Built-in probes: auth bypass, rate limit, SQLi |
+| **Flow creation** | Manual configuration | AI-generated from natural language |
+| **CI integration** | Complex credential management | `--set KEY=val` or `--default` flags |
+
+---
+
+## Commands Reference
 
 ### Package Security
 | Command | Description |
@@ -163,11 +170,11 @@ infynon logs --verdict block
 ### API Flow Testing (Weave)
 | Command | Description |
 |---------|-------------|
-| `infynon weave node create --ai "..."` | Create a node from a natural language description |
+| `infynon weave node create --ai "..."` | Create a node from natural language |
 | `infynon weave flow create "name" --ai "..."` | Build a flow from description |
 | `infynon weave flow run <id>` | Run a flow with live step output |
 | `infynon weave flow run <id> --set key=val` | Pre-seed context vars (skip prompts) |
-| `infynon weave ai probe <id>` | Run auth bypass / rate limit / SQLi security probes |
+| `infynon weave ai probe <id>` | Run auth bypass / rate limit / SQLi probes |
 | `infynon weave ai explain <id>` | Diagnose the last failed run |
 | `infynon weave validate` | Validate all nodes and flows |
 | `infynon weave tui` | Open 10-tab TUI dashboard |
