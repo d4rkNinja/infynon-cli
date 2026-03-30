@@ -208,6 +208,18 @@ pub fn carry_context(
     }
 }
 
+/// Convert `--set KEY=VALUE` pairs into a context map, parsing JSON values where possible.
+pub fn parse_set_vars(set_vars: &[(String, String)]) -> HashMap<String, Value> {
+    set_vars
+        .iter()
+        .map(|(k, v)| {
+            let val = serde_json::from_str::<Value>(v)
+                .unwrap_or_else(|_| Value::String(v.clone()));
+            (k.clone(), val)
+        })
+        .collect()
+}
+
 fn value_to_str(val: &Value) -> String {
     match val {
         Value::String(s) => s.clone(),

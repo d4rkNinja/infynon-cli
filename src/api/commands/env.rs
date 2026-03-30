@@ -1,20 +1,15 @@
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use owo_colors::OwoColorize;
 
 use crate::tui::logger::Logger;
 
-// ── .env file path ────────────────────────────────────────────────────────────
-
 fn env_file_path() -> PathBuf {
     Path::new(".infynon").join(".env")
 }
 
-// ── read / write ──────────────────────────────────────────────────────────────
-
 /// Parse a .env file into an ordered list of (key, value) pairs.
-/// Lines starting with # are treated as comments and preserved as-is.
+/// `None` value means the line is a comment or blank — preserved verbatim on write.
 fn read_env_file() -> Vec<(String, Option<String>)> {
     let path = env_file_path();
     let content = match std::fs::read_to_string(&path) {
@@ -39,7 +34,6 @@ fn read_env_file() -> Vec<(String, Option<String>)> {
         .collect()
 }
 
-/// Write an ordered map back to the .env file, creating it if needed.
 fn write_env_file(entries: &[(String, Option<String>)]) -> std::io::Result<()> {
     let path = env_file_path();
     std::fs::create_dir_all(path.parent().unwrap())?;
@@ -56,16 +50,6 @@ fn write_env_file(entries: &[(String, Option<String>)]) -> std::io::Result<()> {
     std::fs::write(&path, content)
 }
 
-/// Build a key→value map from parsed entries (skipping comment lines).
-fn to_map(entries: &[(String, Option<String>)]) -> HashMap<String, String> {
-    entries
-        .iter()
-        .filter_map(|(k, v)| v.as_ref().map(|val| (k.clone(), val.clone())))
-        .collect()
-}
-
-// ── sensitivity heuristic ─────────────────────────────────────────────────────
-
 fn looks_sensitive(key: &str) -> bool {
     let upper = key.to_uppercase();
     ["TOKEN", "SECRET", "PASSWORD", "KEY", "PASS", "AUTH", "CREDENTIAL", "PRIVATE"]
@@ -80,8 +64,6 @@ fn mask(value: &str) -> String {
         format!("{}***", &value[..4])
     }
 }
-
-// ── commands ──────────────────────────────────────────────────────────────────
 
 pub fn cmd_env_list() {
     println!();
@@ -132,8 +114,6 @@ pub fn cmd_env_set(key: &str, value: &str) {
     }
 
     let mut entries = read_env_file();
-
-    // Update in-place if key already exists
     let mut found = false;
     for (k, v) in entries.iter_mut() {
         if v.is_some() && k == key {
@@ -149,13 +129,15 @@ pub fn cmd_env_set(key: &str, value: &str) {
 
     match write_env_file(&entries) {
         Ok(()) => {
-            let display = if looks_sensitive(key) { mask(value) } else { value.to_string() };
+            let sensitive = looks_sensitive(key);
+            let display = if sensitive { mask(value) } else { value.to_string() };
+            let label = if found { "(updated)" } else { "(added)" };
             println!(
                 "  {}  {}={} {}",
                 "✔".bright_green(),
                 key.bold(),
                 display.truecolor(200, 200, 220),
-                if found { "(updated)".truecolor(100, 100, 140).to_string() } else { "(added)".truecolor(100, 100, 140).to_string() }
+                label.truecolor(100, 100, 140),
             );
         }
         Err(e) => Logger::error(&format!("Could not write .env: {}", e)),
@@ -181,17 +163,16 @@ pub fn cmd_env_delete(key: &str) {
 
 pub fn cmd_env_get(key: &str, reveal: bool) {
     let entries = read_env_file();
-    let map = to_map(&entries);
+    let value = entries.iter().find_map(|(k, v)| {
+        if k == key { v.as_deref() } else { None }
+    });
 
-    match map.get(key) {
+    match value {
         Some(value) => {
-            let display = if !reveal && looks_sensitive(key) {
-                mask(value)
-            } else {
-                value.clone()
-            };
+            let sensitive = looks_sensitive(key);
+            let display = if !reveal && sensitive { mask(value) } else { value.to_string() };
             println!("  {}  {}={}", "→".bright_cyan(), key.bold(), display.truecolor(200, 200, 220));
-            if !reveal && looks_sensitive(key) {
+            if !reveal && sensitive {
                 println!("     (use --reveal to show full value)");
             }
         }

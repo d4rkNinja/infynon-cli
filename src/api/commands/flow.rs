@@ -1,13 +1,12 @@
-use std::collections::HashMap;
 use std::io::{self, Write};
 
 use owo_colors::OwoColorize;
-use serde_json::Value;
 
 use crate::api::ai;
 use crate::api::executor::{execute_flow, FlowExecuteOptions};
 use crate::api::storage;
 use crate::api::types::{Edge, Flow};
+use crate::api::variables;
 use crate::tui::logger::Logger;
 
 // ── flow create ───────────────────────────────────────────────────────────────
@@ -235,13 +234,7 @@ pub fn cmd_flow_run(id: &str, base_url_override: Option<&str>, set_vars: &[(Stri
             prompt("  Base URL (e.g. http://localhost:3000): ")
         });
 
-    // Build initial context from --set flags
-    let mut initial_context: HashMap<String, Value> = HashMap::new();
-    for (k, v) in set_vars {
-        let val = serde_json::from_str::<Value>(v)
-            .unwrap_or_else(|_| Value::String(v.clone()));
-        initial_context.insert(k.clone(), val);
-    }
+    let initial_context = variables::parse_set_vars(set_vars);
 
     if !initial_context.is_empty() {
         println!();
@@ -409,7 +402,6 @@ pub fn cmd_flow_run_all(base_url_override: Option<&str>, set_vars: &[(String, St
 
     for flow in &flows {
         cmd_flow_run(&flow.id, base_url_override, set_vars, output);
-        // Check last run result
         let runs = storage::load_recent_runs(&flow.id, 1);
         if let Some(run) = runs.first() {
             if run.passed { passed += 1; } else { failed += 1; }

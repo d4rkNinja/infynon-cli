@@ -1,14 +1,19 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{self, Write};
+use std::sync::OnceLock;
 
 use owo_colors::OwoColorize;
+use regex::Regex;
 use serde_json::Value;
 
 use crate::api::ai;
 use crate::api::executor;
 use crate::api::storage;
 use crate::api::types::{Assertion, Edge, Extraction, Node, OnFail, PromptInput};
+use crate::api::variables;
 use crate::tui::logger::Logger;
+
+static PLACEHOLDER_RE: OnceLock<Regex> = OnceLock::new();
 
 // ── node create ───────────────────────────────────────────────────────────────
 
@@ -384,18 +389,12 @@ pub fn cmd_node_run(id: &str, base_url: &str, set_vars: &[(String, String)], pro
         Err(e) => { Logger::error(&e); return; }
     };
 
-    let mut context: HashMap<String, Value> = HashMap::new();
-    for (k, v) in set_vars {
-        let val = serde_json::from_str::<Value>(v)
-            .unwrap_or_else(|_| Value::String(v.clone()));
-        context.insert(k.clone(), val);
-    }
+    let mut context = variables::parse_set_vars(set_vars);
 
-    // --prompt: detect unresolved {placeholder} vars not already in context or env, then ask
     if prompt_flag {
         let unresolved = collect_unresolved_placeholders(&node, &context);
         if !unresolved.is_empty() {
-            use dialoguer::{Input};
+            use dialoguer::Input;
             println!();
             println!("  {}  Prompting for {} unresolved variable(s):", "→".bright_cyan(), unresolved.len());
             for var in &unresolved {
@@ -418,24 +417,23 @@ pub fn cmd_node_run(id: &str, base_url: &str, set_vars: &[(String, String)], pro
 }
 
 /// Collect placeholder variable names from node path/headers/body that are not already
-/// provided in context or available as environment variables.
+/// provided in context, environment, or declared as prompt_inputs.
 fn collect_unresolved_placeholders(node: &Node, context: &HashMap<String, Value>) -> Vec<String> {
-    use regex::Regex;
-    let re = Regex::new(r"\{([A-Za-z_][A-Za-z0-9_]*)\}").unwrap();
-    let mut seen = std::collections::HashSet::new();
+    let re = PLACEHOLDER_RE.get_or_init(|| {
+        Regex::new(r"\{([A-Za-z_][A-Za-z0-9_]*)\}").unwrap()
+    });
+    let prompt_vars: HashSet<&str> = node.prompt_inputs.iter().map(|pi| pi.var.as_str()).collect();
+    let mut seen: HashSet<String> = HashSet::new();
     let mut result = Vec::new();
 
     let mut check = |text: &str| {
         for cap in re.captures_iter(text) {
             let var = cap[1].to_string();
             if seen.contains(&var) { continue; }
-            // Skip if already in context
-            if context.contains_key(&var) { seen.insert(var); continue; }
-            // Skip if available as env var
-            if std::env::var(&var).is_ok() { seen.insert(var); continue; }
-            // Skip prompt_inputs vars — those go through the prompt modal
-            if node.prompt_inputs.iter().any(|pi| pi.var == var) { seen.insert(var); continue; }
             seen.insert(var.clone());
+            if context.contains_key(&var) { continue; }
+            if std::env::var(&var).is_ok() { continue; }
+            if prompt_vars.contains(var.as_str()) { continue; }
             result.push(var);
         }
     };
