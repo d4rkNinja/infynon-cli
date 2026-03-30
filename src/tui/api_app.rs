@@ -230,9 +230,6 @@ pub struct ApiApp {
     // ── Config tab (tab 0) ────────────────────────────────────────────────
     pub config_output_markdown: bool,
     pub config_output_pdf: bool,
-    pub default_base_url: String,
-    pub config_editing_url: bool,
-    pub config_url_input: String,
 
     // ── Prompt input modal ────────────────────────────────────────────────
     pub prompt_modal: Option<PromptModal>,
@@ -340,9 +337,6 @@ impl ApiApp {
             show_help: false,
             config_output_markdown: false,
             config_output_pdf: false,
-            default_base_url: "http://localhost:3000".to_string(),
-            config_editing_url: false,
-            config_url_input: String::new(),
             prompt_modal: None,
             prompt_reply_tx: None,
             body_editor: None,
@@ -552,7 +546,7 @@ impl ApiApp {
             None => return,
         };
         let nodes = self.nodes.clone();
-        let base_url = flow.base_url.clone().unwrap_or_else(|| self.default_base_url.clone());
+        let base_url = flow.base_url.clone().unwrap_or_else(|| "http://localhost:3000".to_string());
 
         let (tx, rx) = mpsc::sync_channel::<LiveEvent>(100);
         self.run_rx = Some(rx);
@@ -603,7 +597,7 @@ impl ApiApp {
         };
         let base_url = self.active_flow()
             .and_then(|f| f.base_url.clone())
-            .unwrap_or_else(|| self.default_base_url.clone());
+            .unwrap_or_else(|| "http://localhost:3000".to_string());
 
         let (tx, rx) = mpsc::sync_channel::<LiveEvent>(100);
         self.run_rx = Some(rx);
@@ -1088,13 +1082,6 @@ impl ApiApp {
             return;
         }
 
-        // Config URL editor — intercept before global digit keys so typing a number
-        // doesn't switch tabs while editing the base URL.
-        if self.config_editing_url {
-            self.handle_config_key(key);
-            return;
-        }
-
         // Global keys
         match key.code {
             KeyCode::Char('q') => { self.should_quit = true; return; }
@@ -1209,23 +1196,6 @@ impl ApiApp {
     }
 
     fn handle_config_key(&mut self, key: KeyEvent) {
-        if self.config_editing_url {
-            match key.code {
-                KeyCode::Esc => {
-                    self.config_editing_url = false;
-                    self.config_url_input.clear();
-                }
-                KeyCode::Enter => {
-                    self.default_base_url = self.config_url_input.clone();
-                    self.config_editing_url = false;
-                    self.notify("Base URL updated");
-                }
-                KeyCode::Backspace => { self.config_url_input.pop(); }
-                KeyCode::Char(c) => { self.config_url_input.push(c); }
-                _ => {}
-            }
-            return;
-        }
         match key.code {
             KeyCode::Char('m') => {
                 self.config_output_markdown = !self.config_output_markdown;
@@ -1234,10 +1204,6 @@ impl ApiApp {
             KeyCode::Char('p') => {
                 self.config_output_pdf = !self.config_output_pdf;
                 self.notify(if self.config_output_pdf { "PDF output: ON" } else { "PDF output: OFF" });
-            }
-            KeyCode::Char('e') => {
-                self.config_editing_url = true;
-                self.config_url_input = self.default_base_url.clone();
             }
             KeyCode::Char('R') => self.refresh_data(),
             _ => {}

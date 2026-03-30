@@ -1674,12 +1674,6 @@ fn render_config(f: &mut Frame, app: &ApiApp, area: Rect) {
     let md_check = if app.config_output_markdown { "[x]" } else { "[ ]" };
     let pdf_check = if app.config_output_pdf { "[x]" } else { "[ ]" };
 
-    let url_display = if app.config_editing_url {
-        format!("{}▌", app.config_url_input)
-    } else {
-        app.default_base_url.clone()
-    };
-
     let lines = vec![
         Line::raw(""),
         Line::from(vec![Span::styled("  ◆ Weave Configuration", Style::default().fg(CYAN).add_modifier(Modifier::BOLD))]),
@@ -1696,19 +1690,10 @@ fn render_config(f: &mut Frame, app: &ApiApp, area: Rect) {
             Span::styled("(toggle with 'p')", Style::default().fg(DIMMER)),
         ]),
         Line::raw(""),
-        Line::from(vec![Span::styled("  Run Behavior", Style::default().fg(WHITE).add_modifier(Modifier::BOLD))]),
-        Line::from(vec![Span::styled("  ────────────", Style::default().fg(DIMMER))]),
-        Line::from(vec![
-            Span::styled("  Default Base URL:  ", Style::default().fg(TEXT_DIM)),
-            Span::styled(&url_display, Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
-            Span::styled("   (press 'e' to edit)", Style::default().fg(DIMMER)),
-        ]),
-        Line::raw(""),
         Line::from(vec![Span::styled("  Keyboard Hints", Style::default().fg(WHITE).add_modifier(Modifier::BOLD))]),
         Line::from(vec![Span::styled("  ──────────────", Style::default().fg(DIMMER))]),
         Line::from(vec![Span::styled("  m  Toggle markdown output", Style::default().fg(DIM))]),
         Line::from(vec![Span::styled("  p  Toggle PDF output", Style::default().fg(DIM))]),
-        Line::from(vec![Span::styled("  e  Edit default base URL", Style::default().fg(DIM))]),
         Line::from(vec![Span::styled("  R  Refresh / reload", Style::default().fg(DIM))]),
         Line::raw(""),
     ];
