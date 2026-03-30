@@ -4,7 +4,7 @@ use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{
-        Block, Borders, Clear, Gauge, List, ListItem, ListState, Paragraph, Sparkline, Wrap,
+        Block, Borders, Clear, List, ListItem, ListState, Paragraph, Sparkline, Wrap,
     },
 };
 
@@ -39,7 +39,7 @@ pub fn render(f: &mut Frame, app: &mut ApiApp) {
         ApiView::LiveExecution   => render_live_execution(f, app, chunks[3]),
         ApiView::LatencyProfiler => render_latency_profiler(f, app, chunks[3]),
         ApiView::SecurityProbes  => render_security_probes(f, app, chunks[3]),
-        ApiView::CoverageMap     => render_coverage_map(f, app, chunks[3]),
+        ApiView::EnvContext      => render_env_context(f, app, chunks[3]),
         ApiView::StateInspector  => render_state_inspector(f, app, chunks[3]),
         ApiView::RunDiff         => render_run_diff(f, app, chunks[3]),
         ApiView::NodeLibrary     => render_node_library(f, app, chunks[3]),
@@ -777,70 +777,150 @@ fn render_security_probes(f: &mut Frame, app: &ApiApp, area: Rect) {
 
 // ── View 6: Coverage Map ──────────────────────────────────────────────────────
 
-fn render_coverage_map(f: &mut Frame, app: &ApiApp, area: Rect) {
-    let flow = match app.active_flow() {
-        Some(f) => f,
-        None => {
-            render_no_flows_hint(f, area, "Coverage Map");
-            return;
-        }
-    };
-
-    let flow_node_ids = flow.all_node_ids();
-    let total_nodes = app.nodes.len().max(1);
-    let covered_nodes = flow_node_ids.len();
-    let pct = (covered_nodes * 100) / total_nodes;
-
-    let block = Block::default()
-        .title(Span::styled(format!(" Coverage Map — {}% ", pct), title_style()))
-        .borders(Borders::ALL)
-        .border_style(border_style());
-    let inner = block.inner(area);
-    f.render_widget(block, area);
-
+fn render_env_context(f: &mut Frame, app: &ApiApp, area: Rect) {
     let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(0)])
-        .split(inner);
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(area);
 
-    // Coverage gauge
-    let gauge = Gauge::default()
-        .gauge_style(Style::default().fg(CYAN).bg(DIMMER))
-        .percent(pct as u16)
-        .label(format!("{}% endpoints in flow", pct));
-    f.render_widget(gauge, chunks[0]);
+    // ── Left: .infynon/.env variables ─────────────────────────────────────────
+    let env_entries = read_dot_env();
+    let mut env_lines: Vec<Line> = vec![Line::raw("")];
 
-    // Node coverage list
-    let mut items: Vec<ListItem> = Vec::new();
-
-    for (id, node) in &app.nodes {
-        let in_flow = flow_node_ids.contains(id);
-        let tested = app.last_run.as_ref()
-            .map(|r| r.steps.iter().any(|s| &s.node_id == id))
-            .unwrap_or(false);
-
-        let (icon, style) = match (in_flow, tested) {
-            (true, true)  => ("▓ ", Style::default().fg(GREEN)),
-            (true, false) => ("░ ", Style::default().fg(YELLOW)),
-            (false, _)    => ("· ", Style::default().fg(DIM)),
-        };
-
-        items.push(ListItem::new(Line::from(vec![
-            Span::styled(icon, style),
-            Span::styled(format!("{:<20}", truncate(id, 20)), style),
-            Span::styled(format!(" {} {}", node.method, truncate(&node.path, 30)), Style::default().fg(TEXT_DIM)),
-            if !in_flow {
-                Span::styled("  not in flow", Style::default().fg(DIMMER))
-            } else if !tested {
-                Span::styled("  not run", Style::default().fg(YELLOW))
-            } else {
-                Span::styled("  ✔", Style::default().fg(GREEN))
-            },
-        ])));
+    if env_entries.is_empty() {
+        env_lines.push(Line::from(vec![
+            Span::styled("  No variables set.", Style::default().fg(DIM)),
+        ]));
+        env_lines.push(Line::raw(""));
+        env_lines.push(Line::from(vec![
+            Span::styled("  Use: infynon weave env set KEY VALUE", Style::default().fg(DIMMER)),
+        ]));
+        env_lines.push(Line::from(vec![
+            Span::styled("  Reference in nodes as {$KEY}", Style::default().fg(DIMMER)),
+        ]));
+    } else {
+        env_lines.push(Line::from(vec![
+            Span::styled(format!("  {:<24} {}", "KEY", "VALUE"), Style::default().fg(DIMMER)),
+        ]));
+        env_lines.push(Line::from(vec![
+            Span::styled(format!("  {}", "─".repeat(50)), Style::default().fg(DIM)),
+        ]));
+        for (key, value) in &env_entries {
+            let display = if env_looks_sensitive(key) { env_mask(value) } else { value.clone() };
+            env_lines.push(Line::from(vec![
+                Span::styled(format!("  {:<24}", truncate(key, 24)), Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
+                Span::styled(display, Style::default().fg(TEXT_DIM)),
+            ]));
+        }
+        env_lines.push(Line::raw(""));
+        env_lines.push(Line::from(vec![
+            Span::styled(format!("  {} variable(s) — reference as {{$KEY}}", env_entries.len()), Style::default().fg(DIMMER)),
+        ]));
     }
 
-    let list = List::new(items);
-    f.render_widget(list, chunks[1]);
+    let env_block = Block::default()
+        .title(Span::styled(" .env Variables ", title_style()))
+        .borders(Borders::ALL)
+        .border_style(border_style());
+    let env_para = Paragraph::new(env_lines)
+        .block(env_block)
+        .wrap(Wrap { trim: false });
+    f.render_widget(env_para, chunks[0]);
+
+    // ── Right: current flow context (last run or empty) ────────────────────────
+    let mut ctx_lines: Vec<Line> = vec![Line::raw("")];
+
+    match &app.last_run {
+        None => {
+            ctx_lines.push(Line::from(vec![
+                Span::styled("  No flow run yet.", Style::default().fg(DIM)),
+            ]));
+            ctx_lines.push(Line::raw(""));
+            ctx_lines.push(Line::from(vec![
+                Span::styled("  Run a flow to see extracted context here.", Style::default().fg(DIMMER)),
+            ]));
+            ctx_lines.push(Line::raw(""));
+            ctx_lines.push(Line::from(vec![
+                Span::styled("  Tip: seed initial values with --set KEY=VALUE", Style::default().fg(DIMMER)),
+            ]));
+        }
+        Some(run) => {
+            if run.final_context.is_empty() {
+                ctx_lines.push(Line::from(vec![
+                    Span::styled("  No variables captured in last run.", Style::default().fg(DIM)),
+                ]));
+            } else {
+                ctx_lines.push(Line::from(vec![
+                    Span::styled(format!("  {:<24} {}", "VARIABLE", "VALUE"), Style::default().fg(DIMMER)),
+                ]));
+                ctx_lines.push(Line::from(vec![
+                    Span::styled(format!("  {}", "─".repeat(50)), Style::default().fg(DIM)),
+                ]));
+                let mut sorted: Vec<_> = run.final_context.iter().collect();
+                sorted.sort_by_key(|(k, _)| k.as_str());
+                for (key, val) in &sorted {
+                    let display = match val {
+                        serde_json::Value::String(s) => {
+                            if s.len() > 40 { format!("{}…", &s[..40]) } else { s.clone() }
+                        }
+                        other => truncate(&other.to_string(), 40),
+                    };
+                    let masked = if env_looks_sensitive(key) { env_mask(&display) } else { display };
+                    ctx_lines.push(Line::from(vec![
+                        Span::styled(format!("  {:<24}", truncate(key, 24)), Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
+                        Span::styled(masked, Style::default().fg(TEXT_DIM)),
+                    ]));
+                }
+                ctx_lines.push(Line::raw(""));
+                ctx_lines.push(Line::from(vec![
+                    Span::styled(
+                        format!("  {} variable(s) captured from last run", run.final_context.len()),
+                        Style::default().fg(DIMMER),
+                    ),
+                ]));
+            }
+        }
+    }
+
+    let ctx_block = Block::default()
+        .title(Span::styled(" Flow Context (last run) ", title_style()))
+        .borders(Borders::ALL)
+        .border_style(border_style());
+    let ctx_para = Paragraph::new(ctx_lines)
+        .block(ctx_block)
+        .wrap(Wrap { trim: false });
+    f.render_widget(ctx_para, chunks[1]);
+}
+
+fn read_dot_env() -> Vec<(String, String)> {
+    let path = std::path::Path::new(".infynon").join(".env");
+    let content = match std::fs::read_to_string(&path) {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+    content
+        .lines()
+        .filter_map(|line| {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') { return None; }
+            line.find('=').map(|eq| {
+                let key = line[..eq].trim().to_string();
+                let value = line[eq + 1..].to_string();
+                (key, value)
+            })
+        })
+        .collect()
+}
+
+fn env_looks_sensitive(key: &str) -> bool {
+    let upper = key.to_uppercase();
+    ["TOKEN", "SECRET", "PASSWORD", "KEY", "PASS", "AUTH", "CREDENTIAL", "PRIVATE"]
+        .iter()
+        .any(|w| upper.contains(w))
+}
+
+fn env_mask(value: &str) -> String {
+    if value.len() <= 6 { "***".to_string() } else { format!("{}***", &value[..4]) }
 }
 
 // ── View 7: State Inspector ───────────────────────────────────────────────────

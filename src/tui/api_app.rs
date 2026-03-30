@@ -15,7 +15,7 @@ pub enum ApiView {
     LiveExecution,
     LatencyProfiler,
     SecurityProbes,
-    CoverageMap,
+    EnvContext,
     StateInspector,
     RunDiff,
     NodeLibrary,
@@ -30,7 +30,7 @@ impl ApiView {
             ApiView::LiveExecution   => "Live",
             ApiView::LatencyProfiler => "Latency",
             ApiView::SecurityProbes  => "Security",
-            ApiView::CoverageMap     => "Coverage",
+            ApiView::EnvContext      => "Env / Ctx",
             ApiView::StateInspector  => "State",
             ApiView::RunDiff         => "Diff",
             ApiView::NodeLibrary     => "Node Lib",
@@ -45,7 +45,7 @@ impl ApiView {
             ApiView::LiveExecution   => '3',
             ApiView::LatencyProfiler => '4',
             ApiView::SecurityProbes  => '5',
-            ApiView::CoverageMap     => '6',
+            ApiView::EnvContext      => '6',
             ApiView::StateInspector  => '7',
             ApiView::RunDiff         => '8',
             ApiView::NodeLibrary     => '9',
@@ -60,7 +60,7 @@ impl ApiView {
             ApiView::LiveExecution,
             ApiView::LatencyProfiler,
             ApiView::SecurityProbes,
-            ApiView::CoverageMap,
+            ApiView::EnvContext,
             ApiView::StateInspector,
             ApiView::RunDiff,
             ApiView::NodeLibrary,
@@ -1072,7 +1072,7 @@ impl ApiApp {
             KeyCode::Char('3') => { self.current_view = ApiView::LiveExecution; self.reset_scroll(); return; }
             KeyCode::Char('4') => { self.current_view = ApiView::LatencyProfiler; self.reset_scroll(); return; }
             KeyCode::Char('5') => { self.current_view = ApiView::SecurityProbes; self.reset_scroll(); return; }
-            KeyCode::Char('6') => { self.current_view = ApiView::CoverageMap; self.reset_scroll(); return; }
+            KeyCode::Char('6') => { self.current_view = ApiView::EnvContext; self.reset_scroll(); return; }
             KeyCode::Char('7') => { self.current_view = ApiView::StateInspector; self.reset_scroll(); return; }
             KeyCode::Char('8') => { self.current_view = ApiView::RunDiff; self.reset_scroll(); return; }
             KeyCode::Char('9') => { self.current_view = ApiView::NodeLibrary; self.reset_scroll(); return; }
