@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::time::Instant;
 
 use reqwest::blocking::{Client, RequestBuilder};
@@ -158,7 +158,6 @@ pub fn execute_flow(
     opts: FlowExecuteOptions,
 ) -> FlowRunResult {
     let started_at = Utc::now();
-    let started_inst = Instant::now();
     let run_id = format!("{}", started_at.timestamp_millis());
 
     let mut context: HashMap<String, Value> = HashMap::new();
@@ -166,11 +165,11 @@ pub fn execute_flow(
     let mut overall_passed = true;
 
     // BFS execution following edges
-    let mut current_nodes = vec![flow.entry.clone()];
+    let mut current_nodes: VecDeque<String> = VecDeque::new();
+    current_nodes.push_back(flow.entry.clone());
     let mut visited: std::collections::HashSet<String> = std::collections::HashSet::new();
 
-    while let Some(node_id) = current_nodes.first().cloned() {
-        current_nodes.remove(0);
+    while let Some(node_id) = current_nodes.pop_front() {
 
         if visited.contains(&node_id) {
             continue;
@@ -250,16 +249,8 @@ pub fn execute_flow(
                 }
             }
 
-            // Build the next node's context from carry list
-            let mut next_context: HashMap<String, Value> = HashMap::new();
-            variables::carry_context(&context, &mut next_context, &edge.carry);
-            // Also carry all current context so full state is available
-            for (k, v) in &context {
-                next_context.entry(k.clone()).or_insert_with(|| v.clone());
-            }
-
             if !visited.contains(&edge.to) {
-                current_nodes.push(edge.to.clone());
+                current_nodes.push_back(edge.to.clone());
             }
         }
     }

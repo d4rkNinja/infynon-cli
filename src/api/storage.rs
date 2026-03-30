@@ -157,7 +157,7 @@ pub fn load_recent_runs(flow_id: &str, limit: usize) -> Vec<FlowRunResult> {
     let mut results = Vec::new();
 
     if let Ok(entries) = fs::read_dir(&dir) {
-        let mut paths: Vec<PathBuf> = entries
+        let paths: Vec<PathBuf> = entries
             .flatten()
             .map(|e| e.path())
             .filter(|p| {
@@ -169,14 +169,17 @@ pub fn load_recent_runs(flow_id: &str, limit: usize) -> Vec<FlowRunResult> {
             })
             .collect();
 
-        // Sort by modification time, newest first
-        paths.sort_by(|a, b| {
-            let ta = fs::metadata(a).and_then(|m| m.modified()).ok();
-            let tb = fs::metadata(b).and_then(|m| m.modified()).ok();
-            tb.cmp(&ta)
-        });
+        // Sort by modification time, newest first (fetch metadata once per file)
+        let mut paths: Vec<_> = paths
+            .into_iter()
+            .map(|p| {
+                let mtime = fs::metadata(&p).and_then(|m| m.modified()).ok();
+                (p, mtime)
+            })
+            .collect();
+        paths.sort_by(|a, b| b.1.cmp(&a.1));
 
-        for path in paths.iter().take(limit) {
+        for (path, _) in paths.iter().take(limit) {
             if let Ok(content) = fs::read_to_string(path) {
                 if let Ok(result) = serde_json::from_str::<FlowRunResult>(&content) {
                     results.push(result);
@@ -193,19 +196,22 @@ pub fn load_all_recent_runs(limit: usize) -> Vec<FlowRunResult> {
     let mut results = Vec::new();
 
     if let Ok(entries) = fs::read_dir(&dir) {
-        let mut paths: Vec<PathBuf> = entries
+        let paths: Vec<PathBuf> = entries
             .flatten()
             .map(|e| e.path())
             .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("json"))
             .collect();
 
-        paths.sort_by(|a, b| {
-            let ta = fs::metadata(a).and_then(|m| m.modified()).ok();
-            let tb = fs::metadata(b).and_then(|m| m.modified()).ok();
-            tb.cmp(&ta)
-        });
+        let mut paths: Vec<_> = paths
+            .into_iter()
+            .map(|p| {
+                let mtime = fs::metadata(&p).and_then(|m| m.modified()).ok();
+                (p, mtime)
+            })
+            .collect();
+        paths.sort_by(|a, b| b.1.cmp(&a.1));
 
-        for path in paths.iter().take(limit) {
+        for (path, _) in paths.iter().take(limit) {
             if let Ok(content) = fs::read_to_string(path) {
                 if let Ok(result) = serde_json::from_str::<FlowRunResult>(&content) {
                     results.push(result);

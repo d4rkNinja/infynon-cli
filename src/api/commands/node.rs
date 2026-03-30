@@ -144,7 +144,8 @@ fn create_node_from_ai(description: &str) -> Node {
     }
 
     // Add auth header placeholder if path doesn't look like auth itself
-    if !path.to_lowercase().contains("login") && !path.to_lowercase().contains("auth") {
+    let path_lower = path.to_lowercase();
+    if !path_lower.contains("login") && !path_lower.contains("auth") {
         node.headers.insert("Authorization".to_string(), "Bearer {token}".to_string());
     }
 
@@ -158,13 +159,17 @@ fn create_node_from_ai(description: &str) -> Node {
     node
 }
 
+fn has_any_keyword(text: &str, keywords: &[&str]) -> bool {
+    keywords.iter().any(|k| text.contains(k))
+}
+
 fn infer_method(desc: &str) -> String {
     let d = desc.to_lowercase();
-    if d.contains("create") || d.contains("add") || d.contains("register") || d.contains("login") || d.contains("post") {
+    if has_any_keyword(&d, &["create", "add", "register", "login", "post"]) {
         "POST".to_string()
-    } else if d.contains("update") || d.contains("edit") || d.contains("change") {
+    } else if has_any_keyword(&d, &["update", "edit", "change"]) {
         "PATCH".to_string()
-    } else if d.contains("delete") || d.contains("remove") {
+    } else if has_any_keyword(&d, &["delete", "remove"]) {
         "DELETE".to_string()
     } else {
         "GET".to_string()

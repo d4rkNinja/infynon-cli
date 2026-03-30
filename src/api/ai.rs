@@ -34,6 +34,11 @@ pub fn analyze_node(node: &Node) -> NodeInterface {
     NodeInterface { produces, consumes }
 }
 
+fn is_auth_like(s: &str) -> bool {
+    let lower = s.to_lowercase();
+    lower.contains("token") || lower.contains("key") || lower.contains("auth") || lower.contains("session")
+}
+
 fn collect_placeholders(s: &str) -> Vec<String> {
     let mut result = Vec::new();
     let mut chars = s.chars().peekable();
@@ -70,11 +75,7 @@ pub fn infer_carry(from_node: &Node, to_node: &Node) -> Vec<String> {
 
     // Also infer common implicit carries by name convention
     for produced in &from_iface.produces {
-        let p = produced.to_lowercase();
-        // token → likely needed everywhere
-        if (p.contains("token") || p.contains("key") || p.contains("auth") || p.contains("session"))
-            && !carry.contains(produced)
-        {
+        if is_auth_like(produced) && !carry.contains(produced) {
             carry.push(produced.clone());
         }
     }
@@ -133,8 +134,8 @@ pub fn suggest_next_nodes(current: &Node, candidates: &[Node]) -> Vec<NodeSugges
         }
 
         // Auth token flow — if current produces a token, anything that consumes it is a good next step
-        if current_iface.produces.iter().any(|p| p.to_lowercase().contains("token"))
-            && cand_iface.consumes.iter().any(|c| c.to_lowercase().contains("token"))
+        if current_iface.produces.iter().any(|p| is_auth_like(p))
+            && cand_iface.consumes.iter().any(|c| is_auth_like(c))
         {
             score += 0.3;
             reasons.push("consumes auth token from this node".to_string());
@@ -167,13 +168,14 @@ pub fn suggest_next_nodes(current: &Node, candidates: &[Node]) -> Vec<NodeSugges
 }
 
 fn base_path(path: &str) -> String {
-    // Strip {variable} parts and trailing segments for comparison
-    let clean: String = path
-        .split('/')
-        .filter(|seg| !seg.starts_with('{'))
-        .collect::<Vec<_>>()
-        .join("/");
-    clean
+    let mut out = String::new();
+    for seg in path.split('/') {
+        if !seg.starts_with('{') {
+            if !out.is_empty() { out.push('/'); }
+            out.push_str(seg);
+        }
+    }
+    out
 }
 
 fn method_progression_score(from_method: &str, to_method: &str, from_path: &str, to_path: &str) -> f32 {

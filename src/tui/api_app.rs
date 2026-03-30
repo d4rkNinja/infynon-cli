@@ -107,6 +107,8 @@ pub struct ApiApp {
     pub last_run: Option<FlowRunResult>,
     pub compare_run: Option<FlowRunResult>,
     pub security_probes: Vec<SecurityProbeResult>,
+    /// Last-run pass/fail status per flow id — cached to avoid per-frame disk reads.
+    pub flow_run_statuses: HashMap<String, Option<bool>>,
 
     // ── Live execution feed ────────────────────────────────────────────────
     pub live_steps: Vec<crate::api::types::StepResult>,
@@ -150,6 +152,14 @@ impl ApiApp {
         let last_run = flows.get(active_flow_idx)
             .and_then(|f| storage::load_recent_runs(&f.id, 1).into_iter().next());
 
+        // Cache pass/fail status for every flow (avoids N disk reads per render frame)
+        let flow_run_statuses: HashMap<String, Option<bool>> = flows.iter()
+            .map(|f| {
+                let status = storage::load_recent_runs(&f.id, 1).into_iter().next().map(|r| r.passed);
+                (f.id.clone(), status)
+            })
+            .collect();
+
         // Build initial graph layout
         let graph_layout = if let Some(flow) = flows.get(active_flow_idx) {
             compute_graph_layout(flow)
@@ -175,6 +185,7 @@ impl ApiApp {
             last_run,
             compare_run: None,
             security_probes: vec![],
+            flow_run_statuses,
             live_steps: vec![],
             live_running: false,
             scroll_offset: 0,
@@ -200,7 +211,14 @@ impl ApiApp {
     pub fn refresh_data(&mut self) {
         self.flows = storage::list_flows();
         self.nodes = storage::load_nodes_map();
-        // Grab the data we need before borrowing self mutably
+        // Refresh per-flow run status cache
+        self.flow_run_statuses = self.flows.iter()
+            .map(|f| {
+                let status = storage::load_recent_runs(&f.id, 1).into_iter().next().map(|r| r.passed);
+                (f.id.clone(), status)
+            })
+            .collect();
+        // Grab layout + last run before borrowing self mutably
         let (layout, last_run) = if let Some(flow) = self.flows.get(self.active_flow_idx) {
             let layout = compute_graph_layout(flow);
             let run = storage::load_recent_runs(&flow.id, 1).into_iter().next();

@@ -127,11 +127,10 @@ fn render_overview(f: &mut Frame, app: &ApiApp, area: Rect) {
 
 fn render_flow_list(f: &mut Frame, app: &ApiApp, area: Rect) {
     let items: Vec<ListItem> = app.flows.iter().enumerate().map(|(i, flow)| {
-        let runs = crate::api::storage::load_recent_runs(&flow.id, 1);
-        let status_icon = match runs.first() {
-            Some(r) if r.passed => Span::styled("✔ ", Style::default().fg(GREEN)),
-            Some(_) => Span::styled("✘ ", Style::default().fg(RED)),
-            None => Span::styled("· ", Style::default().fg(DIM)),
+        let status_icon = match app.flow_run_statuses.get(&flow.id) {
+            Some(Some(true))  => Span::styled("✔ ", Style::default().fg(GREEN)),
+            Some(Some(false)) => Span::styled("✘ ", Style::default().fg(RED)),
+            _ => Span::styled("· ", Style::default().fg(DIM)),
         };
         let name = Span::styled(
             format!("{} ({} nodes)", flow.name, flow.all_node_ids().len()),

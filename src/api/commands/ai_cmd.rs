@@ -1,9 +1,11 @@
+use std::collections::HashMap;
+
 use owo_colors::OwoColorize;
 
 use crate::api::ai;
 use crate::api::executor::{execute_flow, FlowExecuteOptions};
 use crate::api::storage;
-use crate::api::types::Edge;
+use crate::api::types::{Edge, Node};
 use crate::tui::logger::Logger;
 
 // ── ai suggest ────────────────────────────────────────────────────────────────
@@ -109,10 +111,13 @@ pub fn cmd_ai_complete(flow_id: &str) {
 
     let mut new_edges: Vec<Edge> = Vec::new();
 
+    // Build a lookup map once to avoid O(n²) per-orphan searches
+    let node_map: HashMap<&str, &Node> = all_nodes.iter().map(|n| (n.id.as_str(), n)).collect();
+
     // For each orphan, find the best node in the flow to connect from
     for orphan in &orphan_nodes {
         let flow_nodes: Vec<_> = flow_node_ids.iter()
-            .filter_map(|id| all_nodes.iter().find(|n| &n.id == id))
+            .filter_map(|id| node_map.get(id.as_str()).copied())
             .collect();
 
         let mut best_score: f32 = 0.0;
