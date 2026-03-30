@@ -65,7 +65,7 @@ pub fn cmd_ai_suggest(after_node_id: &str) {
         println!();
     }
 
-    println!("  Attach best match: infynon api attach {} {} --ai", after_node_id, suggestions[0].node.id);
+    println!("  Attach best match: infynon weave attach {} {} --ai", after_node_id, suggestions[0].node.id);
     println!();
 }
 
@@ -155,7 +155,7 @@ pub fn cmd_ai_complete(flow_id: &str) {
 
     if new_edges.is_empty() {
         println!();
-        println!("  No edges could be inferred. Add nodes manually with: infynon api attach");
+        println!("  No edges could be inferred. Add nodes manually with: infynon weave attach");
         println!();
         return;
     }
@@ -285,7 +285,7 @@ pub fn cmd_ai_build_flow(node_ids: &[String], name: &str) {
     Logger::title("AI Build Flow", "cyan");
 
     if node_ids.is_empty() {
-        Logger::error("No node IDs provided. Usage: infynon api ai build-flow --nodes login,create-cart,checkout");
+        Logger::error("No node IDs provided. Usage: infynon weave ai build-flow --nodes login,create-cart,checkout");
         return;
     }
 
@@ -360,7 +360,7 @@ pub fn cmd_ai_explain(flow_id: &str, run_index: usize) {
     if runs.is_empty() {
         println!();
         println!("  No run history found for flow '{}'.", flow_id);
-        println!("  Run the flow first: infynon api flow run {}", flow_id);
+        println!("  Run the flow first: infynon weave flow run {}", flow_id);
         println!();
         return;
     }
@@ -442,10 +442,10 @@ pub fn cmd_ai_branch(node_id: &str) {
             condition.bright_yellow(),
         );
         println!("     ({} — connect to appropriate handler node)", label.truecolor(140, 140, 160));
-        println!("     infynon api attach {} <handler-node> --if \"{}\"", node_id, condition);
+        println!("     infynon weave attach {} <handler-node> --if \"{}\"", node_id, condition);
         println!();
     }
 
-    println!("  Use: infynon api attach <from> <to> --if \"<condition>\"");
+    println!("  Use: infynon weave attach <from> <to> --if \"<condition>\"");
     println!();
 }
