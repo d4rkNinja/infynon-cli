@@ -1,9 +1,10 @@
 use std::collections::HashMap;
+use std::sync::mpsc;
 
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::api::storage;
-use crate::api::types::{Flow, FlowRunResult, Node, SecurityProbeResult};
+use crate::api::types::{Flow, FlowRunResult, Node, SecurityProbeResult, StepResult};
 
 // ── Views ─────────────────────────────────────────────────────────────────────
 
@@ -64,6 +65,14 @@ impl ApiView {
     }
 }
 
+// ── Live execution events ─────────────────────────────────────────────────────
+
+pub enum LiveEvent {
+    Step(StepResult),
+    Done { passed: bool },
+    Error(String),
+}
+
 // ── Attach mode state ─────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq)]
@@ -113,6 +122,10 @@ pub struct ApiApp {
     // ── Live execution feed ────────────────────────────────────────────────
     pub live_steps: Vec<crate::api::types::StepResult>,
     pub live_running: bool,
+    pub flow_running: bool,
+    pub run_rx: Option<mpsc::Receiver<LiveEvent>>,
+    pub run_tx: Option<mpsc::SyncSender<LiveEvent>>,
+    pub run_error: Option<String>,
 
     // ── Navigation ────────────────────────────────────────────────────────
     pub scroll_offset: usize,
@@ -188,6 +201,10 @@ impl ApiApp {
             flow_run_statuses,
             live_steps: vec![],
             live_running: false,
+            flow_running: false,
+            run_rx: None,
+            run_tx: None,
+            run_error: None,
             scroll_offset: 0,
             selected_index: 0,
             graph_layout,
@@ -391,6 +408,78 @@ impl ApiApp {
         }
     }
 
+    // ── Flow runner ───────────────────────────────────────────────────────
+
+    pub fn start_flow_run(&mut self) {
+        let flow = match self.flows.get(self.active_flow_idx) {
+            Some(f) => f.clone(),
+            None => return,
+        };
+        let nodes = self.nodes.clone();
+        let base_url = flow.base_url.clone().unwrap_or_else(|| "http://localhost:3000".to_string());
+
+        let (tx, rx) = mpsc::sync_channel::<LiveEvent>(100);
+        self.run_rx = Some(rx);
+        self.run_tx = Some(tx.clone());
+        self.live_steps.clear();
+        self.live_running = true;
+        self.flow_running = true;
+        self.run_error = None;
+
+        std::thread::spawn(move || {
+            use crate::api::executor::{execute_flow, FlowExecuteOptions};
+            let tx2 = tx.clone();
+            let result = execute_flow(&flow, &nodes, FlowExecuteOptions {
+                base_url,
+                on_step: Some(Box::new(move |step| {
+                    tx.send(LiveEvent::Step(step.clone())).ok();
+                })),
+            });
+            tx2.send(LiveEvent::Done { passed: result.passed }).ok();
+        });
+
+        self.current_view = ApiView::LiveExecution;
+    }
+
+    pub fn poll_run_events(&mut self) {
+        loop {
+            let event = match &self.run_rx {
+                Some(rx) => match rx.try_recv() {
+                    Ok(e) => e,
+                    Err(mpsc::TryRecvError::Empty) => break,
+                    Err(mpsc::TryRecvError::Disconnected) => {
+                        self.live_running = false;
+                        self.flow_running = false;
+                        self.run_rx = None;
+                        break;
+                    }
+                },
+                None => break,
+            };
+
+            match event {
+                LiveEvent::Step(step) => {
+                    self.live_steps.push(step);
+                }
+                LiveEvent::Done { passed } => {
+                    self.live_running = false;
+                    self.flow_running = false;
+                    self.run_rx = None;
+                    self.notify(if passed { "Flow passed ✔" } else { "Flow failed ✘" });
+                    self.refresh_data();
+                    break;
+                }
+                LiveEvent::Error(e) => {
+                    self.live_running = false;
+                    self.flow_running = false;
+                    self.run_error = Some(e);
+                    self.run_rx = None;
+                    break;
+                }
+            }
+        }
+    }
+
     // ── Run comparison (diff view) ────────────────────────────────────────
 
     pub fn load_comparison_run(&mut self) {
@@ -469,7 +558,7 @@ impl ApiApp {
         match self.current_view {
             ApiView::FlowGraph => self.handle_graph_key(key),
             ApiView::NodeLibrary => self.handle_list_key(key, self.nodes.len()),
-            ApiView::Overview => self.handle_list_key(key, self.flows.len()),
+            ApiView::Overview => self.handle_overview_key(key),
             ApiView::RunDiff => {
                 match key.code {
                     KeyCode::Char('d') => self.load_comparison_run(),
@@ -507,6 +596,20 @@ impl ApiApp {
                 self.notify("Chaos inject: inspect the node, then re-run");
             }
             _ => {}
+        }
+    }
+
+    fn handle_overview_key(&mut self, key: KeyEvent) {
+        let max = self.flows.len();
+        match key.code {
+            KeyCode::Enter => {
+                self.start_flow_run();
+            }
+            KeyCode::Char('a') => {
+                // Run all flows sequentially (simplified: just run active for now)
+                self.start_flow_run();
+            }
+            _ => self.handle_list_key(key, max),
         }
     }
 

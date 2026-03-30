@@ -1,16 +1,98 @@
 use std::collections::HashMap;
+use std::sync::OnceLock;
 use serde_json::Value;
 
-/// Substitute `{var_name}` placeholders in a string template.
+// ── .env file loader ──────────────────────────────────────────────────────────
+
+static DOTENV: OnceLock<HashMap<String, String>> = OnceLock::new();
+
+fn get_dotenv() -> &'static HashMap<String, String> {
+    DOTENV.get_or_init(|| {
+        let mut map = HashMap::new();
+        if let Ok(content) = std::fs::read_to_string(".env") {
+            for line in content.lines() {
+                let line = line.trim();
+                // Skip comments and empty lines
+                if line.is_empty() || line.starts_with('#') {
+                    continue;
+                }
+                if let Some(eq_pos) = line.find('=') {
+                    let key = line[..eq_pos].trim().to_string();
+                    let mut val = line[eq_pos + 1..].trim().to_string();
+                    // Strip surrounding quotes (single or double)
+                    if (val.starts_with('"') && val.ends_with('"'))
+                        || (val.starts_with('\'') && val.ends_with('\''))
+                    {
+                        val = val[1..val.len() - 1].to_string();
+                    }
+                    if !key.is_empty() {
+                        map.insert(key, val);
+                    }
+                }
+            }
+        }
+        map
+    })
+}
+
+/// Look up an environment variable: first from .env file, then from actual env.
+/// Returns None if not found in either.
+fn lookup_env_var(name: &str) -> Option<String> {
+    let dotenv = get_dotenv();
+    if let Some(val) = dotenv.get(name) {
+        return Some(val.clone());
+    }
+    std::env::var(name).ok()
+}
+
+// ── Substitution ──────────────────────────────────────────────────────────────
+
+/// Substitute `{var_name}` or `{$ENV_VAR}` placeholders in a string template.
 ///
 /// Rules:
-/// - If a template is exactly `{var_name}` (nothing else), the variable value
+/// - `{$VAR_NAME}` → look up environment variable VAR_NAME (from .env then process env)
+/// - `{var_name}`  → look up in context map
+/// - If the template is exactly `{var_name}` (nothing else), the variable value
 ///   is returned as a JSON Value preserving its original type (number, bool, etc.)
 ///   — used for body field substitution.
 /// - Otherwise (partial match, e.g. `Bearer {token}`), the value is coerced
 ///   to its string representation and spliced in — used for paths and headers.
+pub fn substitute(template: &str, context: &HashMap<String, Value>) -> String {
+    substitute_str(template, context)
+}
+
 pub fn substitute_str(template: &str, context: &HashMap<String, Value>) -> String {
     let mut result = template.to_string();
+
+    // First pass: handle {$ENV_VAR} placeholders
+    let mut output = String::new();
+    let mut i = 0;
+    let bytes = result.as_bytes();
+    while i < bytes.len() {
+        if bytes[i] == b'{' {
+            // Find closing brace
+            if let Some(close) = result[i..].find('}') {
+                let inner = &result[i + 1..i + close];
+                if inner.starts_with('$') {
+                    let env_name = &inner[1..];
+                    if let Some(val) = lookup_env_var(env_name) {
+                        output.push_str(&val);
+                    } else {
+                        // Leave the placeholder as-is
+                        output.push_str(&result[i..i + close + 1]);
+                    }
+                    i += close + 1;
+                    continue;
+                }
+            }
+        }
+        output.push(bytes[i] as char);
+        i += 1;
+    }
+    // Use the env-substituted result for context substitution
+    result = output;
+
+    // Second pass: handle {var_name} context placeholders
     for (key, val) in context {
         let placeholder = format!("{{{}}}", key);
         let replacement = value_to_str(val);
@@ -28,6 +110,32 @@ pub fn substitute_body(body_json: &str, context: &HashMap<String, Value>) -> Val
     // Start with naive string substitution for string-embedded placeholders
     // (e.g. "Bearer {token}")
     let mut substituted = body_json.to_string();
+
+    // Handle {$ENV_VAR} in body
+    let mut output = String::new();
+    let bytes = substituted.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'{' {
+            if let Some(close) = substituted[i..].find('}') {
+                let inner = &substituted[i + 1..i + close];
+                if inner.starts_with('$') {
+                    let env_name = &inner[1..];
+                    if let Some(val) = lookup_env_var(env_name) {
+                        output.push_str(&val);
+                    } else {
+                        output.push_str(&substituted[i..i + close + 1]);
+                    }
+                    i += close + 1;
+                    continue;
+                }
+            }
+        }
+        output.push(bytes[i] as char);
+        i += 1;
+    }
+    substituted = output;
+
     for (key, val) in context {
         let placeholder = format!("\"{{{}}}\"", key);
         // Replace JSON string placeholder "  {var}  " with the raw JSON value

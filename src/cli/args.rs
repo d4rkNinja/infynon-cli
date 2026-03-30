@@ -366,6 +366,25 @@ pub enum ApiCommands {
         #[command(subcommand)]
         action: AiAction,
     },
+
+    /// Import nodes from an OpenAPI or Swagger spec file
+    #[command(name = "import")]
+    Import {
+        /// Path to OpenAPI/Swagger spec file (.yaml, .yml, .json)
+        spec: String,
+        /// Create a flow from the imported nodes
+        #[arg(long, value_name = "FLOW_NAME")]
+        flow: Option<String>,
+        /// Override base URL (default: from spec servers[0].url)
+        #[arg(long)]
+        base_url: Option<String>,
+        /// Only import paths matching this prefix (e.g. /api/v1)
+        #[arg(long)]
+        prefix: Option<String>,
+        /// Preview what would be imported without saving anything
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]

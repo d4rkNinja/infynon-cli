@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::api::types::{Assertion, Edge, Flow, FlowRunResult, Node, Extraction, OnFail};
 
@@ -78,10 +78,10 @@ struct YamlAssertion {
     id: Option<String>,
     #[serde(default)]
     on_fail: Option<String>,
-    // Structured check (YAML format: check.type / check.operator / check.value)
+    // Can be a plain string like "status == 200" or a structured mapping
     #[serde(default)]
-    check: Option<YamlCheck>,
-    // Flat string check (internal format): "status == 200"
+    check: serde_yaml::Value,
+    // Flat string check (internal format): "status == 200" (legacy field)
     #[serde(default)]
     check_str: Option<String>,
 }
@@ -130,6 +130,90 @@ struct YamlStep {
 }
 
 // ── YAML → internal type converters ──────────────────────────────────────────
+
+/// Convert a serde_yaml::Value (either a string or a mapping) to an assertion expression string.
+fn yaml_assertion_to_expr(check: &serde_yaml::Value) -> String {
+    match check {
+        serde_yaml::Value::String(s) => s.clone(),
+        serde_yaml::Value::Mapping(m) => {
+            // Convert mapping keys to strings for easier access
+            let get_str = |key: &str| -> Option<String> {
+                m.get(serde_yaml::Value::String(key.to_string()))
+                    .and_then(|v| v.as_str().map(|s| s.to_string()))
+            };
+            let get_val = |key: &str| -> Option<serde_json::Value> {
+                m.get(serde_yaml::Value::String(key.to_string()))
+                    .and_then(|v| serde_json::to_value(v).ok())
+            };
+
+            let check_type = get_str("type").unwrap_or_default();
+            let operator = get_str("operator");
+            let path = get_str("path");
+            let value = get_val("value");
+
+            let op = match operator.as_deref().unwrap_or("equals") {
+                "equals" | "eq" => "==",
+                "not_equals" | "ne" => "!=",
+                "greater_than" | "gt" => ">",
+                "less_than" | "lt" => "<",
+                "gte" | "greater_than_or_equal" => ">=",
+                "lte" | "less_than_or_equal" => "<=",
+                "contains" => "contains",
+                "exists" => "exists",
+                "not_exists" => "not exists",
+                other => other,
+            };
+
+            let val_str = match &value {
+                Some(v) => match v {
+                    serde_json::Value::String(s) => format!("\"{}\"", s),
+                    serde_json::Value::Null => String::new(),
+                    other => other.to_string(),
+                },
+                None => String::new(),
+            };
+
+            match check_type.as_str() {
+                "status" => {
+                    if op == "exists" || op == "not exists" || val_str.is_empty() {
+                        format!("status {}", op)
+                    } else {
+                        format!("status {} {}", op, val_str)
+                    }
+                }
+                "json_path" => {
+                    let raw = path.as_deref().unwrap_or("$");
+                    let field = raw.trim_start_matches("$.");
+                    let field = if field == "$" || field.is_empty() { "body".to_string() } else { format!("body.{}", field) };
+                    if op == "exists" || op == "not exists" {
+                        format!("{} {}", field, op)
+                    } else {
+                        format!("{} {} {}", field, op, val_str)
+                    }
+                }
+                "header" => {
+                    let name = path.as_deref().unwrap_or("");
+                    if op == "exists" || op == "not exists" || val_str.is_empty() {
+                        format!("header.{} {}", name, op)
+                    } else {
+                        format!("header.{} {} {}", name, op, val_str)
+                    }
+                }
+                "response_time" | "latency" => {
+                    format!("latency {} {}", op, val_str)
+                }
+                other => {
+                    if val_str.is_empty() {
+                        format!("{} {}", other, op)
+                    } else {
+                        format!("{} {} {}", other, op, val_str)
+                    }
+                }
+            }
+        }
+        _ => String::new(),
+    }
+}
 
 fn yaml_check_to_expr(check: &YamlCheck) -> String {
     let op = match check.operator.as_deref().unwrap_or("equals") {
@@ -211,8 +295,8 @@ fn convert_yaml_node(y: YamlNode) -> Node {
     };
 
     let assertions = y.assertions.into_iter().map(|a| {
-        let check_expr = if let Some(c) = &a.check {
-            yaml_check_to_expr(c)
+        let check_expr = if !matches!(a.check, serde_yaml::Value::Null) {
+            yaml_assertion_to_expr(&a.check)
         } else if let Some(s) = a.check_str {
             s
         } else {
@@ -301,9 +385,174 @@ fn convert_yaml_flow(y: YamlFlow) -> Flow {
     }
 }
 
+// ── YAML save structs ─────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct YamlSaveNode {
+    id: String,
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    request: YamlSaveRequest,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    extractions: Vec<YamlSaveExtraction>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    assertions: Vec<YamlSaveAssertion>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    tags: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct YamlSaveRequest {
+    method: String,
+    path: String,
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    headers: HashMap<String, String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    body: Option<serde_json::Value>,
+}
+
+#[derive(Serialize)]
+struct YamlSaveExtraction {
+    name: String,
+    from: String,
+}
+
+#[derive(Serialize)]
+struct YamlSaveAssertion {
+    check: String,
+    on_fail: String,
+}
+
+#[derive(Serialize)]
+struct YamlSaveFlow {
+    id: String,
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    base_url: Option<String>,
+    steps: Vec<YamlSaveStep>,
+}
+
+#[derive(Serialize)]
+struct YamlSaveStep {
+    node_id: String,
+    id: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    depends_on: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    carry: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    condition: Option<String>,
+    on_fail: String,
+}
+
+// ── YAML save helpers ─────────────────────────────────────────────────────────
+
+/// Returns true if the nodes directory contains any .yaml files.
+fn detect_project_yaml() -> bool {
+    let dir = PathBuf::from(".infynon/api/nodes");
+    if let Ok(entries) = fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+            if ext == "yaml" || ext == "yml" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn node_to_yaml_save(node: &Node) -> YamlSaveNode {
+    let body = node.body_json.as_deref()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok());
+
+    YamlSaveNode {
+        id: node.id.clone(),
+        name: node.name.clone(),
+        description: node.description.clone(),
+        request: YamlSaveRequest {
+            method: node.method.clone(),
+            path: node.path.clone(),
+            headers: node.headers.clone(),
+            body,
+        },
+        extractions: node.extractions.iter().map(|e| YamlSaveExtraction {
+            name: e.name.clone(),
+            from: e.from.clone(),
+        }).collect(),
+        assertions: node.assertions.iter().map(|a| YamlSaveAssertion {
+            check: a.check.clone(),
+            on_fail: match a.on_fail {
+                OnFail::Stop => "stop".to_string(),
+                OnFail::Warn => "warn".to_string(),
+            },
+        }).collect(),
+        tags: node.tags.clone(),
+    }
+}
+
+fn flow_to_yaml_save(flow: &Flow) -> YamlSaveFlow {
+    let node_ids = flow.all_node_ids();
+
+    let steps = node_ids.iter().map(|node_id| {
+        let preds: Vec<&Edge> = flow.predecessors(node_id);
+        let depends_on: Vec<String> = preds.iter()
+            .map(|e| format!("step-{}", e.from))
+            .collect();
+        let carry = preds.first().map(|e| e.carry.clone()).unwrap_or_default();
+        let condition = preds.first().and_then(|e| e.condition.clone());
+
+        YamlSaveStep {
+            node_id: node_id.clone(),
+            id: format!("step-{}", node_id),
+            depends_on,
+            carry,
+            condition,
+            on_fail: "stop".to_string(),
+        }
+    }).collect();
+
+    YamlSaveFlow {
+        id: flow.id.clone(),
+        name: flow.name.clone(),
+        description: flow.description.clone(),
+        base_url: flow.base_url.clone(),
+        steps,
+    }
+}
+
+pub fn save_node_yaml(node: &Node) -> Result<PathBuf, String> {
+    let dir = nodes_dir();
+    let path = dir.join(format!("{}.yaml", node.id));
+    let save = node_to_yaml_save(node);
+    let content = serde_yaml::to_string(&save)
+        .map_err(|e| format!("Failed to serialize node as YAML: {}", e))?;
+    fs::write(&path, content)
+        .map_err(|e| format!("Failed to write node YAML file: {}", e))?;
+    Ok(path)
+}
+
+pub fn save_flow_yaml(flow: &Flow) -> Result<PathBuf, String> {
+    let dir = flows_dir();
+    let path = dir.join(format!("{}.yaml", flow.id));
+    let save = flow_to_yaml_save(flow);
+    let content = serde_yaml::to_string(&save)
+        .map_err(|e| format!("Failed to serialize flow as YAML: {}", e))?;
+    fs::write(&path, content)
+        .map_err(|e| format!("Failed to write flow YAML file: {}", e))?;
+    Ok(path)
+}
+
 // ── Node I/O ──────────────────────────────────────────────────────────────────
 
 pub fn save_node(node: &Node) -> Result<PathBuf, String> {
+    // If the project uses YAML files, save as YAML
+    if detect_project_yaml() {
+        return save_node_yaml(node);
+    }
     let dir = nodes_dir();
     let path = dir.join(format!("{}.toml", node.id));
     let content = toml::to_string_pretty(node)
@@ -383,6 +632,10 @@ pub fn load_nodes_map() -> HashMap<String, Node> {
 // ── Flow I/O ──────────────────────────────────────────────────────────────────
 
 pub fn save_flow(flow: &Flow) -> Result<PathBuf, String> {
+    // If the project uses YAML files, save as YAML
+    if detect_project_yaml() {
+        return save_flow_yaml(flow);
+    }
     let dir = flows_dir();
     let path = dir.join(format!("{}.toml", flow.id));
     let content = toml::to_string_pretty(flow)

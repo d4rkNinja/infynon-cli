@@ -46,7 +46,7 @@ fn create_flow_interactive(id: &str, name: &str) -> Flow {
 
     let nodes = storage::list_nodes();
     if nodes.is_empty() {
-        println!("  {}  No nodes found. Create nodes first with: infynon api node create", "⚠".bright_yellow());
+        println!("  {}  No nodes found. Create nodes first with: infynon weave node create", "⚠".bright_yellow());
         println!();
     } else {
         println!("  Available nodes:");
@@ -115,7 +115,7 @@ pub fn cmd_flow_list() {
 
     if flows.is_empty() {
         println!();
-        println!("  No flows yet. Create one with: infynon api flow create <name>");
+        println!("  No flows yet. Create one with: infynon weave flow create <name>");
         println!();
         return;
     }

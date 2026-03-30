@@ -212,29 +212,43 @@ fn render_overview(f: &mut Frame, app: &ApiApp, area: Rect) {
 
 fn render_flow_list(f: &mut Frame, app: &ApiApp, area: Rect) {
     let items: Vec<ListItem> = app.flows.iter().enumerate().map(|(i, flow)| {
-        let status_icon = match app.flow_run_statuses.get(&flow.id) {
-            Some(Some(true))  => Span::styled("✔ ", Style::default().fg(GREEN)),
-            Some(Some(false)) => Span::styled("✘ ", Style::default().fg(RED)),
-            _ => Span::styled("· ", Style::default().fg(DIM)),
+        let (status_icon, status_color) = match app.flow_run_statuses.get(&flow.id) {
+            Some(Some(true))  => ("✔", GREEN),
+            Some(Some(false)) => ("✘", RED),
+            _ => ("·", DIM),
         };
-        let name = Span::styled(
-            format!("{} ({} nodes)", flow.name, flow.all_node_ids().len()),
-            if i == app.active_flow_idx {
-                Style::default().fg(CYAN).add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(TEXT)
-            },
-        );
-        ListItem::new(Line::from(vec![status_icon, name]))
+        let is_selected = i == app.active_flow_idx;
+        let name_style = if is_selected {
+            Style::default().fg(CYAN).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(TEXT)
+        };
+
+        let node_count = flow.all_node_ids().len();
+        let base = flow.base_url.as_deref().unwrap_or("—");
+
+        let line = Line::from(vec![
+            Span::styled(format!("{} ", status_icon), Style::default().fg(status_color)),
+            Span::styled(format!("{:<22}", truncate(&flow.name, 22)), name_style),
+            Span::styled(format!(" {:>2} nodes", node_count), Style::default().fg(DIM)),
+            Span::styled(format!("  {}", truncate(base, 24)), Style::default().fg(DIMMER)),
+        ]);
+        ListItem::new(line)
     }).collect();
 
     let mut state = ListState::default();
     state.select(Some(app.active_flow_idx));
 
+    let hints = if app.flow_running {
+        " Flows  [RUNNING...]"
+    } else {
+        " Flows  Enter·run  a·run-all  ↑↓·select"
+    };
+
     let list = List::new(items)
         .block(
             Block::default()
-                .title(Span::styled(" Flows ", title_style()))
+                .title(Span::styled(hints, title_style()))
                 .borders(Borders::ALL)
                 .border_style(border_style()),
         )
@@ -555,7 +569,7 @@ fn render_live_execution(f: &mut Frame, app: &ApiApp, area: Rect) {
         ListItem::new(item_lines)
     }).collect();
 
-    let title = if app.live_running { " Live Execution ⟳ " } else { " Last Run " };
+    let title = if app.flow_running { " Live Execution ⟳ RUNNING... " } else if app.live_running { " Live Execution ⟳ " } else { " Last Run " };
 
     let list = List::new(items)
         .block(

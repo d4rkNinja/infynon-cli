@@ -1094,7 +1094,7 @@ fn run_firewall_tui(state: std::sync::Arc<crate::firewall::server::SharedState>)
 // ── API command router ────────────────────────────────────────────────────────
 
 fn execute_api_command(action: ApiCommands) {
-    use crate::api::commands::{ai_cmd, attach, flow, node};
+    use crate::api::commands::{ai_cmd, attach, flow, import, node};
 
     match action {
         ApiCommands::Tui { flow_id } => {
@@ -1143,6 +1143,10 @@ fn execute_api_command(action: ApiCommands) {
             AiAction::Assert { node_id } => ai_cmd::cmd_ai_assert(&node_id),
             AiAction::Branch { node_id } => ai_cmd::cmd_ai_branch(&node_id),
         },
+
+        ApiCommands::Import { spec, flow, base_url, prefix, dry_run } => {
+            import::cmd_import(&spec, flow.as_deref(), base_url.as_deref(), prefix.as_deref(), dry_run);
+        }
     }
 }
 
@@ -1171,6 +1175,8 @@ fn run_api_tui(flow_id: Option<&str>) {
     let mut app = crate::tui::api_app::ApiApp::new(flow_id);
 
     loop {
+        app.poll_run_events();
+
         let _ = terminal.draw(|f| {
             crate::tui::api_views::render(f, &mut app);
         });
