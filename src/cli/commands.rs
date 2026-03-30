@@ -119,6 +119,8 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
     } else {
         if Path::new("package.json").exists() { ecosystem = "npm"; }
         else if Path::new("Cargo.toml").exists() { ecosystem = "cargo"; }
+        else if Path::new("uv.lock").exists() { ecosystem = "uv"; }
+        else if Path::new("poetry.lock").exists() { ecosystem = "poetry"; }
         else if Path::new("pyproject.toml").exists() || Path::new("requirements.txt").exists() { ecosystem = "pip"; }
         else if Path::new("go.mod").exists() { ecosystem = "go"; }
         else if Path::new("composer.json").exists() { ecosystem = "composer"; }
@@ -186,6 +188,7 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
         let (safe, hits) = check_packages_before_install(&install_packages, ecosystem);
 
         let pkgs_to_install = if !safe {
+            // ── --strict: block entire install if any hit matches the level ──
             if let Some(ref strict_level) = args.strict {
                 let level = scan::FixLevel::from_str(strict_level);
                 let blocked = hits.iter().any(|h| level.matches(h.severity));
@@ -198,16 +201,82 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
                         "--strict mode active".truecolor(200,80,80),
                         level_label.truecolor(200,120,80)
                     );
-                    return Ok(());
+                    std::process::exit(1);
                 }
             }
 
-            let final_specs = ask_vuln_decisions(&install_packages, &hits, ecosystem);
-            if final_specs.is_empty() {
-                Logger::raw_dim("  All packages skipped. Nothing to install.");
-                return Ok(());
+            // ── CI non-interactive flags ──────────────────────────────────────
+            if args.yes {
+                // Install everything regardless of vulnerabilities
+                println!(
+                    "\n  {}  {} — installing all packages (including vulnerable)\n",
+                    "⚠".bright_yellow().bold(),
+                    "--yes mode".bold().bright_yellow(),
+                );
+                install_packages.clone()
+            } else if args.skip_vulnerable {
+                // Skip every vulnerable package, install only clean ones
+                let vuln_names: std::collections::HashSet<String> =
+                    hits.iter().map(|h| h.package.clone()).collect();
+                let safe_specs: Vec<String> = install_packages.iter()
+                    .filter(|spec| {
+                        let (name, _) = scan::parse_pkg_spec(spec);
+                        !vuln_names.contains(&name)
+                    })
+                    .cloned()
+                    .collect();
+                for name in &vuln_names {
+                    println!("  {}  Skipping vulnerable: {}", "✘".bright_red(), name.bold());
+                }
+                if safe_specs.is_empty() {
+                    Logger::raw_dim("  All packages were vulnerable and skipped. Nothing to install.");
+                    return Ok(());
+                }
+                safe_specs
+            } else if args.auto_fix {
+                // Auto-upgrade to safe version; skip if no fix available
+                let mut fix_map: std::collections::HashMap<String, Option<String>> =
+                    std::collections::HashMap::new();
+                for h in &hits {
+                    let entry = fix_map.entry(h.package.clone()).or_insert(None);
+                    if h.fixed_version.is_some() {
+                        *entry = h.fixed_version.clone();
+                    }
+                }
+                let vuln_names: std::collections::HashSet<String> =
+                    hits.iter().map(|h| h.package.clone()).collect();
+                let mut auto_specs: Vec<String> = Vec::new();
+                for spec in &install_packages {
+                    let (name, _) = scan::parse_pkg_spec(spec);
+                    if vuln_names.contains(&name) {
+                        match fix_map.get(&name).and_then(|v| v.clone()) {
+                            Some(ver) => {
+                                let new_spec = format_spec_for_ecosystem(&name, &ver, ecosystem);
+                                println!("  {}  Auto-fix: {} → {}", "✔".bright_green(), name.bold(), new_spec.bright_green().bold());
+                                auto_specs.push(new_spec);
+                            }
+                            None => {
+                                println!("  {}  No fix available for {} — skipping", "✘".bright_red(), name.bold());
+                            }
+                        }
+                    } else {
+                        auto_specs.push(spec.clone());
+                    }
+                }
+                if auto_specs.is_empty() {
+                    Logger::raw_dim("  Nothing to install after auto-fix resolution.");
+                    return Ok(());
+                }
+                auto_specs
+            } else {
+                // Interactive mode (default — not suitable for CI)
+                let final_specs = ask_vuln_decisions(&install_packages, &hits, ecosystem);
+                if final_specs.is_empty() {
+                    Logger::raw_dim("  All packages skipped. Nothing to install.");
+                    return Ok(());
+                }
+                final_specs
             }
-            final_specs
         } else {
             install_packages.clone()
         };

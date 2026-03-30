@@ -1,6 +1,6 @@
 [package]
 name = "infynon"
-version = "0.2.0-beta.6.3"
+version = "0.2.0-beta.6.5"
 edition = "2021"
 description = "Universal package security manager & network firewall — intercepts installs across npm, pip, cargo, go, gem, composer, nuget, hex, pub with 3-layer CVE verification, plus a real-time reverse proxy WAF with TUI dashboard"
 license = "MIT"
@@ -41,3 +41,4 @@ regex       = "1"
 chrono      = { version = "0.4", features = ["serde"] }
 ipnet       = "2"
 lettre      = { version = "0.11", default-features = false, features = ["builder", "hostname", "smtp-transport", "rustls-tls"] }
+lru = "0.16.3"
