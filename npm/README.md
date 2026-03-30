@@ -1,15 +1,15 @@
 # INFYNON
 
-**Network Firewall & Dependency Security Manager**
+**🔥 Stop installing vulnerable dependencies blindly**
 
-Real-time reverse proxy WAF with TUI dashboard + pre-install CVE verification for 14 ecosystems.
+A security-first CLI: pre-install CVE scanner for 14 ecosystems + reverse proxy WAF for your backend.
 
 [![npm](https://img.shields.io/npm/v/infynon?style=flat-square&logo=npm)](https://www.npmjs.com/package/infynon)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/d4rkNinja/infynon-cli/blob/main/LICENSE)
 [![GitHub](https://img.shields.io/badge/source-GitHub-black?style=flat-square&logo=github)](https://github.com/d4rkNinja/infynon-cli)
 
-> AI generates code, installs packages — you don't know what's compromised.
-> **INFYNON catches it before it touches your system.**
+> ⚠️ AI installs packages. You don't verify them. That's the risk.
+> **INFYNON fixes that — blocks threats before they reach your system.**
 
 ---
 
@@ -57,8 +57,11 @@ infynon pkg fix --auto
 # Deep audit with full dependency tree
 infynon pkg audit
 
-# Strict mode — fail build on any vulnerability (great for CI)
-infynon pkg --strict npm install express
+# CI / non-interactive flags (no prompts)
+infynon pkg npm install express --strict high      # fail build on critical/high
+infynon pkg npm install express --auto-fix         # auto-upgrade to safe versions
+infynon pkg npm install express --skip-vulnerable  # skip bad packages silently
+infynon pkg npm install express --yes              # install everything (audit-only CI)
 ```
 
 **Ecosystems:** npm · yarn · pnpm · bun · pip · uv · poetry · cargo · go · gem · composer · nuget · hex · pub
