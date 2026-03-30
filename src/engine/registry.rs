@@ -34,8 +34,8 @@ pub fn fetch_latest_version(name: &str, ecosystem: &str) -> Option<String> {
         "npm" | "yarn" | "pnpm" | "bun" => npm_latest(name),
 
         // ── Python family ─────────────────────────────────────────────────────
-        // uv and poetry both install from PyPI
-        "PyPI" | "uv" | "poetry" => pypi_latest(name),
+        // pip, uv, poetry all install from PyPI
+        "PyPI" | "pip" | "pip3" | "uv" | "poetry" => pypi_latest(name),
 
         // ── Rust ──────────────────────────────────────────────────────────────
         "crates.io" => crates_latest(name),

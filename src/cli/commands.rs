@@ -119,6 +119,8 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
     } else {
         if Path::new("package.json").exists() { ecosystem = "npm"; }
         else if Path::new("Cargo.toml").exists() { ecosystem = "cargo"; }
+        else if Path::new("uv.lock").exists() { ecosystem = "uv"; }
+        else if Path::new("poetry.lock").exists() { ecosystem = "poetry"; }
         else if Path::new("pyproject.toml").exists() || Path::new("requirements.txt").exists() { ecosystem = "pip"; }
         else if Path::new("go.mod").exists() { ecosystem = "go"; }
         else if Path::new("composer.json").exists() { ecosystem = "composer"; }

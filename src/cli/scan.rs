@@ -596,6 +596,24 @@ pub fn upgrade_cmd(pkg: &scanner::LockedPackage, fixed: &str) -> String {
 
 // ── Install-time security gate ────────────────────────────────────────────────
 
+/// Map a package manager tool name to the correct OSV ecosystem identifier.
+/// OSV requires specific strings: "PyPI", "npm", "crates.io", "Go", etc.
+/// Tool names like "pip", "uv", "yarn", "cargo" must be translated.
+pub fn tool_to_osv_ecosystem(ecosystem: &str) -> String {
+    match ecosystem {
+        "pip" | "pip3" | "uv" | "poetry"  => "PyPI".to_string(),
+        "yarn" | "pnpm" | "bun"            => "npm".to_string(),
+        "cargo"                            => "crates.io".to_string(),
+        "go"                               => "Go".to_string(),
+        "gem"                              => "RubyGems".to_string(),
+        "composer"                         => "Packagist".to_string(),
+        "nuget" | "dotnet"                 => "NuGet".to_string(),
+        "hex" | "mix"                      => "Hex".to_string(),
+        "pub" | "dart"                     => "pub.dev".to_string(),
+        other                              => other.to_string(),
+    }
+}
+
 /// A single vulnerability hit found during install-time check.
 pub struct VulnHit {
     pub package:       String,
@@ -623,7 +641,8 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str) -> (bool
     );
     sp.enable_steady_tick(Duration::from_millis(60));
 
-    let eco_osv = ecosystem.to_string();
+    // Map tool name (e.g. "pip", "uv", "yarn") to OSV ecosystem string (e.g. "PyPI", "npm")
+    let eco_osv = tool_to_osv_ecosystem(ecosystem);
 
     let tuples: Vec<(String, String, String)> = names.iter()
         .map(|spec| {
