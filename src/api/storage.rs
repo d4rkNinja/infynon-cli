@@ -84,7 +84,11 @@ struct YamlAssertion {
     // Flat string check (internal format): "status == 200" (legacy field)
     #[serde(default)]
     check_str: Option<String>,
+    #[serde(default = "bool_true")]
+    enabled: bool,
 }
+
+fn bool_true() -> bool { true }
 
 #[derive(Debug, Deserialize)]
 struct YamlCheck {
@@ -306,7 +310,7 @@ fn convert_yaml_node(y: YamlNode) -> Node {
             "continue" | "warn" => OnFail::Warn,
             _ => OnFail::Stop,
         };
-        Assertion { check: check_expr, on_fail }
+        Assertion { check: check_expr, on_fail, enabled: a.enabled }
     }).filter(|a| !a.check.is_empty()).collect();
 
     let extractions = y.extractions.into_iter().map(|e| {
@@ -422,7 +426,11 @@ struct YamlSaveExtraction {
 struct YamlSaveAssertion {
     check: String,
     on_fail: String,
+    #[serde(skip_serializing_if = "is_true")]
+    enabled: bool,
 }
+
+fn is_true(b: &bool) -> bool { *b }
 
 #[derive(Serialize)]
 struct YamlSaveFlow {
@@ -489,6 +497,7 @@ fn node_to_yaml_save(node: &Node) -> YamlSaveNode {
                 OnFail::Stop => "stop".to_string(),
                 OnFail::Warn => "warn".to_string(),
             },
+            enabled: a.enabled,
         }).collect(),
         tags: node.tags.clone(),
     }

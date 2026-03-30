@@ -256,6 +256,7 @@ pub fn generate_assertions(node: &Node) -> Vec<Assertion> {
     assertions.push(Assertion {
         check: format!("status == {}", expected_status),
         on_fail: OnFail::Stop,
+        enabled: true,
     });
 
     // If path suggests a resource with ID, assert body has an id field
@@ -263,6 +264,7 @@ pub fn generate_assertions(node: &Node) -> Vec<Assertion> {
         assertions.push(Assertion {
             check: "body.id exists".to_string(),
             on_fail: OnFail::Warn,
+            enabled: true,
         });
     }
 
@@ -271,6 +273,7 @@ pub fn generate_assertions(node: &Node) -> Vec<Assertion> {
         assertions.push(Assertion {
             check: "header.content-type contains application/json".to_string(),
             on_fail: OnFail::Warn,
+            enabled: true,
         });
     }
 

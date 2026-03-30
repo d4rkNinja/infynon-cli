@@ -71,7 +71,11 @@ pub struct Assertion {
     pub check: String,
     #[serde(default)]
     pub on_fail: OnFail,
+    #[serde(default = "bool_true")]
+    pub enabled: bool,
 }
+
+fn bool_true() -> bool { true }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "lowercase")]

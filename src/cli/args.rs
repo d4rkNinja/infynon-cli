@@ -367,6 +367,9 @@ pub enum ApiCommands {
         action: AiAction,
     },
 
+    /// Validate all nodes and flows — check for missing references, invalid fields
+    Validate,
+
     /// Import nodes from an OpenAPI or Swagger spec file
     #[command(name = "import")]
     Import {
@@ -430,6 +433,35 @@ pub enum NodeAction {
         #[arg(long)]
         base_url: Option<String>,
     },
+    /// Enable or disable an assertion on a node
+    #[command(name = "assertion")]
+    Assertion {
+        /// Node ID
+        node_id: String,
+        #[command(subcommand)]
+        action: AssertionAction,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum AssertionAction {
+    /// List assertions with enabled/disabled status
+    List,
+    /// Enable an assertion by index (0-based)
+    Enable { index: usize },
+    /// Disable an assertion by index (0-based)
+    Disable { index: usize },
+    /// Toggle an assertion by index
+    Toggle { index: usize },
+    /// Add a new assertion
+    Add {
+        /// Assertion expression (e.g. "status == 200")
+        check: String,
+        #[arg(long, default_value = "stop")]
+        on_fail: String,
+    },
+    /// Remove an assertion by index
+    Remove { index: usize },
 }
 
 #[derive(Subcommand, Debug)]
@@ -454,11 +486,17 @@ pub enum FlowAction {
         /// Override base URL
         #[arg(long)]
         base_url: Option<String>,
+        /// Save run report: markdown | pdf | both
+        #[arg(long, value_name = "FORMAT")]
+        output: Option<String>,
     },
     /// Run all flows
     RunAll {
         #[arg(long)]
         base_url: Option<String>,
+        /// Save run report: markdown | pdf | both
+        #[arg(long, value_name = "FORMAT")]
+        output: Option<String>,
     },
     /// Delete a flow (nodes are not deleted)
     Remove {

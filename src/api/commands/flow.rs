@@ -215,7 +215,7 @@ fn render_flow_ascii(flow: &Flow) {
 
 // ── flow run ──────────────────────────────────────────────────────────────────
 
-pub fn cmd_flow_run(id: &str, base_url_override: Option<&str>) {
+pub fn cmd_flow_run(id: &str, base_url_override: Option<&str>, output: Option<&str>) {
     println!();
     Logger::title(&format!("Running flow: {}", id), "cyan");
 
@@ -290,11 +290,88 @@ pub fn cmd_flow_run(id: &str, base_url_override: Option<&str>) {
     if let Err(e) = storage::save_run_result(&result) {
         Logger::error(&format!("Could not save run result: {}", e));
     }
+
+    // Save report if requested
+    if let Some(fmt) = output {
+        save_run_report(&result, fmt);
+    }
+}
+
+pub fn save_run_report_pub(result: &crate::api::types::FlowRunResult, format: &str) {
+    save_run_report(result, format);
+}
+
+fn save_run_report(result: &crate::api::types::FlowRunResult, format: &str) {
+    let md = build_run_markdown(result);
+    let ts = result.started_at.format("%Y%m%d-%H%M%S");
+
+    match format.to_lowercase().as_str() {
+        "markdown" | "md" => {
+            let path = format!("reports/{}-{}.md", result.flow_id, ts);
+            std::fs::create_dir_all("reports").ok();
+            std::fs::write(&path, &md).ok();
+            println!("  {}  Report saved: {}", "✔".bright_green(), path);
+        }
+        "pdf" => {
+            let path = format!("reports/{}-{}.pdf.md", result.flow_id, ts);
+            std::fs::create_dir_all("reports").ok();
+            std::fs::write(&path, &md).ok();
+            println!("  {}  Report saved: {}", "✔".bright_green(), path);
+        }
+        "both" => {
+            let md_path = format!("reports/{}-{}.md", result.flow_id, ts);
+            let pdf_path = format!("reports/{}-{}.pdf.md", result.flow_id, ts);
+            std::fs::create_dir_all("reports").ok();
+            std::fs::write(&md_path, &md).ok();
+            std::fs::write(&pdf_path, &md).ok();
+            println!("  {}  Reports saved: {} and {}", "✔".bright_green(), md_path, pdf_path);
+        }
+        _ => {}
+    }
+}
+
+fn build_run_markdown(result: &crate::api::types::FlowRunResult) -> String {
+    let mut md = String::new();
+    md.push_str(&format!("# Flow Run: {}\n\n", result.flow_id));
+    md.push_str(&format!("- Started: {}\n", result.started_at.format("%Y-%m-%d %H:%M:%S UTC")));
+    md.push_str(&format!("- Duration: {}ms\n", result.duration_ms()));
+    md.push_str(&format!("- Status: {}\n\n", if result.passed { "PASSED" } else { "FAILED" }));
+    md.push_str("## Steps\n\n");
+
+    for step in &result.steps {
+        md.push_str(&format!("### {} — {} {}\n\n", step.node_id, step.method, step.url));
+        md.push_str(&format!("- Status: {}\n", step.status_code.map(|s| s.to_string()).unwrap_or_else(|| "ERR".to_string())));
+        md.push_str(&format!("- Duration: {}ms\n", step.duration_ms));
+        md.push_str(&format!("- Result: {}\n", if step.passed { "PASSED" } else { "FAILED" }));
+
+        if !step.assertion_results.is_empty() {
+            md.push_str("\n**Assertions:**\n\n");
+            for ar in &step.assertion_results {
+                let icon = if ar.passed { "✔" } else { "✘" };
+                md.push_str(&format!("- {} `{}` (actual: `{}`)\n", icon, ar.check, ar.actual));
+            }
+        }
+
+        if !step.extracted.is_empty() {
+            md.push_str("\n**Extracted:**\n\n");
+            for (k, v) in &step.extracted {
+                md.push_str(&format!("- `{}` = `{}`\n", k, v));
+            }
+        }
+
+        if let Some(err) = &step.error {
+            md.push_str(&format!("\n**Error:** {}\n", err));
+        }
+
+        md.push('\n');
+    }
+
+    md
 }
 
 // ── flow run all ──────────────────────────────────────────────────────────────
 
-pub fn cmd_flow_run_all(base_url_override: Option<&str>) {
+pub fn cmd_flow_run_all(base_url_override: Option<&str>, output: Option<&str>) {
     let flows = storage::list_flows();
     if flows.is_empty() {
         println!();
@@ -310,7 +387,7 @@ pub fn cmd_flow_run_all(base_url_override: Option<&str>) {
     let mut failed = 0;
 
     for flow in &flows {
-        cmd_flow_run(&flow.id, base_url_override);
+        cmd_flow_run(&flow.id, base_url_override, output);
         // Check last run result
         let runs = storage::load_recent_runs(&flow.id, 1);
         if let Some(run) = runs.first() {

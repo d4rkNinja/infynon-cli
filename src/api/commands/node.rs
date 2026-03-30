@@ -100,7 +100,7 @@ fn create_node_interactive() -> Node {
         loop {
             let check = prompt("    Assertion (e.g. 'status == 201', or Enter to finish): ");
             if check.is_empty() { break; }
-            node.assertions.push(Assertion { check, on_fail: OnFail::Stop });
+            node.assertions.push(Assertion { check, on_fail: OnFail::Stop, enabled: true });
         }
     }
 
@@ -467,6 +467,123 @@ pub fn cmd_node_export(id: &str, format: &str, base_url: Option<&str>) {
         _ => {
             Logger::error(&format!("Unknown export format: '{}'. Use: curl, json", format));
         }
+    }
+}
+
+// ── node assertion commands ───────────────────────────────────────────────────
+
+pub fn cmd_node_assertion_list(node_id: &str) {
+    println!();
+    let node = match storage::load_node(node_id) {
+        Ok(n) => n,
+        Err(e) => { Logger::error(&e); return; }
+    };
+    Logger::title(&format!("Assertions: {}", node_id), "cyan");
+    println!();
+    if node.assertions.is_empty() {
+        println!("  No assertions defined.");
+        println!();
+        return;
+    }
+    for (i, a) in node.assertions.iter().enumerate() {
+        let status = if a.enabled {
+            "✔ enabled ".bright_green().to_string()
+        } else {
+            "✘ disabled".truecolor(120, 120, 120).to_string()
+        };
+        let fail_label = match a.on_fail {
+            OnFail::Stop => "stop".bright_red().to_string(),
+            OnFail::Warn => "warn".bright_yellow().to_string(),
+        };
+        println!(
+            "  [{:>2}]  {}  {}  [{}]",
+            i,
+            status,
+            a.check.bright_cyan(),
+            fail_label,
+        );
+    }
+    println!();
+}
+
+pub fn cmd_node_assertion_enable(node_id: &str, idx: usize) {
+    let mut node = match storage::load_node(node_id) {
+        Ok(n) => n,
+        Err(e) => { Logger::error(&e); return; }
+    };
+    if idx >= node.assertions.len() {
+        Logger::error(&format!("Index {} out of range (0..{})", idx, node.assertions.len()));
+        return;
+    }
+    node.assertions[idx].enabled = true;
+    match storage::save_node(&node) {
+        Ok(_) => println!("  {}  Assertion [{}] enabled.", "✔".bright_green(), idx),
+        Err(e) => Logger::error(&e),
+    }
+}
+
+pub fn cmd_node_assertion_disable(node_id: &str, idx: usize) {
+    let mut node = match storage::load_node(node_id) {
+        Ok(n) => n,
+        Err(e) => { Logger::error(&e); return; }
+    };
+    if idx >= node.assertions.len() {
+        Logger::error(&format!("Index {} out of range (0..{})", idx, node.assertions.len()));
+        return;
+    }
+    node.assertions[idx].enabled = false;
+    match storage::save_node(&node) {
+        Ok(_) => println!("  {}  Assertion [{}] disabled.", "✔".bright_green(), idx),
+        Err(e) => Logger::error(&e),
+    }
+}
+
+pub fn cmd_node_assertion_toggle(node_id: &str, idx: usize) {
+    let mut node = match storage::load_node(node_id) {
+        Ok(n) => n,
+        Err(e) => { Logger::error(&e); return; }
+    };
+    if idx >= node.assertions.len() {
+        Logger::error(&format!("Index {} out of range (0..{})", idx, node.assertions.len()));
+        return;
+    }
+    node.assertions[idx].enabled = !node.assertions[idx].enabled;
+    let state = if node.assertions[idx].enabled { "enabled" } else { "disabled" };
+    match storage::save_node(&node) {
+        Ok(_) => println!("  {}  Assertion [{}] {}.", "✔".bright_green(), idx, state),
+        Err(e) => Logger::error(&e),
+    }
+}
+
+pub fn cmd_node_assertion_add(node_id: &str, check: &str, on_fail_str: &str) {
+    let mut node = match storage::load_node(node_id) {
+        Ok(n) => n,
+        Err(e) => { Logger::error(&e); return; }
+    };
+    let on_fail = match on_fail_str.to_lowercase().as_str() {
+        "warn" | "continue" => OnFail::Warn,
+        _ => OnFail::Stop,
+    };
+    node.assertions.push(Assertion { check: check.to_string(), on_fail, enabled: true });
+    match storage::save_node(&node) {
+        Ok(_) => println!("  {}  Assertion added: {}", "✔".bright_green(), check.bright_cyan()),
+        Err(e) => Logger::error(&e),
+    }
+}
+
+pub fn cmd_node_assertion_remove(node_id: &str, idx: usize) {
+    let mut node = match storage::load_node(node_id) {
+        Ok(n) => n,
+        Err(e) => { Logger::error(&e); return; }
+    };
+    if idx >= node.assertions.len() {
+        Logger::error(&format!("Index {} out of range (0..{})", idx, node.assertions.len()));
+        return;
+    }
+    let removed = node.assertions.remove(idx);
+    match storage::save_node(&node) {
+        Ok(_) => println!("  {}  Assertion [{}] removed: {}", "✔".bright_green(), idx, removed.check.bright_cyan()),
+        Err(e) => Logger::error(&e),
     }
 }
 

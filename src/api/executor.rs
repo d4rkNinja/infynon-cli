@@ -110,15 +110,19 @@ pub fn execute_node(
             let body_json: Value = serde_json::from_str(&body_str)
                 .unwrap_or(Value::String(body_str.clone()));
 
-            // Evaluate assertions
-            let assertion_results: Vec<_> = node
+            // Evaluate assertions (skip disabled ones)
+            let enabled_assertions: Vec<&crate::api::types::Assertion> = node
                 .assertions
+                .iter()
+                .filter(|a| a.enabled)
+                .collect();
+            let assertion_results: Vec<_> = enabled_assertions
                 .iter()
                 .map(|a| assertions::evaluate(&a.check, status, &body_json, &resp_headers))
                 .collect();
 
             // Determine pass/fail (stop on first failing Stop assertion)
-            let passed = check_passed(&node.assertions, &assertion_results);
+            let passed = check_passed_enabled(&enabled_assertions, &assertion_results);
 
             // Extract variables from response
             let extracted = extract_variables(&node.extractions, status, &body_json, &resp_headers);
@@ -216,9 +220,9 @@ pub fn execute_flow(
             context.insert(k.clone(), v.clone());
         }
 
-        // Check if we should stop
+        // Check if we should stop (only consider enabled assertions)
         let should_stop = !step.passed
-            && node.assertions.iter().any(|a| a.on_fail == OnFail::Stop);
+            && node.assertions.iter().any(|a| a.enabled && a.on_fail == OnFail::Stop);
 
         if !step.passed {
             overall_passed = false;
@@ -295,6 +299,15 @@ fn collect_headers(headers: &reqwest::header::HeaderMap) -> HashMap<String, Stri
 }
 
 fn check_passed(assertions: &[Assertion], results: &[crate::api::types::AssertionResult]) -> bool {
+    for (assertion, result) in assertions.iter().zip(results.iter()) {
+        if !result.passed && assertion.on_fail == OnFail::Stop {
+            return false;
+        }
+    }
+    true
+}
+
+fn check_passed_enabled(assertions: &[&Assertion], results: &[crate::api::types::AssertionResult]) -> bool {
     for (assertion, result) in assertions.iter().zip(results.iter()) {
         if !result.passed && assertion.on_fail == OnFail::Stop {
             return false;

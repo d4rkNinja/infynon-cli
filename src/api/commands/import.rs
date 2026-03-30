@@ -304,6 +304,7 @@ fn build_node_from_operation(
         node.assertions.push(Assertion {
             check: format!("status == {}", code),
             on_fail: OnFail::Stop,
+            enabled: true,
         });
     }
 
@@ -312,6 +313,7 @@ fn build_node_from_operation(
         node.assertions.push(Assertion {
             check: "body exists".to_string(),
             on_fail: OnFail::Warn,
+            enabled: true,
         });
     }
 

@@ -3,3 +3,4 @@ pub mod attach;
 pub mod flow;
 pub mod import;
 pub mod node;
+pub mod validate;

@@ -43,6 +43,7 @@ pub fn render(f: &mut Frame, app: &mut ApiApp) {
         ApiView::StateInspector  => render_state_inspector(f, app, chunks[3]),
         ApiView::RunDiff         => render_run_diff(f, app, chunks[3]),
         ApiView::NodeLibrary     => render_node_library(f, app, chunks[3]),
+        ApiView::Config          => render_config(f, app, chunks[3]),
     }
 
     render_status_bar(f, app, chunks[4]);
@@ -195,7 +196,11 @@ fn render_status_bar(f: &mut Frame, app: &ApiApp, area: Rect) {
 
 fn render_overview(f: &mut Frame, app: &ApiApp, area: Rect) {
     if app.flows.is_empty() {
-        render_welcome_screen(f, area);
+        if app.nodes.is_empty() {
+            render_welcome_screen(f, area);
+        } else {
+            render_overview_nodes_only(f, app, area);
+        }
         return;
     }
 
@@ -319,7 +324,7 @@ fn render_flow_graph(f: &mut Frame, app: &ApiApp, area: Rect) {
     let flow = match app.active_flow() {
         Some(f) => f,
         None => {
-            render_welcome_screen(f, area);
+            render_no_flows_hint(f, area, "Flow Graph");
             return;
         }
     };
@@ -518,6 +523,10 @@ fn render_graph_sidebar(f: &mut Frame, app: &ApiApp, flow: &crate::api::types::F
 // ── View 3: Live Execution ────────────────────────────────────────────────────
 
 fn render_live_execution(f: &mut Frame, app: &ApiApp, area: Rect) {
+    if app.flows.is_empty() && app.live_steps.is_empty() {
+        render_no_flows_hint(f, area, "Live Execution");
+        return;
+    }
     let steps: Vec<&StepResult> = if app.live_steps.is_empty() {
         app.last_run.as_ref()
             .map(|r| r.steps.iter().collect())
@@ -585,6 +594,10 @@ fn render_live_execution(f: &mut Frame, app: &ApiApp, area: Rect) {
 // ── View 4: Latency Profiler ──────────────────────────────────────────────────
 
 fn render_latency_profiler(f: &mut Frame, app: &ApiApp, area: Rect) {
+    if app.flows.is_empty() {
+        render_no_flows_hint(f, area, "Latency Profiler");
+        return;
+    }
     let run = match &app.last_run {
         Some(r) => r,
         None => {
@@ -663,6 +676,10 @@ fn percentile(steps: &[StepResult], pct: u64) -> u64 {
 // ── View 5: Security Probes ───────────────────────────────────────────────────
 
 fn render_security_probes(f: &mut Frame, app: &ApiApp, area: Rect) {
+    if app.flows.is_empty() {
+        render_no_flows_hint(f, area, "Security Probes");
+        return;
+    }
     let probes = &app.security_probes;
 
     if probes.is_empty() {
@@ -748,11 +765,7 @@ fn render_coverage_map(f: &mut Frame, app: &ApiApp, area: Rect) {
     let flow = match app.active_flow() {
         Some(f) => f,
         None => {
-            f.render_widget(
-                Paragraph::new("No active flow.").style(dim_style())
-                    .block(Block::default().borders(Borders::ALL).border_style(border_style())),
-                area,
-            );
+            render_no_flows_hint(f, area, "Coverage Map");
             return;
         }
     };
@@ -817,6 +830,10 @@ fn render_coverage_map(f: &mut Frame, app: &ApiApp, area: Rect) {
 // ── View 7: State Inspector ───────────────────────────────────────────────────
 
 fn render_state_inspector(f: &mut Frame, app: &ApiApp, area: Rect) {
+    if app.flows.is_empty() {
+        render_no_flows_hint(f, area, "State Inspector");
+        return;
+    }
     let run = match &app.last_run {
         Some(r) => r,
         None => {
@@ -936,6 +953,10 @@ fn extract_json_keys(body: Option<&str>) -> Vec<String> {
 // ── View 8: Run Diff ──────────────────────────────────────────────────────────
 
 fn render_run_diff(f: &mut Frame, app: &ApiApp, area: Rect) {
+    if app.flows.is_empty() {
+        render_no_flows_hint(f, area, "Run Diff");
+        return;
+    }
     let (run_a, run_b) = match (&app.last_run, &app.compare_run) {
         (Some(a), Some(b)) => (a, b),
         _ => {
@@ -1307,6 +1328,135 @@ fn render_help_overlay(f: &mut Frame, area: Rect) {
         );
 
     f.render_widget(p, overlay_area);
+}
+
+// ── Config view (tab 0) ───────────────────────────────────────────────────────
+
+fn render_config(f: &mut Frame, app: &ApiApp, area: Rect) {
+    let md_check = if app.config_output_markdown { "[x]" } else { "[ ]" };
+    let pdf_check = if app.config_output_pdf { "[x]" } else { "[ ]" };
+
+    let url_display = if app.config_editing_url {
+        format!("{}▌", app.config_url_input)
+    } else {
+        app.default_base_url.clone()
+    };
+
+    let lines = vec![
+        Line::raw(""),
+        Line::from(vec![Span::styled("  ◆ Weave Configuration", Style::default().fg(CYAN).add_modifier(Modifier::BOLD))]),
+        Line::from(vec![Span::styled("  ──────────────────────────────────────────────────────", Style::default().fg(BORDER))]),
+        Line::raw(""),
+        Line::from(vec![Span::styled("  Run Output", Style::default().fg(WHITE).add_modifier(Modifier::BOLD))]),
+        Line::from(vec![Span::styled("  ──────────", Style::default().fg(DIMMER))]),
+        Line::from(vec![
+            Span::styled(format!("  {} Save to Markdown    ", md_check), if app.config_output_markdown { Style::default().fg(GREEN) } else { Style::default().fg(TEXT_DIM) }),
+            Span::styled("(toggle with 'm')", Style::default().fg(DIMMER)),
+        ]),
+        Line::from(vec![
+            Span::styled(format!("  {} Save to PDF         ", pdf_check), if app.config_output_pdf { Style::default().fg(GREEN) } else { Style::default().fg(TEXT_DIM) }),
+            Span::styled("(toggle with 'p')", Style::default().fg(DIMMER)),
+        ]),
+        Line::raw(""),
+        Line::from(vec![Span::styled("  Run Behavior", Style::default().fg(WHITE).add_modifier(Modifier::BOLD))]),
+        Line::from(vec![Span::styled("  ────────────", Style::default().fg(DIMMER))]),
+        Line::from(vec![
+            Span::styled("  Default Base URL:  ", Style::default().fg(TEXT_DIM)),
+            Span::styled(&url_display, Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
+            Span::styled("   (press 'e' to edit)", Style::default().fg(DIMMER)),
+        ]),
+        Line::raw(""),
+        Line::from(vec![Span::styled("  Keyboard Hints", Style::default().fg(WHITE).add_modifier(Modifier::BOLD))]),
+        Line::from(vec![Span::styled("  ──────────────", Style::default().fg(DIMMER))]),
+        Line::from(vec![Span::styled("  m  Toggle markdown output", Style::default().fg(DIM))]),
+        Line::from(vec![Span::styled("  p  Toggle PDF output", Style::default().fg(DIM))]),
+        Line::from(vec![Span::styled("  e  Edit default base URL", Style::default().fg(DIM))]),
+        Line::from(vec![Span::styled("  R  Refresh / reload", Style::default().fg(DIM))]),
+        Line::raw(""),
+    ];
+
+    let p = Paragraph::new(lines)
+        .block(
+            Block::default()
+                .title(Span::styled(" Configuration ", title_style()))
+                .borders(Borders::ALL)
+                .border_style(border_style()),
+        )
+        .wrap(Wrap { trim: false });
+
+    f.render_widget(p, area);
+}
+
+// ── Overview helper: nodes-only state ────────────────────────────────────────
+
+fn render_overview_nodes_only(f: &mut Frame, app: &ApiApp, area: Rect) {
+    let outer = Block::default()
+        .title(Span::styled(" Overview ", title_style()))
+        .borders(Borders::ALL)
+        .border_style(border_style());
+    let inner = outer.inner(area);
+    f.render_widget(outer, area);
+
+    let mut lines: Vec<Line> = vec![
+        Line::raw(""),
+        Line::from(vec![
+            Span::styled("  No flows yet — create one with: ", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+            Span::styled("infynon weave flow create <name>", Style::default().fg(CYAN)),
+        ]),
+        Line::raw(""),
+        Line::from(vec![Span::styled("  ── Nodes in library ──────────────────────────────────────────", Style::default().fg(DIMMER))]),
+        Line::raw(""),
+    ];
+
+    let mut node_list: Vec<(&String, &crate::api::types::Node)> = app.nodes.iter().collect();
+    node_list.sort_by_key(|(id, _)| id.as_str());
+
+    for (id, node) in &node_list {
+        let method_style = match node.method.as_str() {
+            "GET"    => Style::default().fg(GREEN),
+            "POST"   => Style::default().fg(CYAN),
+            "PUT"    => Style::default().fg(YELLOW),
+            "PATCH"  => Style::default().fg(ORANGE),
+            "DELETE" => Style::default().fg(RED),
+            _        => normal_style(),
+        };
+        lines.push(Line::from(vec![
+            Span::styled(format!("  {:<24}", truncate(id, 24)), Style::default().fg(TEXT)),
+            Span::styled(format!("{:<8}", node.method), method_style),
+            Span::styled(truncate(&node.path, 40), Style::default().fg(TEXT_DIM)),
+        ]));
+    }
+
+    let p = Paragraph::new(lines).wrap(Wrap { trim: false });
+    f.render_widget(p, inner);
+}
+
+// ── No-flows hint (tabs 2-8 empty state) ─────────────────────────────────────
+
+fn render_no_flows_hint(f: &mut Frame, area: Rect, tab_name: &str) {
+    let p = Paragraph::new(vec![
+        Line::raw(""),
+        Line::from(vec![
+            Span::styled(
+                format!("  {} — no flows yet.", tab_name),
+                Style::default().fg(WHITE).add_modifier(Modifier::BOLD),
+            ),
+        ]),
+        Line::raw(""),
+        Line::from(vec![
+            Span::styled("  Press ", dim_style()),
+            Span::styled("1", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+            Span::styled(" for Overview to get started.", dim_style()),
+        ]),
+    ])
+    .block(
+        Block::default()
+            .title(Span::styled(format!(" {} ", tab_name), title_style()))
+            .borders(Borders::ALL)
+            .border_style(border_style()),
+    )
+    .wrap(Wrap { trim: false });
+    f.render_widget(p, area);
 }
 
 // ── Welcome / empty-state screen ─────────────────────────────────────────────

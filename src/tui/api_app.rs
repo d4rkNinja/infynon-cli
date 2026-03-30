@@ -19,6 +19,7 @@ pub enum ApiView {
     StateInspector,
     RunDiff,
     NodeLibrary,
+    Config,
 }
 
 impl ApiView {
@@ -33,6 +34,7 @@ impl ApiView {
             ApiView::StateInspector  => "State",
             ApiView::RunDiff         => "Diff",
             ApiView::NodeLibrary     => "Node Lib",
+            ApiView::Config          => "Config",
         }
     }
 
@@ -47,6 +49,7 @@ impl ApiView {
             ApiView::StateInspector  => '7',
             ApiView::RunDiff         => '8',
             ApiView::NodeLibrary     => '9',
+            ApiView::Config          => '0',
         }
     }
 
@@ -61,6 +64,7 @@ impl ApiView {
             ApiView::StateInspector,
             ApiView::RunDiff,
             ApiView::NodeLibrary,
+            ApiView::Config,
         ]
     }
 }
@@ -147,6 +151,13 @@ pub struct ApiApp {
 
     // ── Help overlay ──────────────────────────────────────────────────────
     pub show_help: bool,
+
+    // ── Config tab (tab 0) ────────────────────────────────────────────────
+    pub config_output_markdown: bool,
+    pub config_output_pdf: bool,
+    pub default_base_url: String,
+    pub config_editing_url: bool,
+    pub config_url_input: String,
 }
 
 impl ApiApp {
@@ -216,6 +227,11 @@ impl ApiApp {
             search_input: String::new(),
             notification: None,
             show_help: false,
+            config_output_markdown: false,
+            config_output_pdf: false,
+            default_base_url: "http://localhost:3000".to_string(),
+            config_editing_url: false,
+            config_url_input: String::new(),
         }
     }
 
@@ -416,7 +432,7 @@ impl ApiApp {
             None => return,
         };
         let nodes = self.nodes.clone();
-        let base_url = flow.base_url.clone().unwrap_or_else(|| "http://localhost:3000".to_string());
+        let base_url = flow.base_url.clone().unwrap_or_else(|| self.default_base_url.clone());
 
         let (tx, rx) = mpsc::sync_channel::<LiveEvent>(100);
         self.run_rx = Some(rx);
@@ -436,6 +452,39 @@ impl ApiApp {
                 })),
             });
             tx2.send(LiveEvent::Done { passed: result.passed }).ok();
+        });
+
+        self.current_view = ApiView::LiveExecution;
+    }
+
+    pub fn start_node_run(&mut self, node_id: &str) {
+        let node = match self.nodes.get(node_id).cloned() {
+            Some(n) => n,
+            None => {
+                self.notify(&format!("Node '{}' not found", node_id));
+                return;
+            }
+        };
+        let base_url = self.active_flow()
+            .and_then(|f| f.base_url.clone())
+            .unwrap_or_else(|| self.default_base_url.clone());
+
+        let (tx, rx) = mpsc::sync_channel::<LiveEvent>(100);
+        self.run_rx = Some(rx);
+        self.run_tx = Some(tx.clone());
+        self.live_steps.clear();
+        self.live_running = true;
+        self.flow_running = true;
+        self.run_error = None;
+
+        std::thread::spawn(move || {
+            use crate::api::executor::execute_node;
+            use std::collections::HashMap;
+            let context: HashMap<String, serde_json::Value> = HashMap::new();
+            let step = execute_node(&node, &context, &base_url);
+            let passed = step.passed;
+            tx.send(LiveEvent::Step(step)).ok();
+            tx.send(LiveEvent::Done { passed }).ok();
         });
 
         self.current_view = ApiView::LiveExecution;
@@ -467,6 +516,18 @@ impl ApiApp {
                     self.run_rx = None;
                     self.notify(if passed { "Flow passed ✔" } else { "Flow failed ✘" });
                     self.refresh_data();
+                    // Auto-save report if config flags are set
+                    if let Some(run) = &self.last_run {
+                        let fmt = match (self.config_output_markdown, self.config_output_pdf) {
+                            (true, true) => Some("both"),
+                            (true, false) => Some("markdown"),
+                            (false, true) => Some("pdf"),
+                            _ => None,
+                        };
+                        if let Some(f) = fmt {
+                            crate::api::commands::flow::save_run_report_pub(run, f);
+                        }
+                    }
                     break;
                 }
                 LiveEvent::Error(e) => {
@@ -537,6 +598,7 @@ impl ApiApp {
             KeyCode::Char('7') => { self.current_view = ApiView::StateInspector; self.reset_scroll(); return; }
             KeyCode::Char('8') => { self.current_view = ApiView::RunDiff; self.reset_scroll(); return; }
             KeyCode::Char('9') => { self.current_view = ApiView::NodeLibrary; self.reset_scroll(); return; }
+            KeyCode::Char('0') => { self.current_view = ApiView::Config; self.reset_scroll(); return; }
             KeyCode::Char('?') => { self.show_help = true; return; }
             KeyCode::Char('/') => { self.search_active = true; self.search_input.clear(); return; }
             KeyCode::Char('R') => { self.refresh_data(); return; }
@@ -557,7 +619,7 @@ impl ApiApp {
         // View-specific keys
         match self.current_view {
             ApiView::FlowGraph => self.handle_graph_key(key),
-            ApiView::NodeLibrary => self.handle_list_key(key, self.nodes.len()),
+            ApiView::NodeLibrary => self.handle_node_library_key(key),
             ApiView::Overview => self.handle_overview_key(key),
             ApiView::RunDiff => {
                 match key.code {
@@ -565,6 +627,7 @@ impl ApiApp {
                     _ => self.handle_scroll_key(key),
                 }
             }
+            ApiView::Config => self.handle_config_key(key),
             _ => self.handle_scroll_key(key),
         }
     }
@@ -610,6 +673,58 @@ impl ApiApp {
                 self.start_flow_run();
             }
             _ => self.handle_list_key(key, max),
+        }
+    }
+
+    fn handle_node_library_key(&mut self, key: KeyEvent) {
+        let max = self.nodes.len();
+        match key.code {
+            KeyCode::Char('r') | KeyCode::Enter => {
+                // Get sorted node list and pick selected
+                let mut node_ids: Vec<String> = self.nodes.keys().cloned().collect();
+                node_ids.sort();
+                if let Some(node_id) = node_ids.get(self.selected_index.min(node_ids.len().saturating_sub(1))) {
+                    let node_id = node_id.clone();
+                    self.start_node_run(&node_id);
+                }
+            }
+            _ => self.handle_list_key(key, max),
+        }
+    }
+
+    fn handle_config_key(&mut self, key: KeyEvent) {
+        if self.config_editing_url {
+            match key.code {
+                KeyCode::Esc => {
+                    self.config_editing_url = false;
+                    self.config_url_input.clear();
+                }
+                KeyCode::Enter => {
+                    self.default_base_url = self.config_url_input.clone();
+                    self.config_editing_url = false;
+                    self.notify("Base URL updated");
+                }
+                KeyCode::Backspace => { self.config_url_input.pop(); }
+                KeyCode::Char(c) => { self.config_url_input.push(c); }
+                _ => {}
+            }
+            return;
+        }
+        match key.code {
+            KeyCode::Char('m') => {
+                self.config_output_markdown = !self.config_output_markdown;
+                self.notify(if self.config_output_markdown { "Markdown output: ON" } else { "Markdown output: OFF" });
+            }
+            KeyCode::Char('p') => {
+                self.config_output_pdf = !self.config_output_pdf;
+                self.notify(if self.config_output_pdf { "PDF output: ON" } else { "PDF output: OFF" });
+            }
+            KeyCode::Char('e') => {
+                self.config_editing_url = true;
+                self.config_url_input = self.default_base_url.clone();
+            }
+            KeyCode::Char('R') => self.refresh_data(),
+            _ => {}
         }
     }
 

@@ -1,6 +1,6 @@
 use clap::Parser;
 use crate::cli::args::{
-    AiAction, ApiCommands, FlowAction, NodeAction,
+    AiAction, ApiCommands, AssertionAction, FlowAction, NodeAction,
     PkgArgs, PkgCommands, FirewallArgs, FirewallCommands,
 };
 use crate::cli::scan::{self, run_scan, check_packages_before_install, OutputFormat, FixLevel};
@@ -1094,7 +1094,7 @@ fn run_firewall_tui(state: std::sync::Arc<crate::firewall::server::SharedState>)
 // ── API command router ────────────────────────────────────────────────────────
 
 fn execute_api_command(action: ApiCommands) {
-    use crate::api::commands::{ai_cmd, attach, flow, import, node};
+    use crate::api::commands::{ai_cmd, attach, flow, import, node, validate};
 
     match action {
         ApiCommands::Tui { flow_id } => {
@@ -1111,19 +1111,29 @@ fn execute_api_command(action: ApiCommands) {
             NodeAction::Export { id, format, base_url } => {
                 node::cmd_node_export(&id, &format, base_url.as_deref())
             }
+            NodeAction::Assertion { node_id, action } => match action {
+                AssertionAction::List => node::cmd_node_assertion_list(&node_id),
+                AssertionAction::Enable { index } => node::cmd_node_assertion_enable(&node_id, index),
+                AssertionAction::Disable { index } => node::cmd_node_assertion_disable(&node_id, index),
+                AssertionAction::Toggle { index } => node::cmd_node_assertion_toggle(&node_id, index),
+                AssertionAction::Add { check, on_fail } => node::cmd_node_assertion_add(&node_id, &check, &on_fail),
+                AssertionAction::Remove { index } => node::cmd_node_assertion_remove(&node_id, index),
+            },
         },
 
         ApiCommands::Flow { action } => match action {
             FlowAction::Create { name, ai } => flow::cmd_flow_create(&name, ai.as_deref()),
             FlowAction::List => flow::cmd_flow_list(),
             FlowAction::Show { id } => flow::cmd_flow_show(&id),
-            FlowAction::Run { id, base_url } => flow::cmd_flow_run(&id, base_url.as_deref()),
-            FlowAction::RunAll { base_url } => flow::cmd_flow_run_all(base_url.as_deref()),
+            FlowAction::Run { id, base_url, output } => flow::cmd_flow_run(&id, base_url.as_deref(), output.as_deref()),
+            FlowAction::RunAll { base_url, output } => flow::cmd_flow_run_all(base_url.as_deref(), output.as_deref()),
             FlowAction::Remove { id } => flow::cmd_flow_remove(&id),
             FlowAction::Merge { flow1, flow2, join_at, name } => {
                 flow::cmd_flow_merge(&flow1, &flow2, &join_at, &name)
             }
         },
+
+        ApiCommands::Validate => validate::cmd_validate(),
 
         ApiCommands::Attach { from, to, carry, condition, ai } => {
             attach::cmd_attach(&from, &to, &carry, condition.as_deref(), ai)
