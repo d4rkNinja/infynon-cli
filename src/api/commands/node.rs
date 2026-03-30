@@ -375,7 +375,7 @@ pub fn cmd_node_clone(id: &str, new_id: &str) {
 
 // ── node run ──────────────────────────────────────────────────────────────────
 
-pub fn cmd_node_run(id: &str, base_url: &str, set_vars: &[(String, String)]) {
+pub fn cmd_node_run(id: &str, base_url: &str, set_vars: &[(String, String)], prompt_flag: bool) {
     println!();
     Logger::title(&format!("Running node: {}", id), "cyan");
 
@@ -386,10 +386,26 @@ pub fn cmd_node_run(id: &str, base_url: &str, set_vars: &[(String, String)]) {
 
     let mut context: HashMap<String, Value> = HashMap::new();
     for (k, v) in set_vars {
-        // Try to parse as JSON value, else treat as string
         let val = serde_json::from_str::<Value>(v)
             .unwrap_or_else(|_| Value::String(v.clone()));
         context.insert(k.clone(), val);
+    }
+
+    // --prompt: detect unresolved {placeholder} vars not already in context or env, then ask
+    if prompt_flag {
+        let unresolved = collect_unresolved_placeholders(&node, &context);
+        if !unresolved.is_empty() {
+            use dialoguer::{Input};
+            println!();
+            println!("  {}  Prompting for {} unresolved variable(s):", "→".bright_cyan(), unresolved.len());
+            for var in &unresolved {
+                let val: String = Input::<String>::new()
+                    .with_prompt(format!("  {}", var))
+                    .interact_text()
+                    .unwrap_or_default();
+                context.insert(var.clone(), Value::String(val));
+            }
+        }
     }
 
     println!();
@@ -399,6 +415,36 @@ pub fn cmd_node_run(id: &str, base_url: &str, set_vars: &[(String, String)]) {
     let on_prompt = make_cli_prompt();
     let result = executor::execute_node(&node, &context, base_url, Some(&on_prompt));
     print_step_result(&result);
+}
+
+/// Collect placeholder variable names from node path/headers/body that are not already
+/// provided in context or available as environment variables.
+fn collect_unresolved_placeholders(node: &Node, context: &HashMap<String, Value>) -> Vec<String> {
+    use regex::Regex;
+    let re = Regex::new(r"\{([A-Za-z_][A-Za-z0-9_]*)\}").unwrap();
+    let mut seen = std::collections::HashSet::new();
+    let mut result = Vec::new();
+
+    let mut check = |text: &str| {
+        for cap in re.captures_iter(text) {
+            let var = cap[1].to_string();
+            if seen.contains(&var) { continue; }
+            // Skip if already in context
+            if context.contains_key(&var) { seen.insert(var); continue; }
+            // Skip if available as env var
+            if std::env::var(&var).is_ok() { seen.insert(var); continue; }
+            // Skip prompt_inputs vars — those go through the prompt modal
+            if node.prompt_inputs.iter().any(|pi| pi.var == var) { seen.insert(var); continue; }
+            seen.insert(var.clone());
+            result.push(var);
+        }
+    };
+
+    check(&node.path);
+    for v in node.headers.values() { check(v); }
+    if let Some(body) = &node.body_json { check(body); }
+
+    result
 }
 
 /// Build a CLI on_prompt callback using dialoguer for interactive input.

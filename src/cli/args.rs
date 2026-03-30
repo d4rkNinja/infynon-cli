@@ -387,6 +387,17 @@ pub enum ApiCommands {
         action: AiAction,
     },
 
+    /// Manage environment variables for this project.
+    /// Variables set here are written to the .env file in the current directory and
+    /// available as {$VAR_NAME} in any node's path, headers, or body.
+    /// Useful for setting AUTH_TOKEN, API_KEY, BASE_URL, and other shared values.
+    /// Example: infynon weave env set AUTH_TOKEN eyJhbGci...
+    #[command(name = "env")]
+    Env {
+        #[command(subcommand)]
+        action: EnvAction,
+    },
+
     /// Validate all nodes and flows in .infynon/api/ and report any issues.
     /// Checks: node IDs, HTTP methods, path format, body JSON validity, extraction prefixes,
     /// flow entry node existence, edge node existence, and circular references.
@@ -463,8 +474,10 @@ pub enum NodeAction {
     },
     /// Execute a single node in isolation against a live server and print the result.
     /// Shows status code, response body, assertion pass/fail, and extracted variables.
-    /// Use --set to inject context variables into {placeholder} fields in the request.
+    /// Use --set to inject known values, or --prompt to interactively fill any unresolved
+    /// {placeholder} variables found in the node's path, headers, or body.
     /// Example: infynon weave node run get-profile --base-url http://localhost:4000 --set token=abc123
+    /// Example: infynon weave node run verify-otp --prompt  (asks for any missing {vars} interactively)
     Run {
         /// Node ID to execute
         id: String,
@@ -476,6 +489,11 @@ pub enum NodeAction {
         /// Example: --set token=abc123 --set user_id=42
         #[arg(long, value_name = "KEY=VALUE", value_parser = parse_key_val)]
         set: Vec<(String, String)>,
+        /// Interactively prompt for any unresolved {placeholder} variables found in the
+        /// node's path, headers, or body that weren't supplied via --set or .env.
+        /// Combines with --set: pre-fill known values and prompt only for the rest.
+        #[arg(long)]
+        prompt: bool,
     },
     /// Export a node as a ready-to-run curl command or raw JSON definition.
     /// curl format includes all headers and body. json format outputs the full node schema.
@@ -609,8 +627,8 @@ pub enum FlowAction {
     },
     /// Execute all nodes in a flow in order, threading extracted variables between them.
     /// Prints a live step-by-step table: node, status, assertions passed/failed, extracted vars.
-    /// Use --output to save a report to ./reports/ as markdown and/or PDF.
-    /// Example: infynon weave flow run onboarding-flow --base-url http://localhost:4000 --output both
+    /// Use --set to pre-seed context variables, --output to save a report.
+    /// Example: infynon weave flow run onboarding-flow --base-url http://localhost:4000 --set token=abc123
     Run {
         /// Flow ID to execute
         id: String,
@@ -618,6 +636,11 @@ pub enum FlowAction {
         /// Overrides the flow's stored base_url if set.
         #[arg(long, value_name = "URL")]
         base_url: Option<String>,
+        /// Pre-seed context variables before the flow starts. Repeat for multiple values.
+        /// Variables are available as {key} in all node paths, headers, and bodies.
+        /// Example: --set token=eyJhbG --set user_id=42
+        #[arg(long, value_name = "KEY=VALUE", value_parser = parse_key_val)]
+        set: Vec<(String, String)>,
         /// Save a run report to ./reports/<flow-id>-<timestamp>.<ext>.
         /// Formats: markdown | pdf | both
         #[arg(long, value_name = "FORMAT")]
@@ -625,11 +648,14 @@ pub enum FlowAction {
     },
     /// Execute every flow in .infynon/api/flows/ in sequence and summarize results.
     /// Useful for full regression testing or CI checks across all API scenarios.
-    /// Example: infynon weave flow run-all --base-url $API_URL --output markdown
+    /// Example: infynon weave flow run-all --base-url $API_URL --set token=abc123 --output markdown
     RunAll {
         /// Base URL prepended to every node's path in every flow.
         #[arg(long, value_name = "URL")]
         base_url: Option<String>,
+        /// Pre-seed context variables for all flows. Repeat for multiple values.
+        #[arg(long, value_name = "KEY=VALUE", value_parser = parse_key_val)]
+        set: Vec<(String, String)>,
         /// Save a combined run report for all flows: markdown | pdf | both
         #[arg(long, value_name = "FORMAT")]
         output: Option<String>,
@@ -655,6 +681,41 @@ pub enum FlowAction {
         /// Name for the resulting merged flow
         #[arg(long, default_value = "merged-flow")]
         name: String,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum EnvAction {
+    /// List all environment variables stored in the project's .env file.
+    /// Shows KEY=VALUE pairs (sensitive values are masked with ***).
+    /// Example: infynon weave env list
+    List,
+    /// Add or update an environment variable in the project's .env file.
+    /// Variables are available as {$KEY} in any node's path, headers, or body.
+    /// Example: infynon weave env set AUTH_TOKEN eyJhbGciOiJIUzI1NiJ9...
+    /// Example: infynon weave env set BASE_URL http://staging.example.com
+    Set {
+        /// Variable name (e.g. AUTH_TOKEN, BASE_URL)
+        key: String,
+        /// Variable value
+        value: String,
+    },
+    /// Delete an environment variable from the .env file.
+    /// Example: infynon weave env delete OLD_TOKEN
+    Delete {
+        /// Variable name to remove
+        key: String,
+    },
+    /// Show the current value of a single environment variable.
+    /// Sensitive-looking keys (TOKEN, SECRET, PASSWORD, KEY) are masked unless --reveal is set.
+    /// Example: infynon weave env get AUTH_TOKEN
+    /// Example: infynon weave env get AUTH_TOKEN --reveal
+    Get {
+        /// Variable name to look up
+        key: String,
+        /// Show the full value even if it looks sensitive
+        #[arg(long)]
+        reveal: bool,
     },
 }
 

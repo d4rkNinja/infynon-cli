@@ -98,7 +98,7 @@ pub fn cmd_attach(
             "ℹ".bright_cyan(),
             from_id
         );
-        println!("     infynon api flow create <name>  (then attach nodes)");
+        println!("     infynon weave flow create <name>  (then attach nodes)");
     } else {
         println!(
             "     Updated flow(s): {}",
@@ -145,7 +145,7 @@ pub fn cmd_attach_ai(from_id: &str, description: Option<&str>, flow_id: Option<&
             }
         } else {
             println!("  No suitable next nodes found.");
-            println!("  Try: infynon api node create --ai \"describe what comes next\"");
+            println!("  Try: infynon weave node create --ai \"describe what comes next\"");
         }
         println!();
         return;

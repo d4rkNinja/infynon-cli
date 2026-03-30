@@ -1,6 +1,8 @@
+use std::collections::HashMap;
 use std::io::{self, Write};
 
 use owo_colors::OwoColorize;
+use serde_json::Value;
 
 use crate::api::ai;
 use crate::api::executor::{execute_flow, FlowExecuteOptions};
@@ -215,7 +217,7 @@ fn render_flow_ascii(flow: &Flow) {
 
 // ── flow run ──────────────────────────────────────────────────────────────────
 
-pub fn cmd_flow_run(id: &str, base_url_override: Option<&str>, output: Option<&str>) {
+pub fn cmd_flow_run(id: &str, base_url_override: Option<&str>, set_vars: &[(String, String)], output: Option<&str>) {
     println!();
     Logger::title(&format!("Running flow: {}", id), "cyan");
 
@@ -233,6 +235,22 @@ pub fn cmd_flow_run(id: &str, base_url_override: Option<&str>, output: Option<&s
             prompt("  Base URL (e.g. http://localhost:3000): ")
         });
 
+    // Build initial context from --set flags
+    let mut initial_context: HashMap<String, Value> = HashMap::new();
+    for (k, v) in set_vars {
+        let val = serde_json::from_str::<Value>(v)
+            .unwrap_or_else(|_| Value::String(v.clone()));
+        initial_context.insert(k.clone(), val);
+    }
+
+    if !initial_context.is_empty() {
+        println!();
+        println!("  {}  Seeded {} context variable(s):", "→".bright_cyan(), initial_context.len());
+        for k in initial_context.keys() {
+            println!("     {} {}", "·".truecolor(100, 100, 140), k.bright_cyan());
+        }
+    }
+
     println!();
     println!("  {}  Target: {}", "→".bright_cyan(), base_url.truecolor(160, 160, 200));
     println!("  {}  Nodes:  {}", "→".bright_cyan(), flow.all_node_ids().len().to_string().bright_cyan());
@@ -244,6 +262,7 @@ pub fn cmd_flow_run(id: &str, base_url_override: Option<&str>, output: Option<&s
         &nodes,
         FlowExecuteOptions {
             base_url: base_url.clone(),
+            initial_context,
             on_step: Some(Box::new(|step| {
                 let icon = if step.passed { "✔".bright_green().to_string() } else { "✘".bright_red().to_string() };
                 let status = step.status_code.map(|s| s.to_string()).unwrap_or_else(|| "ERR".to_string());
@@ -373,7 +392,7 @@ fn build_run_markdown(result: &crate::api::types::FlowRunResult) -> String {
 
 // ── flow run all ──────────────────────────────────────────────────────────────
 
-pub fn cmd_flow_run_all(base_url_override: Option<&str>, output: Option<&str>) {
+pub fn cmd_flow_run_all(base_url_override: Option<&str>, set_vars: &[(String, String)], output: Option<&str>) {
     let flows = storage::list_flows();
     if flows.is_empty() {
         println!();
@@ -389,7 +408,7 @@ pub fn cmd_flow_run_all(base_url_override: Option<&str>, output: Option<&str>) {
     let mut failed = 0;
 
     for flow in &flows {
-        cmd_flow_run(&flow.id, base_url_override, output);
+        cmd_flow_run(&flow.id, base_url_override, set_vars, output);
         // Check last run result
         let runs = storage::load_recent_runs(&flow.id, 1);
         if let Some(run) = runs.first() {

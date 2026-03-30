@@ -1,6 +1,6 @@
 use clap::Parser;
 use crate::cli::args::{
-    AiAction, ApiCommands, AssertionAction, FlowAction, NodeAction, PromptAction,
+    AiAction, ApiCommands, AssertionAction, EnvAction, FlowAction, NodeAction, PromptAction,
     PkgArgs, PkgCommands, FirewallArgs, FirewallCommands,
 };
 use crate::cli::scan::{self, run_scan, check_packages_before_install, OutputFormat, FixLevel};
@@ -1107,7 +1107,7 @@ fn execute_api_command(action: ApiCommands) {
             NodeAction::List => node::cmd_node_list(),
             NodeAction::Remove { id } => node::cmd_node_remove(&id),
             NodeAction::Clone { id, new_id } => node::cmd_node_clone(&id, &new_id),
-            NodeAction::Run { id, base_url, set } => node::cmd_node_run(&id, &base_url, &set),
+            NodeAction::Run { id, base_url, set, prompt } => node::cmd_node_run(&id, &base_url, &set, prompt),
             NodeAction::Export { id, format, base_url } => {
                 node::cmd_node_export(&id, &format, base_url.as_deref())
             }
@@ -1132,8 +1132,8 @@ fn execute_api_command(action: ApiCommands) {
             FlowAction::Create { name, ai } => flow::cmd_flow_create(&name, ai.as_deref()),
             FlowAction::List => flow::cmd_flow_list(),
             FlowAction::Show { id } => flow::cmd_flow_show(&id),
-            FlowAction::Run { id, base_url, output } => flow::cmd_flow_run(&id, base_url.as_deref(), output.as_deref()),
-            FlowAction::RunAll { base_url, output } => flow::cmd_flow_run_all(base_url.as_deref(), output.as_deref()),
+            FlowAction::Run { id, base_url, set, output } => flow::cmd_flow_run(&id, base_url.as_deref(), &set, output.as_deref()),
+            FlowAction::RunAll { base_url, set, output } => flow::cmd_flow_run_all(base_url.as_deref(), &set, output.as_deref()),
             FlowAction::Remove { id } => flow::cmd_flow_remove(&id),
             FlowAction::Merge { flow1, flow2, join_at, name } => {
                 flow::cmd_flow_merge(&flow1, &flow2, &join_at, &name)
@@ -1163,6 +1163,16 @@ fn execute_api_command(action: ApiCommands) {
 
         ApiCommands::Import { spec, flow, base_url, prefix, dry_run } => {
             import::cmd_import(&spec, flow.as_deref(), base_url.as_deref(), prefix.as_deref(), dry_run);
+        }
+
+        ApiCommands::Env { action } => {
+            use crate::api::commands::env;
+            match action {
+                EnvAction::List => env::cmd_env_list(),
+                EnvAction::Set { key, value } => env::cmd_env_set(&key, &value),
+                EnvAction::Delete { key } => env::cmd_env_delete(&key),
+                EnvAction::Get { key, reveal } => env::cmd_env_get(&key, reveal),
+            }
         }
     }
 }

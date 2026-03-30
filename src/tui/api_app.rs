@@ -78,6 +78,29 @@ pub enum LiveEvent {
     NeedInput { node_id: String, inputs: Vec<PromptInput> },
 }
 
+// ── Step detail modal ─────────────────────────────────────────────────────────
+
+pub struct StepDetailModal {
+    pub step: crate::api::types::StepResult,
+    pub scroll: usize,
+}
+
+// ── Node field editor ─────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum NodeField {
+    Name,
+    Path,
+    Method,
+    Description,
+}
+
+pub struct NodeFieldEditor {
+    pub node_id: String,
+    pub field: NodeField,
+    pub input: String,
+}
+
 // ── Body editor ───────────────────────────────────────────────────────────────
 
 pub struct BodyEditor {
@@ -217,6 +240,13 @@ pub struct ApiApp {
 
     // ── Body editor modal ─────────────────────────────────────────────────
     pub body_editor: Option<BodyEditor>,
+
+    // ── Step detail modal (Live Execution tab) ────────────────────────────
+    pub live_selected_step: usize,
+    pub step_detail: Option<StepDetailModal>,
+
+    // ── Node field editor modal (Node Library tab) ────────────────────────
+    pub node_field_editor: Option<NodeFieldEditor>,
 }
 
 impl ApiApp {
@@ -294,6 +324,9 @@ impl ApiApp {
             prompt_modal: None,
             prompt_reply_tx: None,
             body_editor: None,
+            live_selected_step: 0,
+            step_detail: None,
+            node_field_editor: None,
         }
     }
 
@@ -503,6 +536,8 @@ impl ApiApp {
         self.live_running = true;
         self.flow_running = true;
         self.run_error = None;
+        self.live_selected_step = 0;
+        self.step_detail = None;
 
         // Create reply channel for prompt answers
         let (reply_tx, reply_rx) = mpsc::sync_channel::<HashMap<String, serde_json::Value>>(1);
@@ -514,6 +549,7 @@ impl ApiApp {
             let tx_prompt = tx.clone();
             let result = execute_flow(&flow, &nodes, FlowExecuteOptions {
                 base_url,
+                initial_context: std::collections::HashMap::new(),
                 on_step: Some(Box::new(move |step| {
                     tx.send(LiveEvent::Step(step.clone())).ok();
                 })),
@@ -551,6 +587,8 @@ impl ApiApp {
         self.live_running = true;
         self.flow_running = true;
         self.run_error = None;
+        self.live_selected_step = 0;
+        self.step_detail = None;
 
         // Create reply channel for prompt answers
         let (reply_tx, reply_rx) = mpsc::sync_channel::<HashMap<String, serde_json::Value>>(1);
@@ -848,6 +886,120 @@ impl ApiApp {
         }
     }
 
+    fn handle_live_key(&mut self, key: KeyEvent) {
+        // If modal is open, handle scroll/close
+        if let Some(ref mut modal) = self.step_detail {
+            match key.code {
+                KeyCode::Esc | KeyCode::Char('q') => { self.step_detail = None; }
+                KeyCode::Up   => { if modal.scroll > 0 { modal.scroll -= 1; } }
+                KeyCode::Down => { modal.scroll += 1; }
+                KeyCode::Home => { modal.scroll = 0; }
+                _ => {}
+            }
+            return;
+        }
+
+        let step_count = if self.live_steps.is_empty() {
+            self.last_run.as_ref().map(|r| r.steps.len()).unwrap_or(0)
+        } else {
+            self.live_steps.len()
+        };
+
+        match key.code {
+            KeyCode::Up => {
+                if self.live_selected_step > 0 { self.live_selected_step -= 1; }
+            }
+            KeyCode::Down => {
+                if self.live_selected_step + 1 < step_count { self.live_selected_step += 1; }
+            }
+            KeyCode::Enter | KeyCode::Char(' ') => {
+                let steps: Vec<_> = if self.live_steps.is_empty() {
+                    self.last_run.as_ref().map(|r| r.steps.clone()).unwrap_or_default()
+                } else {
+                    self.live_steps.clone()
+                };
+                if let Some(step) = steps.get(self.live_selected_step) {
+                    self.step_detail = Some(StepDetailModal { step: step.clone(), scroll: 0 });
+                }
+            }
+            _ => {}
+        }
+    }
+
+    pub fn open_node_field_editor(&mut self, field: NodeField) {
+        let mut node_ids: Vec<String> = self.nodes.keys().cloned().collect();
+        node_ids.sort();
+        let node_id = match node_ids.get(self.selected_index.min(node_ids.len().saturating_sub(1))) {
+            Some(id) => id.clone(),
+            None => return,
+        };
+        let initial = match &field {
+            NodeField::Name => self.nodes.get(&node_id).map(|n| n.name.clone()).unwrap_or_default(),
+            NodeField::Path => self.nodes.get(&node_id).map(|n| n.path.clone()).unwrap_or_default(),
+            NodeField::Description => self.nodes.get(&node_id).and_then(|n| n.description.clone()).unwrap_or_default(),
+            NodeField::Method => self.nodes.get(&node_id).map(|n| n.method.clone()).unwrap_or_default(),
+        };
+        self.node_field_editor = Some(NodeFieldEditor { node_id, field, input: initial });
+    }
+
+    pub fn cycle_node_method(&mut self) {
+        let methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"];
+        let mut node_ids: Vec<String> = self.nodes.keys().cloned().collect();
+        node_ids.sort();
+        let node_id = match node_ids.get(self.selected_index.min(node_ids.len().saturating_sub(1))) {
+            Some(id) => id.clone(),
+            None => return,
+        };
+        if let Some(node) = self.nodes.get_mut(&node_id) {
+            let curr_idx = methods.iter().position(|&m| m == node.method.as_str()).unwrap_or(0);
+            node.method = methods[(curr_idx + 1) % methods.len()].to_string();
+            let node_clone = node.clone();
+            match crate::api::storage::save_node(&node_clone) {
+                Ok(_) => self.notify(&format!("Method → {}", node_clone.method)),
+                Err(e) => self.notify(&format!("Save failed: {}", e)),
+            }
+        }
+    }
+
+    pub fn handle_node_field_editor_key(&mut self, key: KeyEvent) {
+        let editor = match self.node_field_editor.as_mut() {
+            Some(e) => e,
+            None => return,
+        };
+        match key.code {
+            KeyCode::Esc => { self.node_field_editor = None; }
+            KeyCode::Backspace => { editor.input.pop(); }
+            KeyCode::Enter => {
+                // Save
+                let node_id = editor.node_id.clone();
+                let field = editor.field.clone();
+                let value = editor.input.clone();
+                self.node_field_editor = None;
+
+                if let Some(node) = self.nodes.get_mut(&node_id) {
+                    match field {
+                        NodeField::Name => node.name = value,
+                        NodeField::Path => {
+                            let path = if value.starts_with('/') { value } else { format!("/{}", value) };
+                            node.path = path;
+                        }
+                        NodeField::Description => {
+                            node.description = if value.is_empty() { None } else { Some(value) };
+                        }
+                        NodeField::Method => {} // handled by cycle
+                    }
+                    let node_clone = node.clone();
+                    match crate::api::storage::save_node(&node_clone) {
+                        Ok(_) => self.notify("Node saved"),
+                        Err(e) => self.notify(&format!("Save failed: {}", e)),
+                    }
+                }
+            }
+            KeyCode::Char(c) => { editor.input.push(c); }
+            _ => {}
+        }
+    }
+
     pub fn handle_key(&mut self, key: KeyEvent) {
         // Prompt modal intercepts all keys
         if self.prompt_modal.is_some() {
@@ -855,9 +1007,21 @@ impl ApiApp {
             return;
         }
 
+        // Step detail modal intercepts all keys (before body editor check)
+        if self.step_detail.is_some() {
+            self.handle_live_key(key);
+            return;
+        }
+
         // Body editor intercepts all keys
         if self.body_editor.is_some() {
             self.handle_body_editor_key(key);
+            return;
+        }
+
+        // Node field editor intercepts all keys
+        if self.node_field_editor.is_some() {
+            self.handle_node_field_editor_key(key);
             return;
         }
 
@@ -928,6 +1092,7 @@ impl ApiApp {
             ApiView::FlowGraph => self.handle_graph_key(key),
             ApiView::NodeLibrary => self.handle_node_library_key(key),
             ApiView::Overview => self.handle_overview_key(key),
+            ApiView::LiveExecution => self.handle_live_key(key),
             ApiView::RunDiff => {
                 match key.code {
                     KeyCode::Char('d') => self.load_comparison_run(),
@@ -995,9 +1160,11 @@ impl ApiApp {
                     self.start_node_run(&node_id);
                 }
             }
-            KeyCode::Char('b') => {
-                self.open_body_editor();
-            }
+            KeyCode::Char('b') => { self.open_body_editor(); }
+            KeyCode::Char('n') => { self.open_node_field_editor(NodeField::Name); }
+            KeyCode::Char('p') => { self.open_node_field_editor(NodeField::Path); }
+            KeyCode::Char('d') => { self.open_node_field_editor(NodeField::Description); }
+            KeyCode::Char('m') => { self.cycle_node_method(); }
             _ => self.handle_list_key(key, max),
         }
     }

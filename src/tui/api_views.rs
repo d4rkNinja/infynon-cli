@@ -9,7 +9,7 @@ use ratatui::{
 };
 
 use crate::api::types::{FlowRunResult, ProbeSeverity, StepResult};
-use crate::tui::api_app::{ApiApp, ApiView, AttachMode, BodyEditor, GraphNode, PromptModal};
+use crate::tui::api_app::{ApiApp, ApiView, AttachMode, BodyEditor, GraphNode, NodeField, NodeFieldEditor, PromptModal, StepDetailModal};
 use crate::tui::theme::*;
 
 // ── Top-level render ─────────────────────────────────────────────────────────
@@ -62,6 +62,8 @@ pub fn render(f: &mut Frame, app: &mut ApiApp) {
         render_prompt_modal(f, app, area);
     }
     render_body_editor(f, app, area);
+    render_step_detail_modal(f, app, area);
+    render_node_field_editor_modal(f, app, area);
 }
 
 // ── Header: info bar ─────────────────────────────────────────────────────────
@@ -584,15 +586,25 @@ fn render_live_execution(f: &mut Frame, app: &ApiApp, area: Rect) {
 
     let title = if app.flow_running { " Live Execution ⟳ RUNNING... " } else if app.live_running { " Live Execution ⟳ " } else { " Last Run " };
 
+    let mut list_state = ListState::default();
+    if !steps.is_empty() {
+        list_state.select(Some(app.live_selected_step.min(steps.len().saturating_sub(1))));
+    }
+
     let list = List::new(items)
         .block(
             Block::default()
                 .title(Span::styled(title, title_style()))
+                .title_bottom(Span::styled(
+                    " ↑↓ navigate  Enter: inspect step  ",
+                    Style::default().fg(DIMMER),
+                ))
                 .borders(Borders::ALL)
                 .border_style(border_style()),
-        );
+        )
+        .highlight_style(selected_style());
 
-    f.render_widget(list, area);
+    f.render_stateful_widget(list, area, &mut list_state);
 }
 
 // ── View 4: Latency Profiler ──────────────────────────────────────────────────
@@ -1137,7 +1149,14 @@ fn render_node_library(f: &mut Frame, app: &ApiApp, area: Rect) {
     };
 
     let mut list_state = ListState::default();
-    list_state.select(Some(app.selected_index.min(filtered.len().saturating_sub(1))));
+    let selected_clamped = app.selected_index.min(filtered.len().saturating_sub(1));
+    list_state.select(Some(selected_clamped));
+
+    // Split into left list + right detail panel
+    let panes = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
+        .split(area);
 
     let list = List::new(items)
         .block(
@@ -1147,7 +1166,7 @@ fn render_node_library(f: &mut Frame, app: &ApiApp, area: Rect) {
                     title_style(),
                 ))
                 .title_bottom(Span::styled(
-                    " Enter/r: run  b: edit body  ↑↓: navigate  /: search ",
+                    " Enter/r: run  n: name  p: path  m: method  b: body  d: desc  ↑↓: nav  /: search ",
                     Style::default().fg(DIMMER),
                 ))
                 .borders(Borders::ALL)
@@ -1155,7 +1174,184 @@ fn render_node_library(f: &mut Frame, app: &ApiApp, area: Rect) {
         )
         .highlight_style(selected_style());
 
-    f.render_stateful_widget(list, area, &mut list_state);
+    f.render_stateful_widget(list, panes[0], &mut list_state);
+
+    // Right pane: node detail
+    let selected_node = filtered.get(selected_clamped).map(|(id, node)| (*id, *node));
+    render_node_library_detail(f, app, selected_node, panes[1]);
+}
+
+fn render_node_library_detail(
+    f: &mut Frame,
+    app: &ApiApp,
+    selected: Option<(&String, &crate::api::types::Node)>,
+    area: Rect,
+) {
+    let (node_id, node) = match selected {
+        Some(p) => p,
+        None => {
+            let p = Paragraph::new(vec![
+                Line::raw(""),
+                Line::from(vec![Span::styled("  No node selected.", dim_style())]),
+            ])
+            .block(
+                Block::default()
+                    .title(Span::styled(" Node Details ", title_style()))
+                    .borders(Borders::ALL)
+                    .border_style(border_style()),
+            );
+            f.render_widget(p, area);
+            return;
+        }
+    };
+
+    let mut lines: Vec<Line> = vec![Line::raw("")];
+
+    // Name + ID
+    lines.push(Line::from(vec![
+        Span::styled("  ", Style::default()),
+        Span::styled(&node.name, Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled(format!("  {}", node_id), Style::default().fg(DIMMER)),
+    ]));
+
+    // Method + Path
+    let method_color = match node.method.as_str() {
+        "GET"    => GREEN,
+        "POST"   => CYAN,
+        "PUT"    => YELLOW,
+        "PATCH"  => ORANGE,
+        "DELETE" => RED,
+        _ => WHITE,
+    };
+    lines.push(Line::raw(""));
+    lines.push(Line::from(vec![
+        Span::styled(format!("  {}", node.method), Style::default().fg(method_color).add_modifier(Modifier::BOLD)),
+        Span::styled("  ", Style::default()),
+        Span::styled(&node.path, Style::default().fg(WHITE)),
+    ]));
+
+    // Description
+    if let Some(desc) = &node.description {
+        if !desc.is_empty() {
+            lines.push(Line::raw(""));
+            lines.push(Line::from(vec![
+                Span::styled("  ", Style::default()),
+                Span::styled(desc, Style::default().fg(TEXT_DIM)),
+            ]));
+        }
+    }
+
+    // Headers
+    if !node.headers.is_empty() {
+        lines.push(Line::raw(""));
+        lines.push(Line::from(vec![Span::styled("  ── Headers ──────────────────────", Style::default().fg(DIMMER))]));
+        for (k, v) in &node.headers {
+            let v_display = if v.len() > 28 { format!("{}…", &v[..27]) } else { v.clone() };
+            lines.push(Line::from(vec![
+                Span::styled(format!("  {:<20}", truncate(k, 20)), Style::default().fg(TEXT_DIM)),
+                Span::styled(v_display, Style::default().fg(DIM)),
+            ]));
+        }
+    }
+
+    // Body
+    if let Some(body) = &node.body_json {
+        if !body.is_empty() {
+            lines.push(Line::raw(""));
+            lines.push(Line::from(vec![Span::styled("  ── Body ─────────────────────────", Style::default().fg(DIMMER))]));
+            let pretty = serde_json::from_str::<serde_json::Value>(body)
+                .map(|v| serde_json::to_string_pretty(&v).unwrap_or_else(|_| body.clone()))
+                .unwrap_or_else(|_| body.clone());
+            for owned_line in pretty.lines().take(8).map(|l| l.to_string()).collect::<Vec<_>>() {
+                lines.push(Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled(owned_line, Style::default().fg(ratatui::style::Color::Rgb(200, 200, 180))),
+                ]));
+            }
+        }
+    }
+
+    // Assertions
+    if !node.assertions.is_empty() {
+        lines.push(Line::raw(""));
+        lines.push(Line::from(vec![
+            Span::styled(format!("  ── Assertions ({}) ─────────────────", node.assertions.len()), Style::default().fg(DIMMER)),
+        ]));
+        for a in &node.assertions {
+            let (icon, col, enabled) = if a.enabled { ("✔", GREEN, true) } else { ("✘", DIM, false) };
+            lines.push(Line::from(vec![
+                Span::styled(format!("  {} ", icon), Style::default().fg(col)),
+                Span::styled(
+                    truncate(&a.check, 30),
+                    if enabled { Style::default().fg(TEXT) } else { Style::default().fg(DIMMER) },
+                ),
+            ]));
+        }
+    }
+
+    // Extractions
+    if !node.extractions.is_empty() {
+        lines.push(Line::raw(""));
+        lines.push(Line::from(vec![
+            Span::styled(format!("  ── Extractions ({}) ────────────────", node.extractions.len()), Style::default().fg(DIMMER)),
+        ]));
+        for e in &node.extractions {
+            lines.push(Line::from(vec![
+                Span::styled(format!("  {:<16}", truncate(&e.name, 16)), Style::default().fg(CYAN)),
+                Span::styled(" ← ", Style::default().fg(DIMMER)),
+                Span::styled(truncate(&e.from, 20), Style::default().fg(TEXT_DIM)),
+            ]));
+        }
+    }
+
+    // Prompt inputs
+    if !node.prompt_inputs.is_empty() {
+        lines.push(Line::raw(""));
+        lines.push(Line::from(vec![
+            Span::styled(format!("  ── Prompt Inputs ({}) ──────────────", node.prompt_inputs.len()), Style::default().fg(DIMMER)),
+        ]));
+        for pi in &node.prompt_inputs {
+            let secret_tag = if pi.secret { "  secret" } else { "" };
+            lines.push(Line::from(vec![
+                Span::styled(format!("  {:<14}", truncate(&pi.var, 14)), Style::default().fg(CYAN)),
+                Span::styled(format!("\"{}\"", truncate(&pi.label, 14)), Style::default().fg(TEXT_DIM)),
+                Span::styled(secret_tag, Style::default().fg(DIMMER)),
+            ]));
+        }
+    }
+
+    // Edit hints
+    lines.push(Line::raw(""));
+    lines.push(Line::from(vec![Span::styled("  ── Edit ─────────────────────────", Style::default().fg(DIMMER))]));
+    lines.push(Line::from(vec![
+        Span::styled("  n", Style::default().fg(YELLOW)),
+        Span::styled(" name  ", Style::default().fg(DIM)),
+        Span::styled("p", Style::default().fg(YELLOW)),
+        Span::styled(" path  ", Style::default().fg(DIM)),
+        Span::styled("m", Style::default().fg(YELLOW)),
+        Span::styled(" method", Style::default().fg(DIM)),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled("  b", Style::default().fg(YELLOW)),
+        Span::styled(" body  ", Style::default().fg(DIM)),
+        Span::styled("d", Style::default().fg(YELLOW)),
+        Span::styled(" desc  ", Style::default().fg(DIM)),
+        Span::styled("Enter", Style::default().fg(YELLOW)),
+        Span::styled(" run", Style::default().fg(DIM)),
+    ]));
+
+    let p = Paragraph::new(lines)
+        .block(
+            Block::default()
+                .title(Span::styled(" Node Details ", title_style()))
+                .borders(Borders::ALL)
+                .border_style(border_style()),
+        )
+        .wrap(Wrap { trim: false });
+
+    f.render_widget(p, area);
 }
 
 // ── Overlays ──────────────────────────────────────────────────────────────────
@@ -1708,6 +1904,200 @@ fn render_body_editor(f: &mut Frame, app: &ApiApp, area: Rect) {
     let title = format!(" ◆ Edit Body — {} ({} lines) ", editor.node_id, line_count);
 
     let p = Paragraph::new(content_lines)
+        .block(
+            Block::default()
+                .title(Span::styled(title, Style::default().fg(CYAN).add_modifier(Modifier::BOLD)))
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(CYAN)),
+        );
+
+    f.render_widget(p, overlay);
+}
+
+// ── Step detail modal ─────────────────────────────────────────────────────────
+
+fn render_step_detail_modal(f: &mut Frame, app: &ApiApp, area: Rect) {
+    use ratatui::style::Color;
+    let modal = match &app.step_detail {
+        Some(m) => m,
+        None => return,
+    };
+    let step = &modal.step;
+
+    // Near-full-screen overlay
+    let w = area.width.saturating_sub(4).max(60);
+    let h = area.height.saturating_sub(2).max(20);
+    let x = area.x + (area.width.saturating_sub(w)) / 2;
+    let y = area.y + (area.height.saturating_sub(h)) / 2;
+    let overlay = Rect { x, y, width: w, height: h };
+    f.render_widget(Clear, overlay);
+
+    let mut lines: Vec<Line> = vec![];
+
+    // Header row
+    let status_str = step.status_code.map(|s| s.to_string()).unwrap_or_else(|| "ERR".to_string());
+    let status_color = match step.status_code {
+        Some(s) if s < 300 => Color::Green,
+        Some(s) if s < 400 => Color::Yellow,
+        Some(_) => Color::Red,
+        None => Color::Red,
+    };
+    lines.push(Line::raw(""));
+    lines.push(Line::from(vec![
+        Span::styled("  Status  ", Style::default().fg(Color::Rgb(100, 100, 140))),
+        Span::styled(&status_str, Style::default().fg(status_color).add_modifier(Modifier::BOLD)),
+        Span::styled("   Method  ", Style::default().fg(Color::Rgb(100, 100, 140))),
+        Span::styled(&step.method, Style::default().fg(Color::Yellow)),
+        Span::styled("   Time  ", Style::default().fg(Color::Rgb(100, 100, 140))),
+        Span::styled(format!("{}ms", step.duration_ms), Style::default().fg(Color::White)),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled("  URL     ", Style::default().fg(Color::Rgb(100, 100, 140))),
+        Span::styled(&step.url, Style::default().fg(Color::Cyan)),
+    ]));
+    lines.push(Line::raw(""));
+
+    // Error
+    if let Some(err) = &step.error {
+        lines.push(Line::from(vec![Span::styled("  ── Error ──────────────────────────────────", Style::default().fg(Color::Red))]));
+        for chunk in err.chars().collect::<Vec<_>>().chunks(w.saturating_sub(6) as usize) {
+            let s: String = chunk.iter().collect();
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(s, Style::default().fg(Color::Red)),
+            ]));
+        }
+        lines.push(Line::raw(""));
+    }
+
+    // Assertions
+    if !step.assertion_results.is_empty() {
+        lines.push(Line::from(vec![Span::styled("  ── Assertions ─────────────────────────────", Style::default().fg(Color::Rgb(100, 100, 140)))]));
+        for ar in &step.assertion_results {
+            let (icon, col) = if ar.passed {
+                ("  ✔ ", Color::Green)
+            } else {
+                ("  ✘ ", Color::Red)
+            };
+            lines.push(Line::from(vec![
+                Span::styled(icon, Style::default().fg(col)),
+                Span::styled(&ar.check, Style::default().fg(col)),
+                Span::styled(format!("  →  {}", ar.actual), Style::default().fg(Color::Rgb(130, 130, 130))),
+            ]));
+        }
+        lines.push(Line::raw(""));
+    }
+
+    // Extracted variables
+    if !step.extracted.is_empty() {
+        lines.push(Line::from(vec![Span::styled("  ── Extracted Variables ─────────────────────", Style::default().fg(Color::Rgb(100, 100, 140)))]));
+        for (k, v) in &step.extracted {
+            lines.push(Line::from(vec![
+                Span::styled(format!("  {:<20}", k), Style::default().fg(Color::Cyan)),
+                Span::styled(v.to_string(), Style::default().fg(Color::White)),
+            ]));
+        }
+        lines.push(Line::raw(""));
+    }
+
+    // Request body
+    if let Some(req_body) = &step.request_body {
+        if !req_body.is_empty() {
+            lines.push(Line::from(vec![Span::styled("  ── Request Body ───────────────────────────", Style::default().fg(Color::Rgb(100, 100, 140)))]));
+            let pretty = serde_json::from_str::<serde_json::Value>(req_body)
+                .map(|v| serde_json::to_string_pretty(&v).unwrap_or_else(|_| req_body.clone()))
+                .unwrap_or_else(|_| req_body.clone());
+            for owned_line in pretty.lines().take(20).map(|l| l.to_string()).collect::<Vec<_>>() {
+                lines.push(Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled(owned_line, Style::default().fg(Color::Rgb(200, 200, 180))),
+                ]));
+            }
+            lines.push(Line::raw(""));
+        }
+    }
+
+    // Response body
+    if let Some(resp_body) = &step.response_body {
+        if !resp_body.is_empty() {
+            lines.push(Line::from(vec![Span::styled("  ── Response Body ──────────────────────────", Style::default().fg(Color::Rgb(100, 100, 140)))]));
+            let pretty = serde_json::from_str::<serde_json::Value>(resp_body)
+                .map(|v| serde_json::to_string_pretty(&v).unwrap_or_else(|_| resp_body.clone()))
+                .unwrap_or_else(|_| resp_body.clone());
+            for owned_line in pretty.lines().take(40).map(|l| l.to_string()).collect::<Vec<_>>() {
+                lines.push(Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled(owned_line, Style::default().fg(Color::Rgb(180, 220, 180))),
+                ]));
+            }
+            lines.push(Line::raw(""));
+        }
+    }
+
+    // Scroll
+    let scroll = modal.scroll.min(lines.len().saturating_sub(1));
+
+    let title = format!(" ◆ Step Details — {} ", step.node_id);
+    let p = Paragraph::new(lines)
+        .block(
+            Block::default()
+                .title(Span::styled(title, Style::default().fg(CYAN).add_modifier(Modifier::BOLD)))
+                .title_bottom(Span::styled(
+                    " ↑↓ scroll  Esc close ",
+                    Style::default().fg(Color::Rgb(80, 80, 120)),
+                ))
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(CYAN)),
+        )
+        .scroll((scroll as u16, 0));
+
+    f.render_widget(p, overlay);
+}
+
+// ── Node field editor modal ───────────────────────────────────────────────────
+
+fn render_node_field_editor_modal(f: &mut Frame, app: &ApiApp, area: Rect) {
+    use ratatui::style::Color;
+    let editor = match &app.node_field_editor {
+        Some(e) => e,
+        None => return,
+    };
+
+    let label = match editor.field {
+        NodeField::Name => "Node Name",
+        NodeField::Path => "Request Path",
+        NodeField::Description => "Description",
+        NodeField::Method => "Method",
+    };
+
+    let w = (area.width * 55 / 100).max(50).min(area.width.saturating_sub(4));
+    let h = 7u16;
+    let x = area.x + (area.width.saturating_sub(w)) / 2;
+    let y = area.y + (area.height.saturating_sub(h)) / 2;
+    let overlay = Rect { x, y, width: w, height: h };
+
+    f.render_widget(Clear, overlay);
+
+    let lines = vec![
+        Line::raw(""),
+        Line::from(vec![
+            Span::styled(format!("  {}:  ", label), Style::default().fg(Color::Rgb(150, 150, 200))),
+        ]),
+        Line::raw(""),
+        Line::from(vec![
+            Span::styled("  › ", Style::default().fg(Color::Rgb(100, 100, 140))),
+            Span::styled(&editor.input, Style::default().fg(Color::Yellow)),
+            Span::styled("▌", Style::default().fg(Color::Cyan)),
+        ]),
+        Line::raw(""),
+        Line::from(vec![Span::styled(
+            "  Enter to save  Esc to cancel",
+            Style::default().fg(Color::Rgb(80, 80, 120)),
+        )]),
+    ];
+
+    let title = format!(" ◆ Edit {} ", label);
+    let p = Paragraph::new(lines)
         .block(
             Block::default()
                 .title(Span::styled(title, Style::default().fg(CYAN).add_modifier(Modifier::BOLD)))

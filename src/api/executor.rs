@@ -164,6 +164,8 @@ pub fn execute_node(
 
 pub struct FlowExecuteOptions {
     pub base_url: String,
+    /// Pre-seeded context variables injected before the first node runs (e.g. from --set flags).
+    pub initial_context: HashMap<String, Value>,
     /// Called after each step so callers (TUI, CLI) can show live progress.
     pub on_step: Option<Box<dyn Fn(&StepResult)>>,
     /// Called before a node fires if that node has prompt_inputs.
@@ -181,7 +183,7 @@ pub fn execute_flow(
     let started_at = Utc::now();
     let run_id = format!("{}", started_at.timestamp_millis());
 
-    let mut context: HashMap<String, Value> = HashMap::new();
+    let mut context: HashMap<String, Value> = opts.initial_context.clone();
     let mut steps: Vec<StepResult> = Vec::new();
     let mut overall_passed = true;
 

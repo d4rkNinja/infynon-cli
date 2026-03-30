@@ -206,6 +206,7 @@ pub fn cmd_ai_probe(flow_id: &str, base_url_override: Option<&str>) {
         &nodes,
         FlowExecuteOptions {
             base_url: base_url.clone(),
+            initial_context: std::collections::HashMap::new(),
             on_step: None,
             on_prompt: None,
         },
