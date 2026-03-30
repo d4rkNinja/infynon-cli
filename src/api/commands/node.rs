@@ -272,7 +272,7 @@ pub fn cmd_node_list() {
 
     if nodes.is_empty() {
         println!();
-        println!("  No nodes yet. Create one with: infynon api node create");
+        println!("  No nodes yet. Create one with: infynon weave node create");
         println!();
         return;
     }
