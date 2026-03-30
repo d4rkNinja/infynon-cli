@@ -301,7 +301,9 @@ pub enum FirewallCommands {
     /// Manually trigger nightly intelligence pipeline immediately
     UpdateIntel,
 
-    /// Weave — node-based API flow testing & security probes TUI
+    /// Weave — node-based API flow testing, context-threading, and security probe TUI.
+    /// Model your API as a directed graph of HTTP nodes, thread variables between requests,
+    /// run security probes, and inspect results live. All state stored in .infynon/api/.
     #[command(name = "weave")]
     Api {
         #[command(subcommand)]
@@ -313,78 +315,109 @@ pub enum FirewallCommands {
 
 #[derive(Subcommand, Debug)]
 pub enum ApiCommands {
-    /// Open the TUI dashboard (flow graph, live execution, security probes)
+    /// Open the Weave interactive TUI dashboard with 10 tabs:
+    /// 1=Overview  2=Flow Graph  3=Live Execution  4=Latency Profiler
+    /// 5=Security Probes  6=Coverage Map  7=State Inspector  8=Run Diff
+    /// 9=Node Library  0=Config.
+    /// From the Overview (tab 1) press Enter/a to run a flow.
+    /// From the Node Library (tab 9) press Enter/r to run a single node.
     #[command(name = "tui")]
     Tui {
-        /// Flow ID to open (optional — defaults to overview)
+        /// Flow ID to open directly (skips overview). Omit to start at the overview.
         #[arg(value_name = "FLOW_ID")]
         flow_id: Option<String>,
     },
 
-    /// Node management
+    /// Manage individual HTTP request nodes — create, inspect, run, clone, export,
+    /// and control assertions. Nodes are the building blocks of flows.
     #[command(name = "node")]
     Node {
         #[command(subcommand)]
         action: NodeAction,
     },
 
-    /// Flow management
+    /// Manage flows — ordered graphs of connected nodes that run end-to-end.
+    /// Create flows manually, via AI description, or by importing an OpenAPI spec.
     #[command(name = "flow")]
     Flow {
         #[command(subcommand)]
         action: FlowAction,
     },
 
-    /// Attach two nodes (creates an edge in all relevant flows)
+    /// Connect two nodes with a directed edge so the flow executes FROM → TO.
+    /// Extracted variables from FROM are available in TO via {var_name} placeholders.
+    /// Use --carry to forward specific variables; --condition to make the edge conditional.
+    /// Example: infynon weave attach login get-profile --carry token,user_id
     #[command(name = "attach")]
     Attach {
-        /// Source node ID
+        /// ID of the source node (executes first)
         from: String,
-        /// Target node ID
+        /// ID of the target node (executes after FROM completes)
         to: String,
-        /// Variables to carry across the edge (comma-separated)
-        #[arg(long, value_delimiter = ',')]
+        /// Comma-separated list of variable names to carry from FROM into TO's context.
+        /// If omitted, all extracted variables from FROM are available in TO.
+        #[arg(long, value_delimiter = ',', value_name = "VAR,...")]
         carry: Vec<String>,
-        /// Only follow this edge if condition is true (e.g. "status == 201")
+        /// Only traverse this edge when the expression is true (e.g. "status == 201").
+        /// Supports: status ==/</>= N, body.field == value, header.name contains text.
         #[arg(long, value_name = "EXPR")]
         condition: Option<String>,
-        /// Let AI infer what to carry
+        /// Ask AI to infer which variables should be carried across this edge
+        /// based on the FROM node's extractions and the TO node's placeholders.
         #[arg(long)]
         ai: bool,
     },
 
-    /// Remove edge between two nodes
+    /// Remove the directed edge between two nodes, breaking their execution link.
+    /// The nodes themselves are NOT deleted — only the connection is removed.
+    /// Example: infynon weave detach login get-profile
     #[command(name = "detach")]
     Detach {
+        /// ID of the source node
         from: String,
+        /// ID of the target node
         to: String,
     },
 
-    /// AI-powered operations
+    /// AI-powered assistance: suggest next nodes, auto-build flows, run security probes,
+    /// generate assertions, explain failures, and suggest conditional branches.
     #[command(name = "ai")]
     Ai {
         #[command(subcommand)]
         action: AiAction,
     },
 
-    /// Validate all nodes and flows — check for missing references, invalid fields
+    /// Validate all nodes and flows in .infynon/api/ and report any issues.
+    /// Checks: node IDs, HTTP methods, path format, body JSON validity, extraction prefixes,
+    /// flow entry node existence, edge node existence, and circular references.
+    /// Exits with code 1 if any errors are found — safe to use in CI pipelines.
+    /// Example: infynon weave validate
     Validate,
 
-    /// Import nodes from an OpenAPI or Swagger spec file
+    /// Import HTTP nodes from an OpenAPI 3.x or Swagger 2.x spec file.
+    /// Reads .yaml, .yml, or .json. Auto-generates node IDs, body templates with
+    /// {field_name} placeholders, variable extractions from response schemas,
+    /// status assertions, and Authorization headers for non-auth endpoints.
+    /// Use --dry-run to preview without writing any files.
+    /// Example: infynon weave import openapi.yaml --flow "My Flow" --prefix /api/v1
     #[command(name = "import")]
     Import {
-        /// Path to OpenAPI/Swagger spec file (.yaml, .yml, .json)
+        /// Path to the OpenAPI 3.x or Swagger 2.x spec file (.yaml, .yml, or .json)
         spec: String,
-        /// Create a flow from the imported nodes
+        /// If provided, automatically create a flow containing all imported nodes,
+        /// with AI-inferred execution order. Value is the human-readable flow name.
         #[arg(long, value_name = "FLOW_NAME")]
         flow: Option<String>,
-        /// Override base URL (default: from spec servers[0].url)
-        #[arg(long)]
+        /// Override the base URL from the spec (default: spec's servers[0].url).
+        /// Useful when the spec points to production but you want to test staging.
+        #[arg(long, value_name = "URL")]
         base_url: Option<String>,
-        /// Only import paths matching this prefix (e.g. /api/v1)
-        #[arg(long)]
+        /// Only import endpoints whose path starts with this prefix.
+        /// Example: --prefix /api/v1  (skips /health, /internal, etc.)
+        #[arg(long, value_name = "PREFIX")]
         prefix: Option<String>,
-        /// Preview what would be imported without saving anything
+        /// Preview all endpoints that would be imported without saving any files.
+        /// Shows node IDs, methods, paths, assertion counts, and extraction counts.
         #[arg(long)]
         dry_run: bool,
     },
@@ -392,51 +425,78 @@ pub enum ApiCommands {
 
 #[derive(Subcommand, Debug)]
 pub enum NodeAction {
-    /// Create a new node (interactive or from --ai description)
+    /// Create a new HTTP request node interactively or from an AI description.
+    /// Interactive wizard prompts for: ID, name, method, path, body, headers,
+    /// variable extractions (e.g. token=body.access_token), and assertions.
+    /// Use --ai to skip the wizard and let AI generate the node from plain English.
+    /// Example: infynon weave node create --ai "POST /api/users with name and email fields"
     Create {
-        /// Let AI generate the node from a description
+        /// Generate the node from a plain-English description instead of the interactive wizard.
+        /// AI will infer method, path, body schema, extractions, and assertions automatically.
         #[arg(long, value_name = "DESCRIPTION")]
         ai: Option<String>,
     },
-    /// Show full details of a node
+    /// Show the full definition of a node: method, path, headers, body template,
+    /// variable extractions, assertions (with enabled/disabled status), and description.
+    /// Example: infynon weave node get login
     Get {
+        /// Node ID to inspect
         id: String,
     },
-    /// List all nodes in the library
+    /// List all nodes saved in .infynon/api/nodes/ with their method, path, and ID.
+    /// Reads both .toml and .yaml/.yml files automatically.
     List,
-    /// Remove a node
+    /// Permanently delete a node from .infynon/api/nodes/.
+    /// Any flows referencing this node will become invalid — run `infynon weave validate` afterward.
     Remove {
+        /// Node ID to delete
         id: String,
     },
-    /// Clone a node with a new ID
+    /// Duplicate an existing node under a new ID. All fields (headers, body, assertions,
+    /// extractions) are copied. Useful for creating variations of an existing request.
+    /// Example: infynon weave node clone create-user create-admin-user
     Clone {
+        /// ID of the node to copy
         id: String,
+        /// ID for the new duplicate node (kebab-case recommended)
         new_id: String,
     },
-    /// Execute a single node in isolation
+    /// Execute a single node in isolation against a live server and print the result.
+    /// Shows status code, response body, assertion pass/fail, and extracted variables.
+    /// Use --set to inject context variables into {placeholder} fields in the request.
+    /// Example: infynon weave node run get-profile --base-url http://localhost:4000 --set token=abc123
     Run {
+        /// Node ID to execute
         id: String,
-        /// Base URL for the request
+        /// Base URL prepended to the node's path (e.g. http://localhost:3000)
         #[arg(long, default_value = "http://localhost:3000")]
         base_url: String,
-        /// Set context variables (key=value)
+        /// Inject context variables as KEY=VALUE pairs. Used to fill {placeholder} fields
+        /// in the request path, headers, or body. Repeat for multiple variables.
+        /// Example: --set token=abc123 --set user_id=42
         #[arg(long, value_name = "KEY=VALUE", value_parser = parse_key_val)]
         set: Vec<(String, String)>,
     },
-    /// Export a node as curl command or JSON
+    /// Export a node as a ready-to-run curl command or raw JSON definition.
+    /// curl format includes all headers and body. json format outputs the full node schema.
+    /// Example: infynon weave node export login --format curl --base-url http://localhost:3000
     Export {
+        /// Node ID to export
         id: String,
-        /// Output format: curl | json
+        /// Export format: curl (ready-to-run shell command) | json (raw node definition)
         #[arg(long, default_value = "curl")]
         format: String,
-        /// Base URL for the exported command
-        #[arg(long)]
+        /// Base URL to use in the exported curl command (omit to use a placeholder)
+        #[arg(long, value_name = "URL")]
         base_url: Option<String>,
     },
-    /// Enable or disable an assertion on a node
+    /// Manage test assertions on a node — list, add, remove, enable, disable, or toggle.
+    /// Assertions verify the response (status code, body fields, headers) after each run.
+    /// Disabled assertions are skipped at runtime but preserved for later re-enabling.
+    /// Example: infynon weave node assertion login list
     #[command(name = "assertion")]
     Assertion {
-        /// Node ID
+        /// Node ID whose assertions you want to manage
         node_id: String,
         #[command(subcommand)]
         action: AssertionAction,
@@ -445,71 +505,121 @@ pub enum NodeAction {
 
 #[derive(Subcommand, Debug)]
 pub enum AssertionAction {
-    /// List assertions with enabled/disabled status
+    /// Show all assertions on the node with their index, enabled/disabled status,
+    /// expression, and on_fail action (stop | warn).
+    /// Example: infynon weave node assertion login list
     List,
-    /// Enable an assertion by index (0-based)
-    Enable { index: usize },
-    /// Disable an assertion by index (0-based)
-    Disable { index: usize },
-    /// Toggle an assertion by index
-    Toggle { index: usize },
-    /// Add a new assertion
+    /// Re-enable a previously disabled assertion so it runs again during flow execution.
+    /// Use `list` first to find the index.
+    /// Example: infynon weave node assertion login enable 2
+    Enable {
+        /// Zero-based index of the assertion to enable (see `list` for indices)
+        index: usize
+    },
+    /// Disable an assertion so it is skipped during flow execution without deleting it.
+    /// Useful for temporarily bypassing a failing check while debugging.
+    /// Example: infynon weave node assertion login disable 1
+    Disable {
+        /// Zero-based index of the assertion to disable (see `list` for indices)
+        index: usize
+    },
+    /// Flip the enabled/disabled state of an assertion.
+    /// If it was enabled it becomes disabled, and vice versa.
+    /// Example: infynon weave node assertion login toggle 0
+    Toggle {
+        /// Zero-based index of the assertion to toggle (see `list` for indices)
+        index: usize
+    },
+    /// Add a new assertion to the node. Expressions support:
+    ///   status == 200 | status >= 200 | body exists | body.field == "value"
+    ///   body.count > 0 | header.content-type contains application/json
+    /// on_fail controls flow behavior: stop (halt the flow) | warn (log and continue).
+    /// Example: infynon weave node assertion login add "status == 200" --on-fail stop
     Add {
-        /// Assertion expression (e.g. "status == 200")
+        /// Assertion expression to evaluate against the response (e.g. "status == 200")
         check: String,
+        /// What to do when this assertion fails: stop (halt execution) | warn (log and continue)
         #[arg(long, default_value = "stop")]
         on_fail: String,
     },
-    /// Remove an assertion by index
-    Remove { index: usize },
+    /// Permanently delete an assertion from the node by its index.
+    /// Use `list` first to confirm the correct index before removing.
+    /// Example: infynon weave node assertion login remove 2
+    Remove {
+        /// Zero-based index of the assertion to delete (see `list` for indices)
+        index: usize
+    },
 }
 
 #[derive(Subcommand, Debug)]
 pub enum FlowAction {
-    /// Create a new flow
+    /// Create a new named flow (empty graph). Add nodes to it with `infynon weave attach`.
+    /// Use --ai to describe the flow in plain English and let AI build the node graph.
+    /// Example: infynon weave flow create "User Onboarding" --ai "register, verify email, login"
     Create {
-        /// Flow name
+        /// Human-readable name for the flow (e.g. "User Onboarding Flow")
         name: String,
-        /// Let AI build the flow from a description
+        /// Build the flow automatically from a plain-English description.
+        /// AI will select nodes from your library, connect them, and infer carry variables.
         #[arg(long, value_name = "DESCRIPTION")]
         ai: Option<String>,
     },
-    /// List all flows
+    /// List all flows saved in .infynon/api/flows/ with their ID, name, entry node,
+    /// and total node count.
     List,
-    /// Show a flow's graph
+    /// Print the directed graph of a flow: node IDs, edges, carry variables, and conditions.
+    /// Useful for understanding execution order before running.
+    /// Example: infynon weave flow show onboarding-flow
     Show {
+        /// Flow ID to display
         id: String,
     },
-    /// Run a specific flow
+    /// Execute all nodes in a flow in order, threading extracted variables between them.
+    /// Prints a live step-by-step table: node, status, assertions passed/failed, extracted vars.
+    /// Use --output to save a report to ./reports/ as markdown and/or PDF.
+    /// Example: infynon weave flow run onboarding-flow --base-url http://localhost:4000 --output both
     Run {
+        /// Flow ID to execute
         id: String,
-        /// Override base URL
-        #[arg(long)]
+        /// Base URL prepended to every node's path (e.g. http://staging.example.com).
+        /// Overrides the flow's stored base_url if set.
+        #[arg(long, value_name = "URL")]
         base_url: Option<String>,
-        /// Save run report: markdown | pdf | both
+        /// Save a run report to ./reports/<flow-id>-<timestamp>.<ext>.
+        /// Formats: markdown | pdf | both
         #[arg(long, value_name = "FORMAT")]
         output: Option<String>,
     },
-    /// Run all flows
+    /// Execute every flow in .infynon/api/flows/ in sequence and summarize results.
+    /// Useful for full regression testing or CI checks across all API scenarios.
+    /// Example: infynon weave flow run-all --base-url $API_URL --output markdown
     RunAll {
-        #[arg(long)]
+        /// Base URL prepended to every node's path in every flow.
+        #[arg(long, value_name = "URL")]
         base_url: Option<String>,
-        /// Save run report: markdown | pdf | both
+        /// Save a combined run report for all flows: markdown | pdf | both
         #[arg(long, value_name = "FORMAT")]
         output: Option<String>,
     },
-    /// Delete a flow (nodes are not deleted)
+    /// Delete a flow definition from .infynon/api/flows/.
+    /// The individual nodes referenced by this flow are NOT deleted.
+    /// Example: infynon weave flow remove old-flow
     Remove {
+        /// Flow ID to delete
         id: String,
     },
-    /// Merge two flows into one
+    /// Combine two flows into a single new flow by connecting FLOW2's entry node
+    /// to a node in FLOW1. The resulting merged flow runs FLOW1 then FLOW2.
+    /// Example: infynon weave flow merge auth-flow data-flow --join-at login --name full-journey
     Merge {
+        /// ID of the first (upstream) flow
         flow1: String,
+        /// ID of the second (downstream) flow — its entry is attached to --join-at
         flow2: String,
-        /// Node ID where flow2 is attached to flow1
-        #[arg(long)]
+        /// Node ID in FLOW1 that FLOW2's entry node will be connected to
+        #[arg(long, value_name = "NODE_ID")]
         join_at: String,
-        /// Name for the merged flow
+        /// Name for the resulting merged flow
         #[arg(long, default_value = "merged-flow")]
         name: String,
     },
@@ -517,49 +627,75 @@ pub enum FlowAction {
 
 #[derive(Subcommand, Debug)]
 pub enum AiAction {
-    /// Suggest the next node after a given node
+    /// Analyze a node's role in the flow and suggest the best next node to add after it.
+    /// AI considers the node's extractions, path, and method to recommend a logical continuation.
+    /// Example: infynon weave ai suggest --after login
     Suggest {
+        /// Node ID to suggest a follow-up for
         #[arg(long, value_name = "NODE_ID")]
         after: String,
     },
-    /// Automatically attach the best next node
+    /// Automatically pick the best next node from your library and attach it after the given node.
+    /// AI infers which variables to carry across the new edge. Optionally scoped to one flow.
+    /// Example: infynon weave ai attach --after login --flow onboarding-flow
     Attach {
+        /// Node ID to attach a new node after
         #[arg(long, value_name = "NODE_ID")]
         after: String,
-        /// Only update this flow
-        #[arg(long)]
+        /// Scope the attachment to a specific flow (omit to update all flows)
+        #[arg(long, value_name = "FLOW_ID")]
         flow: Option<String>,
     },
-    /// Add unconnected nodes to a flow automatically
+    /// Find nodes in your library that are not yet connected to any flow and add them
+    /// to the specified flow in a logical order inferred by AI.
+    /// Example: infynon weave ai complete onboarding-flow
     Complete {
+        /// Flow ID to add unconnected nodes into
         flow_id: String,
     },
-    /// Run security probes on a flow
+    /// Run automated security probes against a flow: SQL injection, XSS, auth bypass,
+    /// IDOR, path traversal, rate-limit testing, and more. Results shown in tab 5 of the TUI.
+    /// Example: infynon weave ai probe onboarding-flow --base-url http://localhost:3000
     Probe {
+        /// Flow ID to probe
         flow_id: String,
-        #[arg(long)]
+        /// Base URL to send probe requests to
+        #[arg(long, value_name = "URL")]
         base_url: Option<String>,
     },
-    /// Build a flow from a list of node IDs
+    /// Build a new flow from an explicit ordered list of node IDs. AI will infer carry variables
+    /// and edge conditions between them. Useful when you know the order but want AI to wire them up.
+    /// Example: infynon weave ai build-flow --nodes login,get-profile,create-post --name user-journey
     BuildFlow {
+        /// Comma-separated ordered list of node IDs to connect into a flow
         #[arg(long, value_delimiter = ',', value_name = "NODE_IDS")]
         nodes: Vec<String>,
+        /// Name for the generated flow (used as both ID and display name)
         #[arg(long, default_value = "ai-generated-flow")]
         name: String,
     },
-    /// Explain why the last run of a flow failed
+    /// Analyze a flow's run output and explain in plain English why it failed,
+    /// which assertion broke, what the actual vs expected values were, and how to fix it.
+    /// Example: infynon weave ai explain onboarding-flow --run 0
     Explain {
+        /// Flow ID whose run history to explain
         flow_id: String,
-        /// Which run to explain (0 = most recent)
+        /// Index of the run to explain (0 = most recent, 1 = second most recent, etc.)
         #[arg(long, default_value = "0")]
         run: usize,
     },
-    /// Generate assertions for a node
+    /// Inspect a node's response schema and generate meaningful assertions automatically.
+    /// AI checks for common fields (id, token, status, error) and adds typed assertions.
+    /// Example: infynon weave ai assert login
     Assert {
+        /// Node ID to generate assertions for
         node_id: String,
     },
-    /// Suggest conditional branches for a node
+    /// Analyze a node's possible response codes and suggest conditional edges for each branch.
+    /// For example: a 201 edge to the next step and a 409 edge to a conflict-handler node.
+    /// Example: infynon weave ai branch create-user
     Branch {
+        /// Node ID to suggest branches for
         node_id: String,
     },
 }
