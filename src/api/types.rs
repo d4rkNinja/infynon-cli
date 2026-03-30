@@ -2,6 +2,24 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 
+// ── PromptInput ───────────────────────────────────────────────────────────────
+
+/// A variable that is requested interactively from the user before the node fires.
+/// Useful for OTPs, 2FA codes, captcha responses, dynamic passwords, etc.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromptInput {
+    /// Variable name — value is injected as {var} in path/headers/body
+    pub var: String,
+    /// Label shown to the user when prompting (e.g. "OTP code", "Admin password")
+    pub label: String,
+    /// If true, mask the input with * characters (for passwords/tokens)
+    #[serde(default)]
+    pub secret: bool,
+    /// Optional pre-filled default value (user can accept or override)
+    #[serde(default)]
+    pub default: Option<String>,
+}
+
 // ── Node ─────────────────────────────────────────────────────────────────────
 
 /// A single API call — the atomic unit of a flow.
@@ -24,6 +42,9 @@ pub struct Node {
     pub tags: Vec<String>,
     #[serde(default)]
     pub description: Option<String>,
+    /// Variables requested interactively from the user before the node fires.
+    #[serde(default)]
+    pub prompt_inputs: Vec<PromptInput>,
 }
 
 impl Node {
@@ -39,6 +60,7 @@ impl Node {
             assertions: vec![],
             tags: vec![],
             description: None,
+            prompt_inputs: vec![],
         }
     }
 }

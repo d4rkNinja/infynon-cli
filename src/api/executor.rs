@@ -8,7 +8,7 @@ use chrono::Utc;
 
 use crate::api::assertions;
 use crate::api::types::{
-    Assertion, Edge, Extraction, FlowRunResult, Node, OnFail, StepResult,
+    Assertion, Edge, Extraction, FlowRunResult, Node, OnFail, PromptInput, StepResult,
 };
 use crate::api::variables;
 
@@ -26,22 +26,36 @@ fn http_client() -> Client {
 
 /// Execute a single node with the given context variables and base URL.
 /// Returns a StepResult with extracted variables, assertion results, and timing.
+/// If `on_prompt` is provided and the node has `prompt_inputs`, the callback is called
+/// before the request is sent to collect user-supplied values.
 pub fn execute_node(
     node: &Node,
     context: &HashMap<String, Value>,
     base_url: &str,
+    on_prompt: Option<&(dyn Fn(&str, &[PromptInput]) -> HashMap<String, Value> + Send)>,
 ) -> StepResult {
     let client = http_client();
 
+    // Collect prompt inputs if the node has any
+    let mut context = context.clone();
+    if !node.prompt_inputs.is_empty() {
+        if let Some(prompt_fn) = on_prompt {
+            let prompted = prompt_fn(&node.id, &node.prompt_inputs);
+            for (k, v) in prompted {
+                context.insert(k, v);
+            }
+        }
+    }
+
     // Substitute variables into path, headers, body
-    let path = variables::substitute_path(&node.path, context);
+    let path = variables::substitute_path(&node.path, &context);
     let url = format!("{}{}", base_url.trim_end_matches('/'), path);
-    let headers = variables::substitute_headers(&node.headers, context);
+    let headers = variables::substitute_headers(&node.headers, &context);
 
     let body_value: Option<Value> = node
         .body_json
         .as_deref()
-        .map(|tmpl| variables::substitute_body(tmpl, context));
+        .map(|tmpl| variables::substitute_body(tmpl, &context));
 
     // Build request
     let method = node.method.to_uppercase();
@@ -152,6 +166,9 @@ pub struct FlowExecuteOptions {
     pub base_url: String,
     /// Called after each step so callers (TUI, CLI) can show live progress.
     pub on_step: Option<Box<dyn Fn(&StepResult)>>,
+    /// Called before a node fires if that node has prompt_inputs.
+    /// Receives the node ID and the list of inputs; must return a map of var → value.
+    pub on_prompt: Option<Box<dyn Fn(&str, &[PromptInput]) -> HashMap<String, Value> + Send>>,
 }
 
 /// Execute an entire flow, threading context through edges.
@@ -209,7 +226,7 @@ pub fn execute_flow(
         };
 
         // Execute the node
-        let step = execute_node(node, &context, &opts.base_url);
+        let step = execute_node(node, &context, &opts.base_url, opts.on_prompt.as_deref());
 
         if let Some(cb) = &opts.on_step {
             cb(&step);

@@ -4,7 +4,7 @@ use std::sync::mpsc;
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::api::storage;
-use crate::api::types::{Flow, FlowRunResult, Node, SecurityProbeResult, StepResult};
+use crate::api::types::{Flow, FlowRunResult, Node, PromptInput, SecurityProbeResult, StepResult};
 
 // ── Views ─────────────────────────────────────────────────────────────────────
 
@@ -75,6 +75,58 @@ pub enum LiveEvent {
     Step(StepResult),
     Done { passed: bool },
     Error(String),
+    NeedInput { node_id: String, inputs: Vec<PromptInput> },
+}
+
+// ── Body editor ───────────────────────────────────────────────────────────────
+
+pub struct BodyEditor {
+    pub node_id: String,
+    pub lines: Vec<String>,   // content split by newlines
+    pub cursor_row: usize,
+    pub cursor_col: usize,
+    pub scroll_top: usize,    // vertical scroll for long bodies
+}
+
+impl BodyEditor {
+    pub fn new(node_id: String, body_json: Option<&str>) -> Self {
+        let content = body_json
+            .map(|b| {
+                // Pretty-print if valid JSON, else keep raw
+                serde_json::from_str::<serde_json::Value>(b)
+                    .map(|v| serde_json::to_string_pretty(&v).unwrap_or_else(|_| b.to_string()))
+                    .unwrap_or_else(|_| b.to_string())
+            })
+            .unwrap_or_else(|| "{}".to_string());
+        let lines: Vec<String> = content.lines().map(|l| l.to_string()).collect();
+        let lines = if lines.is_empty() { vec![String::new()] } else { lines };
+        Self { node_id, lines, cursor_row: 0, cursor_col: 0, scroll_top: 0 }
+    }
+
+    pub fn to_string(&self) -> String {
+        self.lines.join("\n")
+    }
+
+    // Current line length
+    pub fn current_line_len(&self) -> usize {
+        self.lines.get(self.cursor_row).map(|l| l.len()).unwrap_or(0)
+    }
+}
+
+// ── Prompt modal ──────────────────────────────────────────────────────────────
+
+pub struct PromptModal {
+    pub node_id: String,
+    pub inputs: Vec<PromptInput>,
+    pub values: Vec<String>,       // one entry per input, same order
+    pub current_field: usize,      // which field is being edited
+}
+
+impl PromptModal {
+    pub fn new(node_id: String, inputs: Vec<PromptInput>) -> Self {
+        let len = inputs.len();
+        Self { node_id, inputs, values: vec![String::new(); len], current_field: 0 }
+    }
 }
 
 // ── Attach mode state ─────────────────────────────────────────────────────────
@@ -158,6 +210,13 @@ pub struct ApiApp {
     pub default_base_url: String,
     pub config_editing_url: bool,
     pub config_url_input: String,
+
+    // ── Prompt input modal ────────────────────────────────────────────────
+    pub prompt_modal: Option<PromptModal>,
+    pub prompt_reply_tx: Option<mpsc::SyncSender<HashMap<String, serde_json::Value>>>,
+
+    // ── Body editor modal ─────────────────────────────────────────────────
+    pub body_editor: Option<BodyEditor>,
 }
 
 impl ApiApp {
@@ -232,6 +291,9 @@ impl ApiApp {
             default_base_url: "http://localhost:3000".to_string(),
             config_editing_url: false,
             config_url_input: String::new(),
+            prompt_modal: None,
+            prompt_reply_tx: None,
+            body_editor: None,
         }
     }
 
@@ -442,13 +504,26 @@ impl ApiApp {
         self.flow_running = true;
         self.run_error = None;
 
+        // Create reply channel for prompt answers
+        let (reply_tx, reply_rx) = mpsc::sync_channel::<HashMap<String, serde_json::Value>>(1);
+        self.prompt_reply_tx = Some(reply_tx);
+
         std::thread::spawn(move || {
             use crate::api::executor::{execute_flow, FlowExecuteOptions};
             let tx2 = tx.clone();
+            let tx_prompt = tx.clone();
             let result = execute_flow(&flow, &nodes, FlowExecuteOptions {
                 base_url,
                 on_step: Some(Box::new(move |step| {
                     tx.send(LiveEvent::Step(step.clone())).ok();
+                })),
+                on_prompt: Some(Box::new(move |node_id: &str, inputs: &[crate::api::types::PromptInput]| {
+                    tx_prompt.send(LiveEvent::NeedInput {
+                        node_id: node_id.to_string(),
+                        inputs: inputs.to_vec(),
+                    }).ok();
+                    // Block until the TUI sends back the values
+                    reply_rx.recv().unwrap_or_default()
                 })),
             });
             tx2.send(LiveEvent::Done { passed: result.passed }).ok();
@@ -477,11 +552,23 @@ impl ApiApp {
         self.flow_running = true;
         self.run_error = None;
 
+        // Create reply channel for prompt answers
+        let (reply_tx, reply_rx) = mpsc::sync_channel::<HashMap<String, serde_json::Value>>(1);
+        self.prompt_reply_tx = Some(reply_tx);
+
         std::thread::spawn(move || {
             use crate::api::executor::execute_node;
             use std::collections::HashMap;
             let context: HashMap<String, serde_json::Value> = HashMap::new();
-            let step = execute_node(&node, &context, &base_url);
+            let tx_prompt = tx.clone();
+            let on_prompt = move |node_id: &str, inputs: &[crate::api::types::PromptInput]| {
+                tx_prompt.send(LiveEvent::NeedInput {
+                    node_id: node_id.to_string(),
+                    inputs: inputs.to_vec(),
+                }).ok();
+                reply_rx.recv().unwrap_or_default()
+            };
+            let step = execute_node(&node, &context, &base_url, Some(&on_prompt));
             let passed = step.passed;
             tx.send(LiveEvent::Step(step)).ok();
             tx.send(LiveEvent::Done { passed }).ok();
@@ -514,6 +601,7 @@ impl ApiApp {
                     self.live_running = false;
                     self.flow_running = false;
                     self.run_rx = None;
+                    self.prompt_reply_tx = None;
                     self.notify(if passed { "Flow passed ✔" } else { "Flow failed ✘" });
                     self.refresh_data();
                     // Auto-save report if config flags are set
@@ -535,7 +623,12 @@ impl ApiApp {
                     self.flow_running = false;
                     self.run_error = Some(e);
                     self.run_rx = None;
+                    self.prompt_reply_tx = None;
                     break;
+                }
+                LiveEvent::NeedInput { node_id, inputs } => {
+                    self.prompt_modal = Some(PromptModal::new(node_id, inputs));
+                    // Don't break — keep polling (the run is paused waiting for reply)
                 }
             }
         }
@@ -553,7 +646,221 @@ impl ApiApp {
 
     // ── Key handler ───────────────────────────────────────────────────────
 
+    pub fn handle_prompt_modal_key(&mut self, key: KeyEvent) {
+        let modal = match self.prompt_modal.as_mut() {
+            Some(m) => m,
+            None => return,
+        };
+        match key.code {
+            KeyCode::Char(c) => {
+                let idx = modal.current_field;
+                modal.values[idx].push(c);
+            }
+            KeyCode::Backspace => {
+                let idx = modal.current_field;
+                modal.values[idx].pop();
+            }
+            KeyCode::Tab | KeyCode::Down => {
+                let next = (modal.current_field + 1) % modal.inputs.len();
+                modal.current_field = next;
+            }
+            KeyCode::Up => {
+                if modal.current_field > 0 {
+                    modal.current_field -= 1;
+                } else {
+                    modal.current_field = modal.inputs.len().saturating_sub(1);
+                }
+            }
+            KeyCode::Enter => {
+                let last = modal.inputs.len().saturating_sub(1);
+                if modal.current_field < last {
+                    modal.current_field += 1;
+                } else {
+                    // Submit
+                    let mut map: HashMap<String, serde_json::Value> = HashMap::new();
+                    for (i, pi) in modal.inputs.iter().enumerate() {
+                        let raw = modal.values.get(i).cloned().unwrap_or_default();
+                        let val = if raw.is_empty() {
+                            pi.default.clone().unwrap_or_default()
+                        } else {
+                            raw
+                        };
+                        map.insert(pi.var.clone(), serde_json::Value::String(val));
+                    }
+                    if let Some(tx) = self.prompt_reply_tx.take() {
+                        tx.send(map).ok();
+                    }
+                    self.prompt_modal = None;
+                }
+            }
+            KeyCode::Esc => {
+                // Cancel — send empty map so the background thread unblocks
+                if let Some(tx) = self.prompt_reply_tx.take() {
+                    tx.send(HashMap::new()).ok();
+                }
+                self.prompt_modal = None;
+            }
+            _ => {}
+        }
+    }
+
+    pub fn open_body_editor(&mut self) {
+        let mut node_ids: Vec<String> = self.nodes.keys().cloned().collect();
+        node_ids.sort();
+        let node_id = match node_ids.get(self.selected_index.min(node_ids.len().saturating_sub(1))) {
+            Some(id) => id.clone(),
+            None => return,
+        };
+        let body = self.nodes.get(&node_id).and_then(|n| n.body_json.as_deref());
+        self.body_editor = Some(BodyEditor::new(node_id, body));
+    }
+
+    pub fn handle_body_editor_key(&mut self, key: KeyEvent) {
+        use crossterm::event::KeyModifiers;
+        let editor = match self.body_editor.as_mut() {
+            Some(e) => e,
+            None => return,
+        };
+
+        match key.code {
+            KeyCode::Esc => {
+                self.body_editor = None;
+            }
+            KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                // Save body to node
+                let content = editor.to_string();
+                let node_id = editor.node_id.clone();
+                self.body_editor = None;
+
+                if let Some(node) = self.nodes.get_mut(&node_id) {
+                    // Validate JSON (compact it for storage)
+                    let body_val = serde_json::from_str::<serde_json::Value>(&content).ok();
+                    node.body_json = Some(body_val
+                        .map(|v| serde_json::to_string(&v).unwrap_or(content.clone()))
+                        .unwrap_or(content));
+                    let node_clone = node.clone();
+                    match crate::api::storage::save_node(&node_clone) {
+                        Ok(_) => self.notify("Body saved"),
+                        Err(e) => self.notify(&format!("Save failed: {}", e)),
+                    }
+                }
+            }
+            KeyCode::Enter => {
+                // Split current line at cursor
+                let rest = {
+                    let line = editor.lines.get_mut(editor.cursor_row).unwrap();
+                    let rest = line[editor.cursor_col..].to_string();
+                    line.truncate(editor.cursor_col);
+                    rest
+                };
+                editor.cursor_row += 1;
+                editor.cursor_col = 0;
+                editor.lines.insert(editor.cursor_row, rest);
+            }
+            KeyCode::Backspace => {
+                if editor.cursor_col > 0 {
+                    let line = editor.lines.get_mut(editor.cursor_row).unwrap();
+                    editor.cursor_col -= 1;
+                    line.remove(editor.cursor_col);
+                } else if editor.cursor_row > 0 {
+                    // Merge with previous line
+                    let current = editor.lines.remove(editor.cursor_row);
+                    editor.cursor_row -= 1;
+                    editor.cursor_col = editor.lines[editor.cursor_row].len();
+                    editor.lines[editor.cursor_row].push_str(&current);
+                }
+            }
+            KeyCode::Delete => {
+                let line_len = editor.current_line_len();
+                if editor.cursor_col < line_len {
+                    editor.lines[editor.cursor_row].remove(editor.cursor_col);
+                } else if editor.cursor_row + 1 < editor.lines.len() {
+                    // Merge next line into current
+                    let next = editor.lines.remove(editor.cursor_row + 1);
+                    editor.lines[editor.cursor_row].push_str(&next);
+                }
+            }
+            KeyCode::Left => {
+                if editor.cursor_col > 0 {
+                    editor.cursor_col -= 1;
+                } else if editor.cursor_row > 0 {
+                    editor.cursor_row -= 1;
+                    editor.cursor_col = editor.current_line_len();
+                }
+            }
+            KeyCode::Right => {
+                let len = editor.current_line_len();
+                if editor.cursor_col < len {
+                    editor.cursor_col += 1;
+                } else if editor.cursor_row + 1 < editor.lines.len() {
+                    editor.cursor_row += 1;
+                    editor.cursor_col = 0;
+                }
+            }
+            KeyCode::Up => {
+                if editor.cursor_row > 0 {
+                    editor.cursor_row -= 1;
+                    editor.cursor_col = editor.cursor_col.min(editor.current_line_len());
+                    // Adjust scroll
+                    if editor.cursor_row < editor.scroll_top {
+                        editor.scroll_top = editor.cursor_row;
+                    }
+                }
+            }
+            KeyCode::Down => {
+                if editor.cursor_row + 1 < editor.lines.len() {
+                    editor.cursor_row += 1;
+                    editor.cursor_col = editor.cursor_col.min(editor.current_line_len());
+                }
+            }
+            KeyCode::Home => {
+                editor.cursor_col = 0;
+            }
+            KeyCode::End => {
+                editor.cursor_col = editor.current_line_len();
+            }
+            KeyCode::Char(c) => {
+                // Insert character at cursor
+                if editor.lines.is_empty() {
+                    editor.lines.push(String::new());
+                }
+                editor.lines[editor.cursor_row].insert(editor.cursor_col, c);
+                editor.cursor_col += 1;
+            }
+            KeyCode::Tab => {
+                // Insert 2 spaces
+                for _ in 0..2 {
+                    editor.lines[editor.cursor_row].insert(editor.cursor_col, ' ');
+                    editor.cursor_col += 1;
+                }
+            }
+            _ => {}
+        }
+
+        // Adjust scroll_top so cursor stays visible (assume ~20 visible lines)
+        let visible_lines = 20usize;
+        let editor = self.body_editor.as_mut().unwrap();
+        if editor.cursor_row >= editor.scroll_top + visible_lines {
+            editor.scroll_top = editor.cursor_row.saturating_sub(visible_lines - 1);
+        }
+        if editor.cursor_row < editor.scroll_top {
+            editor.scroll_top = editor.cursor_row;
+        }
+    }
+
     pub fn handle_key(&mut self, key: KeyEvent) {
+        // Prompt modal intercepts all keys
+        if self.prompt_modal.is_some() {
+            self.handle_prompt_modal_key(key);
+            return;
+        }
+
+        // Body editor intercepts all keys
+        if self.body_editor.is_some() {
+            self.handle_body_editor_key(key);
+            return;
+        }
+
         // Help overlay — any key closes it
         if self.show_help {
             self.show_help = false;
@@ -687,6 +994,9 @@ impl ApiApp {
                     let node_id = node_id.clone();
                     self.start_node_run(&node_id);
                 }
+            }
+            KeyCode::Char('b') => {
+                self.open_body_editor();
             }
             _ => self.handle_list_key(key, max),
         }

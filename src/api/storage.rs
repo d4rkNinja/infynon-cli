@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::api::types::{Assertion, Edge, Flow, FlowRunResult, Node, Extraction, OnFail};
+use crate::api::types::{Assertion, Edge, Flow, FlowRunResult, Node, Extraction, OnFail, PromptInput};
 
 // ── Directory helpers ─────────────────────────────────────────────────────────
 
@@ -54,6 +54,8 @@ struct YamlNode {
     assertions: Vec<YamlAssertion>,
     #[serde(default)]
     tags: Vec<String>,
+    #[serde(default)]
+    prompt_inputs: Vec<PromptInput>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -328,6 +330,7 @@ fn convert_yaml_node(y: YamlNode) -> Node {
         assertions,
         tags: y.tags,
         description: y.description,
+        prompt_inputs: y.prompt_inputs,
     }
 }
 
@@ -404,6 +407,8 @@ struct YamlSaveNode {
     assertions: Vec<YamlSaveAssertion>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     tags: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    prompt_inputs: Vec<PromptInput>,
 }
 
 #[derive(Serialize)]
@@ -500,6 +505,7 @@ fn node_to_yaml_save(node: &Node) -> YamlSaveNode {
             enabled: a.enabled,
         }).collect(),
         tags: node.tags.clone(),
+        prompt_inputs: node.prompt_inputs.clone(),
     }
 }
 

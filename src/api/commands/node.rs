@@ -7,7 +7,7 @@ use serde_json::Value;
 use crate::api::ai;
 use crate::api::executor;
 use crate::api::storage;
-use crate::api::types::{Assertion, Edge, Extraction, Node, OnFail};
+use crate::api::types::{Assertion, Edge, Extraction, Node, OnFail, PromptInput};
 use crate::tui::logger::Logger;
 
 // ── node create ───────────────────────────────────────────────────────────────
@@ -396,8 +396,33 @@ pub fn cmd_node_run(id: &str, base_url: &str, set_vars: &[(String, String)]) {
     println!("  {}  {} {}{}", "→".bright_cyan(), node.method.bright_yellow(), base_url, node.path);
     println!();
 
-    let result = executor::execute_node(&node, &context, base_url);
+    let on_prompt = make_cli_prompt();
+    let result = executor::execute_node(&node, &context, base_url, Some(&on_prompt));
     print_step_result(&result);
+}
+
+/// Build a CLI on_prompt callback using dialoguer for interactive input.
+pub fn make_cli_prompt() -> impl Fn(&str, &[PromptInput]) -> HashMap<String, Value> {
+    |node_id: &str, inputs: &[PromptInput]| -> HashMap<String, Value> {
+        use dialoguer::{Input, Password};
+        println!("\n  Node '{}' needs input:", node_id);
+        let mut map = HashMap::new();
+        for pi in inputs {
+            let label = if pi.label.is_empty() { pi.var.clone() } else { pi.label.clone() };
+            let val: String = if pi.secret {
+                let pw = Password::new().with_prompt(format!("  {}", label));
+                pw.interact().unwrap_or_default()
+            } else {
+                let mut inp = Input::<String>::new().with_prompt(format!("  {}", label));
+                if let Some(ref d) = pi.default {
+                    inp = inp.default(d.clone());
+                }
+                inp.interact_text().unwrap_or_default()
+            };
+            map.insert(pi.var.clone(), Value::String(val));
+        }
+        map
+    }
 }
 
 fn print_step_result(step: &crate::api::types::StepResult) {
@@ -583,6 +608,84 @@ pub fn cmd_node_assertion_remove(node_id: &str, idx: usize) {
     let removed = node.assertions.remove(idx);
     match storage::save_node(&node) {
         Ok(_) => println!("  {}  Assertion [{}] removed: {}", "✔".bright_green(), idx, removed.check.bright_cyan()),
+        Err(e) => Logger::error(&e),
+    }
+}
+
+// ── node prompt commands ──────────────────────────────────────────────────────
+
+pub fn cmd_node_prompt_list(node_id: &str) {
+    println!();
+    let node = match storage::load_node(node_id) {
+        Ok(n) => n,
+        Err(e) => { Logger::error(&e); return; }
+    };
+    Logger::title(&format!("Prompt Inputs: {}", node_id), "cyan");
+    println!();
+    if node.prompt_inputs.is_empty() {
+        println!("  No prompt inputs defined.");
+        println!();
+        return;
+    }
+    for (i, pi) in node.prompt_inputs.iter().enumerate() {
+        let secret_label = if pi.secret {
+            " (secret)".bright_yellow().to_string()
+        } else {
+            String::new()
+        };
+        let default_label = if let Some(ref d) = pi.default {
+            format!(" (default: \"{}\")", d).truecolor(140, 140, 160).to_string()
+        } else {
+            String::new()
+        };
+        println!(
+            "  [{:>2}]  {}  — \"{}\"{}{}",
+            i,
+            pi.var.bright_cyan(),
+            pi.label.truecolor(200, 200, 220),
+            secret_label,
+            default_label,
+        );
+    }
+    println!();
+}
+
+pub fn cmd_node_prompt_add(
+    node_id: &str,
+    var: &str,
+    label: &str,
+    secret: bool,
+    default: Option<String>,
+) {
+    let mut node = match storage::load_node(node_id) {
+        Ok(n) => n,
+        Err(e) => { Logger::error(&e); return; }
+    };
+    let label_str = if label.is_empty() { var.to_string() } else { label.to_string() };
+    node.prompt_inputs.push(PromptInput {
+        var: var.to_string(),
+        label: label_str,
+        secret,
+        default,
+    });
+    match storage::save_node(&node) {
+        Ok(_) => println!("  {}  Prompt input '{}' added to node '{}'.", "✔".bright_green(), var.bright_cyan(), node_id.bold()),
+        Err(e) => Logger::error(&e),
+    }
+}
+
+pub fn cmd_node_prompt_remove(node_id: &str, index: usize) {
+    let mut node = match storage::load_node(node_id) {
+        Ok(n) => n,
+        Err(e) => { Logger::error(&e); return; }
+    };
+    if index >= node.prompt_inputs.len() {
+        Logger::error(&format!("Index {} out of range (0..{})", index, node.prompt_inputs.len()));
+        return;
+    }
+    let removed = node.prompt_inputs.remove(index);
+    match storage::save_node(&node) {
+        Ok(_) => println!("  {}  Prompt input [{}] removed: {}", "✔".bright_green(), index, removed.var.bright_cyan()),
         Err(e) => Logger::error(&e),
     }
 }

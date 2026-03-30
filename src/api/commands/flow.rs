@@ -238,6 +238,7 @@ pub fn cmd_flow_run(id: &str, base_url_override: Option<&str>, output: Option<&s
     println!("  {}  Nodes:  {}", "→".bright_cyan(), flow.all_node_ids().len().to_string().bright_cyan());
     println!();
 
+    let on_prompt = crate::api::commands::node::make_cli_prompt();
     let result = execute_flow(
         &flow,
         &nodes,
@@ -268,6 +269,7 @@ pub fn cmd_flow_run(id: &str, base_url_override: Option<&str>, output: Option<&s
                     println!("     {}  {}", "Error:".bright_red(), err.truecolor(220, 100, 100));
                 }
             })),
+            on_prompt: Some(Box::new(on_prompt)),
         },
     );
 

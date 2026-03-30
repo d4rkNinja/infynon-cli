@@ -501,6 +501,39 @@ pub enum NodeAction {
         #[command(subcommand)]
         action: AssertionAction,
     },
+    /// Manage runtime prompt inputs on a node — variables the user is asked to supply
+    /// interactively when the node executes (OTPs, passwords, dynamic values).
+    #[command(name = "prompt")]
+    Prompt {
+        /// Node ID
+        node_id: String,
+        #[command(subcommand)]
+        action: PromptAction,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum PromptAction {
+    /// List all prompt inputs defined on the node.
+    List,
+    /// Add a new prompt input — a variable the user is asked to supply at runtime.
+    /// The entered value is injected as {var} in the request path, headers, and body.
+    /// Example: infynon weave node prompt login add otp --label "OTP Code" --secret
+    Add {
+        /// Variable name (used as {var} placeholder in the node's path/headers/body)
+        var: String,
+        /// Human-readable label shown to the user at runtime (e.g. "OTP Code", "Admin password")
+        #[arg(long, default_value = "")]
+        label: String,
+        /// Mask user input with * characters (for passwords and tokens)
+        #[arg(long)]
+        secret: bool,
+        /// Pre-filled default value the user can accept or override
+        #[arg(long)]
+        default: Option<String>,
+    },
+    /// Remove a prompt input by its index (use `list` to find the index).
+    Remove { index: usize },
 }
 
 #[derive(Subcommand, Debug)]

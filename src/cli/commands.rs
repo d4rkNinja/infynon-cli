@@ -1,6 +1,6 @@
 use clap::Parser;
 use crate::cli::args::{
-    AiAction, ApiCommands, AssertionAction, FlowAction, NodeAction,
+    AiAction, ApiCommands, AssertionAction, FlowAction, NodeAction, PromptAction,
     PkgArgs, PkgCommands, FirewallArgs, FirewallCommands,
 };
 use crate::cli::scan::{self, run_scan, check_packages_before_install, OutputFormat, FixLevel};
@@ -1118,6 +1118,13 @@ fn execute_api_command(action: ApiCommands) {
                 AssertionAction::Toggle { index } => node::cmd_node_assertion_toggle(&node_id, index),
                 AssertionAction::Add { check, on_fail } => node::cmd_node_assertion_add(&node_id, &check, &on_fail),
                 AssertionAction::Remove { index } => node::cmd_node_assertion_remove(&node_id, index),
+            },
+            NodeAction::Prompt { node_id, action } => match action {
+                PromptAction::List => node::cmd_node_prompt_list(&node_id),
+                PromptAction::Add { var, label, secret, default } => {
+                    node::cmd_node_prompt_add(&node_id, &var, &label, secret, default)
+                }
+                PromptAction::Remove { index } => node::cmd_node_prompt_remove(&node_id, index),
             },
         },
 

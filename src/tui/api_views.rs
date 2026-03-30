@@ -9,7 +9,7 @@ use ratatui::{
 };
 
 use crate::api::types::{FlowRunResult, ProbeSeverity, StepResult};
-use crate::tui::api_app::{ApiApp, ApiView, AttachMode, GraphNode};
+use crate::tui::api_app::{ApiApp, ApiView, AttachMode, BodyEditor, GraphNode, PromptModal};
 use crate::tui::theme::*;
 
 // ── Top-level render ─────────────────────────────────────────────────────────
@@ -58,6 +58,10 @@ pub fn render(f: &mut Frame, app: &mut ApiApp) {
     if app.attach_mode != AttachMode::Idle {
         render_attach_overlay(f, app, area);
     }
+    if app.prompt_modal.is_some() {
+        render_prompt_modal(f, app, area);
+    }
+    render_body_editor(f, app, area);
 }
 
 // ── Header: info bar ─────────────────────────────────────────────────────────
@@ -1142,6 +1146,10 @@ fn render_node_library(f: &mut Frame, app: &ApiApp, area: Rect) {
                     format!(" Node Library ({} nodes){} ", app.nodes.len(), search_suffix),
                     title_style(),
                 ))
+                .title_bottom(Span::styled(
+                    " Enter/r: run  b: edit body  ↑↓: navigate  /: search ",
+                    Style::default().fg(DIMMER),
+                ))
                 .borders(Borders::ALL)
                 .border_style(border_style()),
         )
@@ -1531,6 +1539,183 @@ fn render_welcome_screen(f: &mut Frame, area: Rect) {
 
     let p = Paragraph::new(lines).wrap(Wrap { trim: false });
     f.render_widget(p, inner);
+}
+
+// ── Prompt modal ──────────────────────────────────────────────────────────────
+
+fn render_prompt_modal(f: &mut Frame, app: &ApiApp, area: Rect) {
+    let modal = match &app.prompt_modal {
+        Some(m) => m,
+        None => return,
+    };
+
+    let input_count = modal.inputs.len() as u16;
+    // height: title(1) + border(2) + subtitle(1) + blank(1) + inputs*(2 each) + footer(1) + blank(1)
+    let h = (input_count * 2 + 6).max(8).min(area.height.saturating_sub(4));
+    let w = (area.width * 60 / 100).max(50).min(area.width.saturating_sub(4));
+    let x = area.x + (area.width.saturating_sub(w)) / 2;
+    let y = area.y + (area.height.saturating_sub(h)) / 2;
+    let overlay_area = Rect { x, y, width: w, height: h };
+
+    f.render_widget(Clear, overlay_area);
+
+    let mut lines: Vec<Line> = vec![
+        Line::raw(""),
+        Line::from(vec![Span::styled(
+            "  This node needs values before it can send the request.",
+            dim_style(),
+        )]),
+        Line::raw(""),
+    ];
+
+    for (i, pi) in modal.inputs.iter().enumerate() {
+        let label = if pi.label.is_empty() { pi.var.as_str() } else { pi.label.as_str() };
+        let is_current = i == modal.current_field;
+
+        let label_style = if is_current {
+            Style::default().fg(CYAN).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(DIM)
+        };
+
+        lines.push(Line::from(vec![
+            Span::styled("  ", Style::default()),
+            Span::styled(label, label_style),
+        ]));
+
+        let raw_val = modal.values.get(i).map(|s| s.as_str()).unwrap_or("");
+        let display_val = if pi.secret {
+            "*".repeat(raw_val.len())
+        } else if raw_val.is_empty() {
+            if let Some(ref d) = pi.default {
+                format!("{} (default)", d)
+            } else {
+                String::new()
+            }
+        } else {
+            raw_val.to_string()
+        };
+
+        let cursor = if is_current { "▌" } else { "" };
+        let val_style = if is_current {
+            Style::default().fg(YELLOW)
+        } else if raw_val.is_empty() {
+            Style::default().fg(DIMMER)
+        } else {
+            Style::default().fg(WHITE)
+        };
+
+        lines.push(Line::from(vec![
+            Span::styled("  › ", dim_style()),
+            Span::styled(format!("{}{}", display_val, cursor), val_style),
+        ]));
+    }
+
+    lines.push(Line::raw(""));
+    lines.push(Line::from(vec![Span::styled(
+        "  Tab/↓ next  ↑ prev  Enter submit  Esc cancel",
+        dim_style(),
+    )]));
+
+    let title = format!(" ◆ Input Required — {} ", modal.node_id);
+    let p = Paragraph::new(lines)
+        .block(
+            Block::default()
+                .title(Span::styled(title, title_style()))
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(CYAN)),
+        );
+
+    f.render_widget(p, overlay_area);
+}
+
+// ── Body editor modal ─────────────────────────────────────────────────────────
+
+fn render_body_editor(f: &mut Frame, app: &ApiApp, area: Rect) {
+    use ratatui::style::Color;
+    let editor = match &app.body_editor {
+        Some(e) => e,
+        None => return,
+    };
+
+    // Full-screen overlay with margin
+    let w = area.width.saturating_sub(4).max(40);
+    let h = area.height.saturating_sub(4).max(10);
+    let x = area.x + (area.width.saturating_sub(w)) / 2;
+    let y = area.y + (area.height.saturating_sub(h)) / 2;
+    let overlay = Rect { x, y, width: w, height: h };
+
+    f.render_widget(Clear, overlay);
+
+    // Visible content area inside the block borders
+    let inner_h = h.saturating_sub(4) as usize; // minus title + borders + footer
+    let visible_lines = inner_h.max(1);
+
+    let scroll_top = editor.scroll_top;
+    let end = (scroll_top + visible_lines).min(editor.lines.len());
+
+    let mut content_lines: Vec<Line> = Vec::new();
+
+    for (abs_i, line) in editor.lines[scroll_top..end].iter().enumerate() {
+        let line_idx = scroll_top + abs_i;
+        let is_cursor_line = line_idx == editor.cursor_row;
+
+        let line_no = Span::styled(
+            format!("{:>3} ", line_idx + 1),
+            Style::default().fg(Color::Rgb(80, 80, 120)),
+        );
+
+        if is_cursor_line {
+            // Render cursor inline
+            let col = editor.cursor_col.min(line.len());
+            let before = &line[..col];
+            let cursor_char = if col < line.len() {
+                line.chars().nth(col).unwrap_or(' ')
+            } else {
+                ' '
+            };
+            let after = if col < line.len() { &line[col + cursor_char.len_utf8()..] } else { "" };
+
+            content_lines.push(Line::from(vec![
+                line_no,
+                Span::styled(before, Style::default().fg(Color::White)),
+                Span::styled(
+                    cursor_char.to_string(),
+                    Style::default().fg(Color::Black).bg(Color::Cyan),
+                ),
+                Span::styled(after, Style::default().fg(Color::White)),
+            ]));
+        } else {
+            content_lines.push(Line::from(vec![
+                line_no,
+                Span::styled(line.as_str(), Style::default().fg(Color::Rgb(200, 200, 220))),
+            ]));
+        }
+    }
+
+    // Padding if fewer lines than visible area
+    while content_lines.len() < visible_lines {
+        content_lines.push(Line::raw(""));
+    }
+
+    // Footer
+    content_lines.push(Line::from(vec![Span::styled(
+        "  Ctrl+S save  Esc cancel  ↑↓←→ move  Enter newline  Backspace delete",
+        Style::default().fg(Color::Rgb(100, 100, 140)),
+    )]));
+
+    let line_count = editor.lines.len();
+    let title = format!(" ◆ Edit Body — {} ({} lines) ", editor.node_id, line_count);
+
+    let p = Paragraph::new(content_lines)
+        .block(
+            Block::default()
+                .title(Span::styled(title, Style::default().fg(CYAN).add_modifier(Modifier::BOLD)))
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(CYAN)),
+        );
+
+    f.render_widget(p, overlay);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

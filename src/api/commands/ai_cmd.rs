@@ -207,6 +207,7 @@ pub fn cmd_ai_probe(flow_id: &str, base_url_override: Option<&str>) {
         FlowExecuteOptions {
             base_url: base_url.clone(),
             on_step: None,
+            on_prompt: None,
         },
     );
 

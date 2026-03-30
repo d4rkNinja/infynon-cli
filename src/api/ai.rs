@@ -369,7 +369,7 @@ fn probe_auth_bypass(
         if let Some(node) = nodes.get(&step.node_id) {
             // Execute with empty context (no auth)
             let empty_ctx = HashMap::new();
-            let result = executor::execute_node(node, &empty_ctx, base_url);
+            let result = executor::execute_node(node, &empty_ctx, base_url, None);
             let status = result.status_code.unwrap_or(0);
 
             let bypassed = status == 200 || status == 201;
@@ -424,7 +424,7 @@ fn probe_missing_rate_limit(
         let ctx: HashMap<String, serde_json::Value> = HashMap::new();
         let mut got_429 = false;
         for _ in 0..20 {
-            let result = executor::execute_node(node, &ctx, base_url);
+            let result = executor::execute_node(node, &ctx, base_url, None);
             if result.status_code == Some(429) {
                 got_429 = true;
                 break;
@@ -476,7 +476,7 @@ fn probe_sql_injection(
     for payload in &payloads {
         ctx.insert("id".to_string(), serde_json::Value::String(payload.to_string()));
         ctx.insert("user_id".to_string(), serde_json::Value::String(payload.to_string()));
-        let result = executor::execute_node(node, &ctx, base_url);
+        let result = executor::execute_node(node, &ctx, base_url, None);
         let status = result.status_code.unwrap_or(0);
 
         // A 500 suggests the payload broke the server
