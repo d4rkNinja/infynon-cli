@@ -8,11 +8,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 | File | Field | Current |
 |------|-------|---------|
-| `Cargo.toml` | `version = "..."` | `0.2.0-beta.6.6` |
-| `npm/package.json` | `"version": "..."` | `0.2.0-beta.6.6` |
-| `README.md` | version badge `shields.io/badge/version-...` | `0.2.0-beta.6.6` |
+| `Cargo.toml` | `version = "..."` | `0.2.0-beta.6.7` |
+| `npm/package.json` | `"version": "..."` | `0.2.0-beta.6.7` |
+| `README.md` | version badge `shields.io/badge/version-...` | `0.2.0-beta.6.7` |
 
-The git tag must also match: `v<version>` (e.g. `v0.2.0-beta.6.6`).
+The git tag must also match: `v<version>` (e.g. `v0.2.0-beta.6.7`).
 The CI `publish-npm` job auto-syncs the npm version from the tag, so the tag is the source of truth.
 
 ## Project Overview
