@@ -6,11 +6,21 @@ use serde_json::Value;
 
 static DOTENV: OnceLock<HashMap<String, String>> = OnceLock::new();
 
+pub fn get_placeholder_regex() -> &'static regex::Regex {
+    static PLACEHOLDER_RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    PLACEHOLDER_RE.get_or_init(|| {
+        regex::Regex::new(r"\{([A-Za-z_][A-Za-z0-9_]*)\}").unwrap()
+    })
+}
+
 fn get_dotenv() -> &'static HashMap<String, String> {
     DOTENV.get_or_init(|| {
         let mut map = HashMap::new();
-        if let Ok(content) = std::fs::read_to_string(".env") {
-            for line in content.lines() {
+        // Try .infynon/.env first (managed by `infynon weave env`), then fall back to root .env
+        let content = std::fs::read_to_string(".infynon/.env")
+            .or_else(|_| std::fs::read_to_string(".env"))
+            .unwrap_or_default();
+        for line in content.lines() {
                 let line = line.trim();
                 // Skip comments and empty lines
                 if line.is_empty() || line.starts_with('#') {
@@ -30,12 +40,11 @@ fn get_dotenv() -> &'static HashMap<String, String> {
                     }
                 }
             }
-        }
         map
     })
 }
 
-/// Look up an environment variable: first from .env file, then from actual env.
+/// Look up an environment variable: first from .infynon/.env, then process env.
 /// Returns None if not found in either.
 fn lookup_env_var(name: &str) -> Option<String> {
     let dotenv = get_dotenv();
@@ -43,6 +52,43 @@ fn lookup_env_var(name: &str) -> Option<String> {
         return Some(val.clone());
     }
     std::env::var(name).ok()
+}
+
+/// Check whether a variable name exists in the .infynon/.env file or process env.
+/// Used by the prompt system to skip asking for vars that are already set.
+pub fn env_has_var(name: &str) -> bool {
+    get_dotenv().contains_key(name) || std::env::var(name).is_ok()
+}
+
+fn substitute_env_pass(s: &str) -> String {
+    let mut output = String::with_capacity(s.len());
+    let mut i = 0;
+    let bytes = s.as_bytes();
+    while i < bytes.len() {
+        if bytes[i] == b'{' {
+            if let Some(close) = s[i..].find('}') {
+                let inner = &s[i + 1..i + close];
+                if inner.starts_with('$') {
+                    let env_name = &inner[1..];
+                    if let Some(val) = lookup_env_var(env_name) {
+                        output.push_str(&val);
+                    } else {
+                        output.push_str(&s[i..i + close + 1]);
+                    }
+                    i += close + 1;
+                    continue;
+                }
+            }
+        }
+        output.push(bytes[i] as char);
+        i += 1;
+    }
+    output
+}
+
+/// Substitute only `{$ENV_VAR}` placeholders in a string (used for label display).
+pub fn substitute_env_placeholders(s: &str) -> String {
+    substitute_env_pass(s)
 }
 
 // ── Substitution ──────────────────────────────────────────────────────────────
@@ -62,35 +108,8 @@ pub fn substitute(template: &str, context: &HashMap<String, Value>) -> String {
 }
 
 pub fn substitute_str(template: &str, context: &HashMap<String, Value>) -> String {
-    let mut result = template.to_string();
-
     // First pass: handle {$ENV_VAR} placeholders
-    let mut output = String::new();
-    let mut i = 0;
-    let bytes = result.as_bytes();
-    while i < bytes.len() {
-        if bytes[i] == b'{' {
-            // Find closing brace
-            if let Some(close) = result[i..].find('}') {
-                let inner = &result[i + 1..i + close];
-                if inner.starts_with('$') {
-                    let env_name = &inner[1..];
-                    if let Some(val) = lookup_env_var(env_name) {
-                        output.push_str(&val);
-                    } else {
-                        // Leave the placeholder as-is
-                        output.push_str(&result[i..i + close + 1]);
-                    }
-                    i += close + 1;
-                    continue;
-                }
-            }
-        }
-        output.push(bytes[i] as char);
-        i += 1;
-    }
-    // Use the env-substituted result for context substitution
-    result = output;
+    let mut result = substitute_env_pass(template);
 
     // Second pass: handle {var_name} context placeholders
     for (key, val) in context {
@@ -109,32 +128,8 @@ pub fn substitute_str(template: &str, context: &HashMap<String, Value>) -> Strin
 pub fn substitute_body(body_json: &str, context: &HashMap<String, Value>) -> Value {
     // Start with naive string substitution for string-embedded placeholders
     // (e.g. "Bearer {token}")
-    let mut substituted = body_json.to_string();
-
     // Handle {$ENV_VAR} in body
-    let mut output = String::new();
-    let bytes = substituted.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'{' {
-            if let Some(close) = substituted[i..].find('}') {
-                let inner = &substituted[i + 1..i + close];
-                if inner.starts_with('$') {
-                    let env_name = &inner[1..];
-                    if let Some(val) = lookup_env_var(env_name) {
-                        output.push_str(&val);
-                    } else {
-                        output.push_str(&substituted[i..i + close + 1]);
-                    }
-                    i += close + 1;
-                    continue;
-                }
-            }
-        }
-        output.push(bytes[i] as char);
-        i += 1;
-    }
-    substituted = output;
+    let mut substituted = substitute_env_pass(body_json);
 
     for (key, val) in context {
         let placeholder = format!("\"{{{}}}\"", key);

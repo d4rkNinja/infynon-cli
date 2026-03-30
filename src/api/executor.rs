@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::Instant;
 
 use reqwest::blocking::{Client, RequestBuilder};
@@ -14,20 +14,72 @@ use crate::api::variables;
 
 // ── HTTP client ───────────────────────────────────────────────────────────────
 
-fn http_client() -> Client {
-    Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .user_agent("infynon-api-tester/1.0")
-        .build()
-        .expect("Failed to build HTTP client")
+fn http_client() -> &'static Client {
+    static CLIENT: std::sync::OnceLock<Client> = std::sync::OnceLock::new();
+    CLIENT.get_or_init(|| {
+        Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .user_agent("infynon-api-tester/1.0")
+            .build()
+            .expect("Failed to build HTTP client")
+    })
+}
+
+// ── Prompt input helpers ──────────────────────────────────────────────────────
+
+/// Build the final list of PromptInputs to ask for a node:
+/// 1. Start with explicitly declared `node.prompt_inputs`
+/// 2. Scan path/headers/body for unresolved `{var}` placeholders not already declared
+/// 3. Filter out any var that already exists in `context` or the process env
+fn build_prompt_inputs(node: &Node, context: &HashMap<String, Value>) -> Vec<PromptInput> {
+    let re = variables::get_placeholder_regex();
+
+    // Find additional unresolved placeholders from templates
+    let mut seen: HashSet<String> = node.prompt_inputs.iter().map(|pi| pi.var.clone()).collect();
+    let mut extra: Vec<PromptInput> = Vec::new();
+
+    let scan = |text: &str, seen: &mut HashSet<String>, extra: &mut Vec<PromptInput>| {
+        for cap in re.captures_iter(text) {
+            let var = cap[1].to_string();
+            if seen.contains(&var) { continue; }
+            seen.insert(var.clone());
+            // Skip vars already in context (e.g. from --set or prior extractions)
+            if context.contains_key(&var) { continue; }
+            // Skip vars available in .infynon/.env or process env
+            if variables::env_has_var(&var) { continue; }
+            extra.push(PromptInput { var, label: String::new(), secret: false, default: None, prompt_type: crate::api::types::PromptType::Text, options: vec![] });
+        }
+    };
+
+    scan(&node.path, &mut seen, &mut extra);
+    for v in node.headers.values() { scan(v, &mut seen, &mut extra); }
+    if let Some(body) = &node.body_json { scan(body, &mut seen, &mut extra); }
+
+    // Merge: start with declared prompt_inputs (filtered to those not already resolvable),
+    // then append auto-detected extras. Substitute {$ENV} in labels for display.
+    let mut result: Vec<PromptInput> = node.prompt_inputs
+        .iter()
+        .filter(|pi| !context.contains_key(&pi.var) && !variables::env_has_var(&pi.var))
+        .map(|pi| {
+            // Resolve {$KEY} placeholders in the label so the user sees real values
+            let label = if pi.label.contains("{$") {
+                variables::substitute_env_placeholders(&pi.label)
+            } else {
+                pi.label.clone()
+            };
+            PromptInput { label, ..pi.clone() }
+        })
+        .collect();
+    result.extend(extra);
+    result
 }
 
 // ── Single node execution ─────────────────────────────────────────────────────
 
 /// Execute a single node with the given context variables and base URL.
 /// Returns a StepResult with extracted variables, assertion results, and timing.
-/// If `on_prompt` is provided and the node has `prompt_inputs`, the callback is called
-/// before the request is sent to collect user-supplied values.
+/// If `on_prompt` is provided, it is called before the request if any prompt vars
+/// are needed (declared or auto-detected from unresolved placeholders).
 pub fn execute_node(
     node: &Node,
     context: &HashMap<String, Value>,
@@ -36,11 +88,13 @@ pub fn execute_node(
 ) -> StepResult {
     let client = http_client();
 
-    // Collect prompt inputs if the node has any
+    // Collect prompt inputs — merge declared prompt_inputs with auto-detected
+    // unresolved {var} placeholders, then skip any already present in context/env.
     let mut context = context.clone();
-    if !node.prompt_inputs.is_empty() {
-        if let Some(prompt_fn) = on_prompt {
-            let prompted = prompt_fn(&node.id, &node.prompt_inputs);
+    if let Some(prompt_fn) = on_prompt {
+        let to_prompt = build_prompt_inputs(node, &context);
+        if !to_prompt.is_empty() {
+            let prompted = prompt_fn(&node.id, &to_prompt);
             for (k, v) in prompted {
                 context.insert(k, v);
             }

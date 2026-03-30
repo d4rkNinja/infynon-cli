@@ -201,6 +201,7 @@ pub fn cmd_ai_probe(flow_id: &str, base_url_override: Option<&str>) {
     println!("  {}  Running baseline flow first...", "→".bright_cyan());
 
     // Run the flow first to get a baseline
+    let on_prompt = crate::api::commands::node::make_noninteractive_prompt();
     let run_result = execute_flow(
         &flow,
         &nodes,
@@ -208,7 +209,7 @@ pub fn cmd_ai_probe(flow_id: &str, base_url_override: Option<&str>) {
             base_url: base_url.clone(),
             initial_context: std::collections::HashMap::new(),
             on_step: None,
-            on_prompt: None,
+            on_prompt: Some(Box::new(on_prompt)),
         },
     );
 

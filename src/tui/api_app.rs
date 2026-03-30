@@ -141,14 +141,53 @@ impl BodyEditor {
 pub struct PromptModal {
     pub node_id: String,
     pub inputs: Vec<PromptInput>,
-    pub values: Vec<String>,       // one entry per input, same order
-    pub current_field: usize,      // which field is being edited
+    pub values: Vec<String>,        // one entry per input, same order
+    pub current_field: usize,       // which field is being edited
+    pub option_cursors: Vec<usize>, // for select/multiselect: which option is highlighted
+    pub multi_checked: Vec<Vec<bool>>, // for multiselect: which options are checked
 }
 
 impl PromptModal {
     pub fn new(node_id: String, inputs: Vec<PromptInput>) -> Self {
+        use crate::api::types::PromptType;
         let len = inputs.len();
-        Self { node_id, inputs, values: vec![String::new(); len], current_field: 0 }
+        let mut values = Vec::with_capacity(len);
+        let mut option_cursors = Vec::with_capacity(len);
+        let mut multi_checked = Vec::with_capacity(len);
+        for pi in &inputs {
+            let default_val = match pi.prompt_type {
+                PromptType::Boolean => {
+                    pi.default.as_deref()
+                        .map(|d| if d == "true" || d == "yes" || d == "1" { "true" } else { "false" })
+                        .unwrap_or("false")
+                        .to_string()
+                }
+                PromptType::Select => {
+                    pi.default.as_deref().unwrap_or("").to_string()
+                }
+                _ => String::new(),
+            };
+            values.push(default_val);
+            let cursor = match pi.prompt_type {
+                PromptType::Select | PromptType::Multiselect => {
+                    pi.default.as_deref()
+                        .and_then(|d| pi.options.iter().position(|o| o == d))
+                        .unwrap_or(0)
+                }
+                _ => 0,
+            };
+            option_cursors.push(cursor);
+            let checked: Vec<bool> = if pi.prompt_type == PromptType::Multiselect {
+                let selected: std::collections::HashSet<&str> = pi.default.as_deref()
+                    .map(|d| d.split(',').map(|s| s.trim()).collect())
+                    .unwrap_or_default();
+                pi.options.iter().map(|o| selected.contains(o.as_str())).collect()
+            } else {
+                vec![false; pi.options.len()]
+            };
+            multi_checked.push(checked);
+        }
+        Self { node_id, inputs, values, current_field: 0, option_cursors, multi_checked }
     }
 }
 
@@ -718,62 +757,179 @@ impl ApiApp {
 
     // ── Key handler ───────────────────────────────────────────────────────
 
+    fn advance_prompt_field_or_submit(&mut self, field_count: usize) {
+        let should_submit = self.prompt_modal.as_ref()
+            .map(|m| m.current_field + 1 >= field_count)
+            .unwrap_or(false);
+        if should_submit {
+            self.submit_prompt_modal();
+        } else if let Some(modal) = self.prompt_modal.as_mut() {
+            modal.current_field += 1;
+        }
+    }
+
     pub fn handle_prompt_modal_key(&mut self, key: KeyEvent) {
-        let modal = match self.prompt_modal.as_mut() {
-            Some(m) => m,
+        use crate::api::types::PromptType;
+        let (field_count, ci, pt) = match self.prompt_modal.as_ref() {
             None => return,
+            Some(m) => {
+                let fc = m.inputs.len();
+                if fc == 0 { return; }
+                let ci = m.current_field;
+                let pt = m.inputs.get(ci).map(|p| p.prompt_type.clone()).unwrap_or(PromptType::Text);
+                (fc, ci, pt)
+            }
         };
+
         match key.code {
-            KeyCode::Char(c) => {
-                let idx = modal.current_field;
-                modal.values[idx].push(c);
-            }
-            KeyCode::Backspace => {
-                let idx = modal.current_field;
-                modal.values[idx].pop();
-            }
-            KeyCode::Tab | KeyCode::Down => {
-                let next = (modal.current_field + 1) % modal.inputs.len();
-                modal.current_field = next;
-            }
-            KeyCode::Up => {
-                if modal.current_field > 0 {
-                    modal.current_field -= 1;
-                } else {
-                    modal.current_field = modal.inputs.len().saturating_sub(1);
-                }
-            }
-            KeyCode::Enter => {
-                let last = modal.inputs.len().saturating_sub(1);
-                if modal.current_field < last {
-                    modal.current_field += 1;
-                } else {
-                    // Submit
-                    let mut map: HashMap<String, serde_json::Value> = HashMap::new();
-                    for (i, pi) in modal.inputs.iter().enumerate() {
-                        let raw = modal.values.get(i).cloned().unwrap_or_default();
-                        let val = if raw.is_empty() {
-                            pi.default.clone().unwrap_or_default()
-                        } else {
-                            raw
-                        };
-                        map.insert(pi.var.clone(), serde_json::Value::String(val));
-                    }
-                    if let Some(tx) = self.prompt_reply_tx.take() {
-                        tx.send(map).ok();
-                    }
-                    self.prompt_modal = None;
-                }
-            }
             KeyCode::Esc => {
-                // Cancel — send empty map so the background thread unblocks
-                if let Some(tx) = self.prompt_reply_tx.take() {
+                if let Some(tx) = &self.prompt_reply_tx {
                     tx.send(HashMap::new()).ok();
                 }
                 self.prompt_modal = None;
+                return;
+            }
+            KeyCode::Tab => {
+                if let Some(modal) = self.prompt_modal.as_mut() {
+                    modal.current_field = (modal.current_field + 1) % field_count;
+                }
+                return;
             }
             _ => {}
         }
+
+        match pt {
+            PromptType::Boolean => {
+                match key.code {
+                    KeyCode::Char('y') | KeyCode::Char('Y') => {
+                        if let Some(modal) = self.prompt_modal.as_mut() { modal.values[ci] = "true".to_string(); }
+                    }
+                    KeyCode::Char('n') | KeyCode::Char('N') => {
+                        if let Some(modal) = self.prompt_modal.as_mut() { modal.values[ci] = "false".to_string(); }
+                    }
+                    KeyCode::Char(' ') | KeyCode::Left | KeyCode::Right => {
+                        if let Some(modal) = self.prompt_modal.as_mut() {
+                            modal.values[ci] = if modal.values[ci] == "true" { "false".to_string() } else { "true".to_string() };
+                        }
+                    }
+                    KeyCode::Down => {
+                        if let Some(modal) = self.prompt_modal.as_mut() {
+                            if modal.current_field + 1 < field_count { modal.current_field += 1; }
+                        }
+                    }
+                    KeyCode::Up => {
+                        if let Some(modal) = self.prompt_modal.as_mut() {
+                            if modal.current_field > 0 { modal.current_field -= 1; }
+                        }
+                    }
+                    KeyCode::Enter => {
+                        self.advance_prompt_field_or_submit(field_count);
+                    }
+                    _ => {}
+                }
+            }
+            PromptType::Select => {
+                match key.code {
+                    KeyCode::Up => {
+                        if let Some(modal) = self.prompt_modal.as_mut() {
+                            if modal.option_cursors[ci] > 0 { modal.option_cursors[ci] -= 1; }
+                        }
+                    }
+                    KeyCode::Down => {
+                        if let Some(modal) = self.prompt_modal.as_mut() {
+                            let max = modal.inputs[ci].options.len().saturating_sub(1);
+                            if modal.option_cursors[ci] < max { modal.option_cursors[ci] += 1; }
+                        }
+                    }
+                    KeyCode::Enter | KeyCode::Char(' ') => {
+                        if let Some(modal) = self.prompt_modal.as_mut() {
+                            let idx = modal.option_cursors[ci];
+                            let chosen = modal.inputs[ci].options.get(idx).cloned().unwrap_or_default();
+                            modal.values[ci] = chosen;
+                        }
+                        self.advance_prompt_field_or_submit(field_count);
+                    }
+                    _ => {}
+                }
+            }
+            PromptType::Multiselect => {
+                match key.code {
+                    KeyCode::Up => {
+                        if let Some(modal) = self.prompt_modal.as_mut() {
+                            if modal.option_cursors[ci] > 0 { modal.option_cursors[ci] -= 1; }
+                        }
+                    }
+                    KeyCode::Down => {
+                        if let Some(modal) = self.prompt_modal.as_mut() {
+                            let max = modal.inputs[ci].options.len().saturating_sub(1);
+                            if modal.option_cursors[ci] < max { modal.option_cursors[ci] += 1; }
+                        }
+                    }
+                    KeyCode::Char(' ') => {
+                        if let Some(modal) = self.prompt_modal.as_mut() {
+                            let idx = modal.option_cursors[ci];
+                            if idx < modal.multi_checked[ci].len() {
+                                modal.multi_checked[ci][idx] = !modal.multi_checked[ci][idx];
+                            }
+                            let checked_vals: Vec<String> = modal.inputs[ci].options.iter().enumerate()
+                                .filter(|(j, _)| modal.multi_checked[ci].get(*j).copied().unwrap_or(false))
+                                .map(|(_, o)| o.clone())
+                                .collect();
+                            modal.values[ci] = checked_vals.join(",");
+                        }
+                    }
+                    KeyCode::Enter => {
+                        self.advance_prompt_field_or_submit(field_count);
+                    }
+                    _ => {}
+                }
+            }
+            PromptType::Text => {
+                match key.code {
+                    KeyCode::Char(c) => {
+                        if let Some(modal) = self.prompt_modal.as_mut() { modal.values[ci].push(c); }
+                    }
+                    KeyCode::Backspace => {
+                        if let Some(modal) = self.prompt_modal.as_mut() { modal.values[ci].pop(); }
+                    }
+                    KeyCode::Down => {
+                        if let Some(modal) = self.prompt_modal.as_mut() {
+                            if modal.current_field + 1 < field_count { modal.current_field += 1; }
+                        }
+                    }
+                    KeyCode::Up => {
+                        if let Some(modal) = self.prompt_modal.as_mut() {
+                            if modal.current_field > 0 { modal.current_field -= 1; }
+                        }
+                    }
+                    KeyCode::Enter => {
+                        self.advance_prompt_field_or_submit(field_count);
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    fn submit_prompt_modal(&mut self) {
+        let modal = match &self.prompt_modal {
+            Some(m) => m,
+            None => return,
+        };
+        let mut map: HashMap<String, serde_json::Value> = HashMap::new();
+        for (i, pi) in modal.inputs.iter().enumerate() {
+            let raw = modal.values.get(i).cloned().unwrap_or_default();
+            let val = if raw.is_empty() {
+                pi.default.clone().unwrap_or_default()
+            } else {
+                raw
+            };
+            map.insert(pi.var.clone(), serde_json::Value::String(val));
+        }
+        if let Some(tx) = &self.prompt_reply_tx {
+            tx.send(map).ok();
+        }
+        self.prompt_modal = None;
     }
 
     pub fn open_body_editor(&mut self) {
@@ -785,6 +941,11 @@ impl ApiApp {
         };
         let body = self.nodes.get(&node_id).and_then(|n| n.body_json.as_deref());
         self.body_editor = Some(BodyEditor::new(node_id, body));
+    }
+
+    pub fn open_body_editor_for_node(&mut self, node_id: &str) {
+        let body = self.nodes.get(node_id).and_then(|n| n.body_json.as_deref());
+        self.body_editor = Some(BodyEditor::new(node_id.to_string(), body));
     }
 
     pub fn handle_body_editor_key(&mut self, key: KeyEvent) {
@@ -954,6 +1115,22 @@ impl ApiApp {
                 };
                 if let Some(step) = steps.get(self.live_selected_step) {
                     self.step_detail = Some(StepDetailModal { step: step.clone(), scroll: 0 });
+                }
+            }
+            KeyCode::Char('r') => {
+                if !self.flow_running {
+                    self.start_flow_run();
+                }
+            }
+            KeyCode::Char('b') => {
+                let steps: Vec<_> = if self.live_steps.is_empty() {
+                    self.last_run.as_ref().map(|r| r.steps.clone()).unwrap_or_default()
+                } else {
+                    self.live_steps.clone()
+                };
+                if let Some(step) = steps.get(self.live_selected_step) {
+                    let node_id = step.node_id.clone();
+                    self.open_body_editor_for_node(&node_id);
                 }
             }
             _ => {}

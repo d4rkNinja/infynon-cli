@@ -550,6 +550,13 @@ pub enum PromptAction {
         /// Pre-filled default value the user can accept or override
         #[arg(long)]
         default: Option<String>,
+        /// Prompt type: text (default), boolean, select, multiselect
+        #[arg(long = "type", default_value = "text")]
+        prompt_type: String,
+        /// Comma-separated list of options for select/multiselect prompts
+        /// Example: --options "staging,production,dev"
+        #[arg(long)]
+        options: Option<String>,
     },
     /// Remove a prompt input by its index (use `list` to find the index).
     Remove { index: usize },

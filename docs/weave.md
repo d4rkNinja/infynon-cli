@@ -12,19 +12,31 @@ infynon weave <subcommand>
 
 ## Variable Types
 
-Weave has two distinct types of variables. Understanding the difference is key.
+Weave has two distinct types of variables. Choosing correctly is the most important design decision.
+
+### The rule of thumb
+
+| | Env var `{$KEY}` | Prompt input `{var}` |
+|--|--|--|
+| **Set** | Once per project/environment | Fresh every test run |
+| **Who sets it** | Developer configuring the project | Person running the test |
+| **Examples** | `BASE_URL`, `API_VERSION`, `X_API_KEY` | `email`, `phone_number`, `otp_code`, `password` |
+| **Where stored** | `.infynon/.env` | Declared on the node via `[[prompt_inputs]]` |
+
+**Never put user-specific test data in `.infynon/.env`.** Email addresses, phone numbers, OTP codes, and passwords change per tester and per run. Storing them in env means they go stale immediately.
 
 ### Env Variables — `{$KEY}`
 
-Set once in `.infynon/.env`. Available throughout the **entire flow** from the first node to the last. Use these for things that are stable across a test run: base URL, phone number, email, API keys.
+Static project-wide config only. Set once, used by all APIs in the project.
 
 ```bash
-# Manage via CLI
-infynon weave env set BASE_URL http://localhost:8001
-infynon weave env set PHONE_NUMBER 9876543210
-infynon weave env set COUNTRY_CODE +91
-infynon weave env set EMAIL merchant@example.com
-infynon weave env set API_TOKEN eyJhbGc...   # sensitive — auto-masked
+# Good candidates for env vars
+infynon weave env set BASE_URL http://localhost:8001   # required — where is the server?
+infynon weave env set API_VERSION v1                   # version prefix used across all paths
+infynon weave env set SHARED_API_KEY abc123            # key shared by all requests
+infynon weave env set API_TOKEN eyJhbGc...             # sensitive — auto-masked in TUI
+
+# List, inspect, remove
 infynon weave env list
 infynon weave env get API_TOKEN --reveal
 infynon weave env delete OLD_KEY
@@ -39,26 +51,40 @@ Or manage interactively in the TUI on **Tab 6 (Env / Ctx)**:
 Reference in any node field with `{$VAR_NAME}`:
 
 ```
-Path:    /api/v1/users/{$USER_ID}
+Path:    /api/{$API_VERSION}/users
 Header:  Authorization: Bearer {$API_TOKEN}
-Body:    {"country_code":"{$COUNTRY_CODE}","number":"{$PHONE_NUMBER}"}
+Body:    {"api_key": "{$SHARED_API_KEY}"}
 ```
 
-**BASE_URL is required.** If not set, the flow/node will refuse to run with a clear error. The resolution order is:
-1. `--base-url` flag (CLI only)
+**BASE_URL is required.** If not set, the flow/node will refuse to run with a clear error. Resolution order:
+1. `--base-url` flag (CLI only, overrides for that run)
 2. `base_url` stored on the flow
 3. `BASE_URL` from `.infynon/.env`
 4. Error — cannot run
 
 ### Runtime Variables — `{var}` + prompt inputs
 
-Values that cannot be known ahead of time — OTP codes, captcha responses, dynamic passwords, one-time tokens. These are **asked for at the moment the flow reaches that specific node**.
+Values that are user-specific or change every run: emails, phone numbers, OTPs, passwords. These are **asked at the moment the flow reaches that specific node**.
 
-**In the TUI:** a popup modal appears in the middle of the screen right before the node fires. You type the value, press Enter, and the flow continues.
+**In the TUI:** a popup modal appears right before the node fires. Fill in each field, press Tab to move between them, Enter on the last field to submit. The flow immediately continues.
 
-**In the CLI:** the terminal pauses and asks you to type the value inline.
+**In the CLI:** the terminal pauses and prompts you for each value inline.
 
 The value is injected into the node's path, headers, and body wherever `{var}` appears.
+
+### Context propagation — ask once, use everywhere
+
+When a value is entered (or extracted from a response) in an earlier node, it stays in the **flow context** and flows to all downstream nodes automatically — without re-prompting.
+
+```
+send-email asks for {email}
+    ↓ email is now in context
+verify-email uses {email} from context — NOT asked again
+    ↓ email still in context
+register uses {email} from context — NOT asked again
+```
+
+Design your flows so user-specific values are prompted on the **first node that needs them**. All downstream nodes just reference `{var_name}`.
 
 ---
 
@@ -101,23 +127,71 @@ infynon weave tui <flow-id>     # open a specific flow directly
 | `m` | Toggle markdown output (tab 0) |
 | `p` | Toggle PDF output (tab 0) |
 
+### Live Execution (Tab 3)
+
+The live execution view shows a real-time feed of each step as it runs. After a run completes (or fails), you can interact with the results:
+
+| Key | Action |
+|-----|--------|
+| `↑` / `↓` | Navigate between steps |
+| `Enter` / `Space` | Open step detail inspector — shows full request/response body, all assertion results, extracted variables, and error messages |
+| `r` | **Retry** — re-run the current flow from the beginning |
+| `b` | **Modify body** — open the inline body editor for the selected step's node. Edit the JSON body and save with `Ctrl+S`, then press `r` to retry |
+| `Esc` | Close step detail |
+
+> **Tip:** The typical debugging cycle is: run → see failure on a step → press `b` to fix the node body → press `r` to retry.
+
 ### Runtime Prompt Modal (TUI)
 
-When the flow reaches a node that has runtime prompt inputs defined, the run **pauses** and a popup appears over the current view:
+When the flow reaches a node that has runtime prompt inputs, execution **pauses** and a modal appears. Each prompt input can have a different type that changes how the modal behaves:
 
+**`text` (default)** — free-text input, masked with `●` if `--secret`:
 ```
 ┌─ ◆ Input Required — api-v1-auth-otp-verify-mobile ──────────────┐
-│                                                                   │
-│  This node needs values before it can send the request.          │
-│                                                                   │
-│  Mobile OTP (check SMS on your phone)                            │
-│  › 847291▌                                                       │
-│                                                                   │
-│  Tab/↓ next  ↑ prev  Enter submit  Esc cancel                    │
-└───────────────────────────────────────────────────────────────────┘
+│  Provide values before the request fires:                        │
+│  ┌─ Mobile OTP (check your SMS) ──────────────────────────────┐ │
+│  │  847291▌                                                   │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│  Tab next field  ↑↓ navigate  Enter confirm  Esc cancel          │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-Type the value and press **Enter** to submit. The flow immediately continues with the next node using the value you entered.
+**`boolean`** — yes/no toggle. Press `y`, `n`, or `Space` to toggle:
+```
+┌─ ◆ Input Required — delete-user ────────────────────────────────┐
+│  ┌─ Confirm delete? ─────────────────────────────────────────┐  │
+│  │  [ Yes ]  [ No ]   y/n or Space to toggle                 │  │
+│  └────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**`select`** — single choice, navigate with `↑`/`↓`, confirm with `Enter`:
+```
+┌─ ◆ Input Required — create-order ───────────────────────────────┐
+│  ┌─ Target environment ──────────────────────────────────────┐  │
+│  │   ▶ staging                                               │  │
+│  │     production                                            │  │
+│  │     dev                                                   │  │
+│  └────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**`multiselect`** — multiple choices. `↑`/`↓` to navigate, `Space` to check/uncheck, `Enter` to confirm:
+```
+┌─ ◆ Input Required — create-token ───────────────────────────────┐
+│  ┌─ Token scopes ─────────────── Space: toggle  Enter: confirm ┐ │
+│  │  [✔] read                                                   │ │
+│  │  [✔] write                                                  │ │
+│  │  [ ] admin                                                  │ │
+│  └──────────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────────┘
+```
+`multiselect` values are stored as a comma-joined string: `"read,write"`.
+
+**CLI modal (terminal):** uses the same types via `dialoguer`:
+- `boolean` → `[y/n]` confirm prompt
+- `select` → interactive arrow-key list
+- `multiselect` → checkbox list with `Space` to toggle
 
 ---
 
@@ -209,6 +283,14 @@ infynon weave node prompt <node-id> list
 
 ### Add a Prompt Input
 
+| Flag | Description |
+|------|-------------|
+| `--label "..."` | Human-readable text shown to the user. Defaults to the variable name. |
+| `--secret` | Masks input with `●` characters. Use for passwords and tokens. |
+| `--default "value"` | Pre-filled value the user can accept (press Enter) or override. Essential for CI. |
+| `--type` | Interaction style: `text` (default), `boolean`, `select`, `multiselect` |
+| `--options "a,b,c"` | Comma-separated choices. Required for `select` and `multiselect`. |
+
 ```bash
 # Basic — asks "code" at runtime, value goes into {code} in the body
 infynon weave node prompt <node-id> add code
@@ -221,6 +303,63 @@ infynon weave node prompt <node-id> add admin_password --label "Admin password" 
 
 # With a default value the user can accept or override
 infynon weave node prompt <node-id> add env_name --label "Environment" --default staging
+
+# With an explicit type
+infynon weave node prompt <node-id> add env --label "Environment" --type select --options "staging,production,dev" --default staging
+infynon weave node prompt <node-id> add confirm --label "Confirm delete?" --type boolean --default false
+infynon weave node prompt <node-id> add scopes --label "Token scopes" --type multiselect --options "read,write,admin" --default "read,write"
+```
+
+### Prompt Input Types
+
+| Type | Description | `options` needed? |
+|------|-------------|-------------------|
+| `text` | Free-text input (default) | No |
+| `boolean` | Yes / No toggle | No |
+| `select` | Single choice from list | Yes |
+| `multiselect` | Multiple choices from list | Yes |
+
+**Examples in TOML** (for reference — always use the CLI to manage these):
+```toml
+[[prompt_inputs]]
+var = "env"
+label = "Target environment"
+type = "select"
+options = ["staging", "production", "dev"]
+default = "staging"
+
+[[prompt_inputs]]
+var = "confirm_delete"
+label = "Confirm delete operation?"
+type = "boolean"
+default = "false"
+
+[[prompt_inputs]]
+var = "scopes"
+label = "API scopes to include"
+type = "multiselect"
+options = ["read", "write", "admin"]
+default = "read"
+
+[[prompt_inputs]]
+var = "otp_code"
+label = "OTP from SMS"
+type = "text"
+```
+
+**CLI examples:**
+```bash
+# text (default)
+infynon weave node prompt login add email --label "Test email"
+
+# boolean
+infynon weave node prompt delete-user add confirm --label "Confirm delete?" --type boolean --default false
+
+# select
+infynon weave node prompt create-order add env --label "Environment" --type select --options "staging,production,dev" --default staging
+
+# multiselect
+infynon weave node prompt create-token add scopes --label "Token scopes" --type multiselect --options "read,write,admin" --default "read,write"
 ```
 
 ### Remove a Prompt Input
@@ -230,39 +369,57 @@ infynon weave node prompt <node-id> list    # find the index first
 infynon weave node prompt <node-id> remove 0
 ```
 
-### Full Example — OTP Verify Node
+### Full Example — OTP Flow (send + verify)
+
+This example shows the correct pattern: `email`/`phone_number` are prompted once on the send nodes and carried automatically to verify nodes and registration.
 
 ```bash
-# 1. Create the node
-infynon weave node create
-#    ID:     api-v1-auth-otp-verify-mobile
-#    Method: POST
-#    Path:   /api/v1/auth/otp/verify-mobile
-#    Body:   {"country_code":"{$COUNTRY_CODE}","number":"{$PHONE_NUMBER}","code":"{code}"}
+# Step 1: Add email prompt to the send-email node
+infynon weave node prompt api-v1-auth-otp-send-email add email \
+  --label "Email address to send OTP to"
 
-# 2. Add the runtime prompt for the OTP code
+# The body uses {email}: {"email":"{email}"}
+
+# Step 2: verify-email gets {email} from context (no prompt needed)
+# Only prompt for the OTP code itself
+infynon weave node prompt api-v1-auth-otp-verify-email add email_code \
+  --label "Email OTP (check your inbox)"
+
+# Step 3: Add phone prompts to the send-mobile node
+infynon weave node prompt api-v1-auth-otp-send-mobile add country_code \
+  --label "Country code (e.g. +91)" \
+  --default "+91"
+infynon weave node prompt api-v1-auth-otp-send-mobile add phone_number \
+  --label "Phone number (digits only)"
+
+# Step 4: verify-mobile gets {country_code} and {phone_number} from context
+# Only prompt for the SMS OTP
 infynon weave node prompt api-v1-auth-otp-verify-mobile add code \
-  --label "Mobile OTP (check SMS)"
+  --label "Mobile OTP (check your SMS)"
 
-# 3. Set env vars so phone/country are resolved automatically
-infynon weave env set COUNTRY_CODE +91
-infynon weave env set PHONE_NUMBER 9876543210
-
-# 4. Run the flow — it will pause at this node and ask for the OTP
+# Step 5: Run the flow — it prompts for user data at the right moments
 infynon weave flow run karnsha-merchant-onboarding
 ```
 
 At runtime (TUI or CLI):
 ```
-→  POST http://localhost:8001/api/v1/auth/otp/verify-mobile
+→  Running karnsha-merchant-onboarding
 
-  Node needs input:
-  Mobile OTP (check SMS): [you type: 847291]
+◆ Input Required — api-v1-auth-otp-send-email
+  Email address to send OTP to
+  › test@example.com▌
 
-✔  api-v1-auth-otp-verify-mobile  POST  200  12ms
+✔  send-email  POST  200  89ms
+
+◆ Input Required — api-v1-auth-otp-verify-email
+  Email OTP (check your inbox)
+  › 847291▌
+
+✔  verify-email  POST  200  45ms
+...
 ```
 
-The body that fires is: `{"country_code":"+91","number":"9876543210","code":"847291"}`
+The body that fires for verify-mobile: `{"country_code":"+91","number":"9876543210","code":"847291"}`
 
 ### Prompt Inputs vs `--prompt` flag
 
@@ -541,4 +698,27 @@ infynon weave flow run <flow-id> --base-url $API_URL
 infynon weave flow run-all --base-url $API_URL --output markdown
 ```
 
-`{$ENV_VAR}` placeholders resolve from CI environment variables automatically — no `.env` file needed in CI. Nodes with `prompt_inputs` will block in CI (they need interactive input), so avoid them in automated pipelines or pre-seed the values with `--set`.
+`{$ENV_VAR}` placeholders resolve from CI environment variables automatically — no `.env` file needed in CI.
+
+Nodes with `prompt_inputs` work in CI in two ways:
+
+**Option 1 — `--default` on each prompt input (recommended)**
+Set a `--default` value on every prompt input. The CLI uses it automatically in non-interactive mode — the run never blocks. The human running interactively can override it.
+
+```bash
+infynon weave node prompt register add full_name --label "Full name" --default "CI Test User"
+infynon weave node prompt register add password  --label "Password"  --secret --default "Test@1234"
+```
+
+**Option 2 — `--set` to pre-seed all vars**
+Pass every prompt var as `--set KEY=VALUE`. Weave skips the prompt for any var already in context.
+
+```bash
+infynon weave flow run auth-flow \
+  --set email=ci@example.com \
+  --set phone_number=9999999999 \
+  --set country_code=+91 \
+  --set full_name="CI Bot" \
+  --set password=Test@1234
+# Note: OTP nodes (email_code, code) still block — use a test inbox or mock SMS service for those
+```

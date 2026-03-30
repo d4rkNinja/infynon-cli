@@ -1,9 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::io::{self, Write};
-use std::sync::OnceLock;
 
 use owo_colors::OwoColorize;
-use regex::Regex;
 use serde_json::Value;
 
 use crate::api::ai;
@@ -12,8 +10,6 @@ use crate::api::storage;
 use crate::api::types::{Assertion, Edge, Extraction, Node, OnFail, PromptInput};
 use crate::api::variables;
 use crate::tui::logger::Logger;
-
-static PLACEHOLDER_RE: OnceLock<Regex> = OnceLock::new();
 
 // ── node create ───────────────────────────────────────────────────────────────
 
@@ -419,9 +415,7 @@ pub fn cmd_node_run(id: &str, base_url: &str, set_vars: &[(String, String)], pro
 /// Collect placeholder variable names from node path/headers/body that are not already
 /// provided in context, environment, or declared as prompt_inputs.
 fn collect_unresolved_placeholders(node: &Node, context: &HashMap<String, Value>) -> Vec<String> {
-    let re = PLACEHOLDER_RE.get_or_init(|| {
-        Regex::new(r"\{([A-Za-z_][A-Za-z0-9_]*)\}").unwrap()
-    });
+    let re = crate::api::variables::get_placeholder_regex();
     let prompt_vars: HashSet<&str> = node.prompt_inputs.iter().map(|pi| pi.var.as_str()).collect();
     let mut seen: HashSet<String> = HashSet::new();
     let mut result = Vec::new();
@@ -445,23 +439,113 @@ fn collect_unresolved_placeholders(node: &Node, context: &HashMap<String, Value>
     result
 }
 
+/// Build a non-interactive on_prompt callback for AI/CI/probe mode.
+/// Uses each PromptInput's `default` value; returns empty string if no default.
+/// Never blocks on stdin.
+pub fn make_noninteractive_prompt() -> impl Fn(&str, &[PromptInput]) -> HashMap<String, Value> {
+    use crate::api::types::PromptType;
+    |_node_id: &str, inputs: &[PromptInput]| -> HashMap<String, Value> {
+        inputs.iter().map(|pi| {
+            let val = match pi.prompt_type {
+                PromptType::Boolean => {
+                    pi.default.as_deref()
+                        .map(|d| if d == "true" || d == "yes" || d == "1" { "true" } else { "false" })
+                        .unwrap_or("false")
+                        .to_string()
+                }
+                PromptType::Select => {
+                    pi.default.as_deref()
+                        .map(|d| d.to_string())
+                        .or_else(|| pi.options.first().cloned())
+                        .unwrap_or_default()
+                }
+                PromptType::Multiselect | PromptType::Text => {
+                    pi.default.clone().unwrap_or_default()
+                }
+            };
+            (pi.var.clone(), Value::String(val))
+        }).collect()
+    }
+}
+
 /// Build a CLI on_prompt callback using dialoguer for interactive input.
 pub fn make_cli_prompt() -> impl Fn(&str, &[PromptInput]) -> HashMap<String, Value> {
     |node_id: &str, inputs: &[PromptInput]| -> HashMap<String, Value> {
-        use dialoguer::{Input, Password};
+        use dialoguer::{Confirm, Input, MultiSelect, Password, Select};
+        use crate::api::types::PromptType;
         println!("\n  Node '{}' needs input:", node_id);
         let mut map = HashMap::new();
         for pi in inputs {
-            let label = if pi.label.is_empty() { pi.var.clone() } else { pi.label.clone() };
-            let val: String = if pi.secret {
-                let pw = Password::new().with_prompt(format!("  {}", label));
-                pw.interact().unwrap_or_default()
+            let raw_label = if pi.label.is_empty() { pi.var.clone() } else { pi.label.clone() };
+            let label = if raw_label.contains("{$") {
+                crate::api::variables::substitute_env_placeholders(&raw_label)
             } else {
-                let mut inp = Input::<String>::new().with_prompt(format!("  {}", label));
-                if let Some(ref d) = pi.default {
-                    inp = inp.default(d.clone());
+                raw_label
+            };
+            let val: String = match pi.prompt_type {
+                PromptType::Boolean => {
+                    let default_bool = pi.default.as_deref()
+                        .map(|d| d == "true" || d == "yes" || d == "1")
+                        .unwrap_or(false);
+                    let answer = Confirm::new()
+                        .with_prompt(format!("  {}", label))
+                        .default(default_bool)
+                        .interact()
+                        .unwrap_or(default_bool);
+                    if answer { "true".to_string() } else { "false".to_string() }
                 }
-                inp.interact_text().unwrap_or_default()
+                PromptType::Select => {
+                    if pi.options.is_empty() {
+                        // Fallback to text if no options defined
+                        let mut inp = Input::<String>::new().with_prompt(format!("  {}", label));
+                        if let Some(ref d) = pi.default { inp = inp.default(d.clone()); }
+                        inp.interact_text().unwrap_or_default()
+                    } else {
+                        let default_idx = pi.default.as_deref()
+                            .and_then(|d| pi.options.iter().position(|o| o == d))
+                            .unwrap_or(0);
+                        let idx = Select::new()
+                            .with_prompt(format!("  {}", label))
+                            .items(&pi.options)
+                            .default(default_idx)
+                            .interact()
+                            .unwrap_or(default_idx);
+                        pi.options.get(idx).cloned().unwrap_or_default()
+                    }
+                }
+                PromptType::Multiselect => {
+                    if pi.options.is_empty() {
+                        let mut inp = Input::<String>::new().with_prompt(format!("  {}", label));
+                        if let Some(ref d) = pi.default { inp = inp.default(d.clone()); }
+                        inp.interact_text().unwrap_or_default()
+                    } else {
+                        let defaults: Vec<bool> = {
+                            let selected: std::collections::HashSet<&str> = pi.default.as_deref()
+                                .map(|d| d.split(',').map(|s| s.trim()).collect())
+                                .unwrap_or_default();
+                            pi.options.iter().map(|o| selected.contains(o.as_str())).collect()
+                        };
+                        let idxs = MultiSelect::new()
+                            .with_prompt(format!("  {}", label))
+                            .items(&pi.options)
+                            .defaults(&defaults)
+                            .interact()
+                            .unwrap_or_default();
+                        idxs.into_iter()
+                            .filter_map(|i| pi.options.get(i).cloned())
+                            .collect::<Vec<_>>()
+                            .join(",")
+                    }
+                }
+                PromptType::Text => {
+                    if pi.secret {
+                        Password::new().with_prompt(format!("  {}", label)).interact().unwrap_or_default()
+                    } else {
+                        let mut inp = Input::<String>::new().with_prompt(format!("  {}", label));
+                        if let Some(ref d) = pi.default { inp = inp.default(d.clone()); }
+                        inp.interact_text().unwrap_or_default()
+                    }
+                }
             };
             map.insert(pi.var.clone(), Value::String(val));
         }
@@ -699,17 +783,38 @@ pub fn cmd_node_prompt_add(
     label: &str,
     secret: bool,
     default: Option<String>,
+    prompt_type: &str,
+    options_str: Option<String>,
 ) {
+    use crate::api::types::PromptType;
     let mut node = match storage::load_node(node_id) {
         Ok(n) => n,
         Err(e) => { Logger::error(&e); return; }
     };
     let label_str = if label.is_empty() { var.to_string() } else { label.to_string() };
+    let pt = match prompt_type {
+        "boolean" => PromptType::Boolean,
+        "select"  => PromptType::Select,
+        "multiselect" => PromptType::Multiselect,
+        _ => PromptType::Text,
+    };
+    let options: Vec<String> = options_str
+        .map(|s| s.split(',').map(|o| o.trim().to_string()).filter(|o| !o.is_empty()).collect())
+        .unwrap_or_default();
+    if (pt == PromptType::Select || pt == PromptType::Multiselect) && options.is_empty() {
+        Logger::error(&format!(
+            "'--type {}' requires '--options a,b,c' — add options or this prompt will fall back to text at runtime.",
+            prompt_type
+        ));
+        return;
+    }
     node.prompt_inputs.push(PromptInput {
         var: var.to_string(),
         label: label_str,
         secret,
         default,
+        prompt_type: pt,
+        options,
     });
     match storage::save_node(&node) {
         Ok(_) => println!("  {}  Prompt input '{}' added to node '{}'.", "✔".bright_green(), var.bright_cyan(), node_id.bold()),

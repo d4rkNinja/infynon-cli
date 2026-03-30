@@ -9,7 +9,8 @@
 <p align="center">
   INFYNON is a <strong>security-first CLI</strong> that acts as a:<br/><br/>
   • 🔐 <strong>Firewall for your dependencies</strong> — pre-install CVE scanner<br/>
-  • 🛡️ <strong>Firewall for your backend</strong> — WAF + reverse proxy<br/><br/>
+  • 🛡️ <strong>Firewall for your backend</strong> — WAF + reverse proxy<br/>
+  • 🧪 <strong>API flow tester</strong> — node-based integration testing with security probes<br/><br/>
   → Blocks threats <strong>BEFORE they reach your system</strong>
 </p>
 
@@ -28,7 +29,7 @@
     <img src="https://img.shields.io/github/license/d4rkNinja/infynon-cli?style=for-the-badge" />
   </a>
   <img src="https://img.shields.io/badge/ecosystems-14-blue?style=for-the-badge" />
-  <img src="https://img.shields.io/badge/version-0.2.0--beta.6.7-orange?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/version-0.2.0--beta.7-orange?style=for-the-badge" />
   <a href="https://www.npmjs.com/package/infynon">
     <img src="https://img.shields.io/npm/v/infynon?style=for-the-badge&logo=npm&label=npm" />
   </a>
@@ -112,6 +113,36 @@ A self-hosted reverse proxy WAF. Sits between the internet and your backend — 
 Internet → INFYNON WAF → Your App Server
 ```
 
+### 3. Weave — API Flow Testing *(new)*
+
+Model your entire API as a directed graph of HTTP requests. Run multi-step test flows, thread authentication tokens automatically between nodes, and run built-in security probes — all from the terminal.
+
+```bash
+# Set your API base URL once
+infynon weave env set BASE_URL http://localhost:8001
+
+# Create nodes (AI-generated from a description)
+infynon weave node create --ai "POST /auth/login with email and password, extracts token"
+infynon weave node create --ai "POST /cart/create extracts cart_id"
+
+# Wire them into a flow
+infynon weave flow create "checkout" --ai "login then create cart then checkout"
+
+# Run the flow — live step-by-step output
+infynon weave flow run checkout
+
+# Run security probes (auth bypass, rate limit, SQL injection)
+infynon weave ai probe checkout
+
+# Open the TUI dashboard
+infynon weave tui
+```
+
+```
+[POST /auth/login] ──token──▶ [POST /cart/create] ──cart_id──▶ [POST /checkout]
+      ↑ asks for email/password       ↑ uses token                  ↑ uses token + cart_id
+```
+
 ---
 
 ## 👥 Who Is This For
@@ -149,6 +180,17 @@ Internet → INFYNON WAF → Your App Server
 - **Outdated detection** — across all ecosystems at once
 - **Package diff** — compare versions: size, deps, scripts, CVEs
 - **Eagle Eye** — scheduled background scanner with email alerts
+
+### 🧪 API Flow Testing (Weave)
+
+- **Node-based test flows** — model your API as a directed graph: each node is one HTTP request
+- **Context threading** — extracted values (tokens, IDs) flow automatically between nodes
+- **Runtime prompt inputs** — pause and ask for OTPs, passwords, dynamic data mid-flow
+- **4 prompt types** — text, boolean, select, multiselect for structured input collection
+- **AI flow builder** — describe your scenario in English, Weave wires the graph
+- **Security probes** — auth bypass, rate limit, and SQL injection checks out of the box
+- **TUI dashboard** — 10-tab terminal UI: live execution feed, latency profiler, security results, env manager
+- **CI ready** — use `--default` values or `--set KEY=val` to run flows fully non-interactively
 
 ---
 
@@ -363,6 +405,87 @@ infynon logs --verdict block --count 100
 | **Email Alerts** | SMTP/SES notifications on suspicious activity + daily digest |
 
 Full configuration reference, TUI keyboard shortcuts, and advanced options → [cli.infynon.com/docs](https://cli.infynon.com/docs)
+
+---
+
+## 🧪 Weave — API Flow Testing
+
+Test your entire API as a connected flow, not as isolated endpoints. Weave threads authentication tokens and response data automatically between nodes — you never manually copy-paste tokens.
+
+### Quick Start
+
+```bash
+# 1. Set your API base URL (once per project)
+infynon weave env set BASE_URL http://localhost:8001
+
+# 2. Create nodes from natural language
+infynon weave node create --ai "POST /auth/login with email and password, extracts token and user_id"
+infynon weave node create --ai "GET /users/{user_id} returns user profile"
+infynon weave node create --ai "POST /orders — creates order, extracts order_id"
+
+# 3. Build a flow
+infynon weave flow create "user-journey" --ai "login, get profile, create order"
+
+# 4. Run it — tokens flow automatically between nodes
+infynon weave flow run user-journey
+
+# 5. Run security probes after a successful run
+infynon weave ai probe user-journey
+```
+
+### Prompt Inputs — Runtime Values
+
+For values only the user can know at test time (OTPs, passwords, 2FA codes), use prompt inputs. The flow pauses and asks before each relevant node:
+
+```bash
+# Add a text prompt (OTP code)
+infynon weave node prompt verify-otp add otp_code --label "OTP Code" --secret
+
+# Add a yes/no confirmation
+infynon weave node prompt delete-account add confirm --label "Confirm delete?" --type boolean --default false
+
+# Add a single-choice dropdown
+infynon weave node prompt create-order add env --label "Environment" --type select --options "staging,production,dev" --default staging
+
+# Add a multi-choice checklist
+infynon weave node prompt create-token add scopes --label "Token scopes" --type multiselect --options "read,write,admin" --default "read,write"
+```
+
+In the TUI a modal popup appears at each prompt. In the CLI the terminal pauses inline.
+
+### CI / Non-Interactive Mode
+
+```bash
+# Option 1: --default on every prompt input (run uses default automatically)
+infynon weave node prompt register add email --label "Email" --default "ci@example.com"
+infynon weave node prompt register add password --label "Password" --secret --default "Test@1234"
+
+# Option 2: --set to pre-seed all vars before the flow starts
+infynon weave flow run auth-flow \
+  --set email=ci@example.com \
+  --set password=Test@1234 \
+  --set full_name="CI Bot"
+```
+
+### TUI Dashboard
+
+```bash
+infynon weave tui               # open dashboard
+infynon weave tui <flow-id>     # open on a specific flow
+```
+
+10 tabs: Overview · Flow Graph · Live Execution · Latency Profiler · Security Probes · Env/Ctx · State Inspector · Run Diff · Node Library · Config
+
+| Key | Action |
+|-----|--------|
+| `1`–`9`, `0` | Switch tabs |
+| `Enter` / `r` | Run selected flow or node |
+| `r` (tab 3) | Retry the last run |
+| `b` (tab 3) | Edit node body, then retry |
+| `q` | Quit |
+| `?` | Help overlay |
+
+Full command reference → [docs/weave.md](docs/weave.md)
 
 ---
 

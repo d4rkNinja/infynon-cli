@@ -1,16 +1,34 @@
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{
-        Block, Borders, Clear, List, ListItem, ListState, Paragraph, Sparkline, Wrap,
+        Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph, Sparkline, Wrap,
     },
 };
 
 use crate::api::types::{FlowRunResult, ProbeSeverity, StepResult};
 use crate::tui::api_app::{ApiApp, ApiView, AttachMode, BodyEditor, GraphNode, NodeField, NodeFieldEditor, PromptModal, StepDetailModal};
 use crate::tui::theme::*;
+
+// ── Block helpers ─────────────────────────────────────────────────────────────
+
+fn rounded_block<'a>(title: &'a str, style: Style) -> Block<'a> {
+    Block::default()
+        .title(Span::styled(title, style))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(border_style())
+}
+
+fn rounded_block_active<'a>(title: &'a str) -> Block<'a> {
+    Block::default()
+        .title(Span::styled(title, title_style()))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(BORDER_ACTIVE))
+}
 
 // ── Top-level render ─────────────────────────────────────────────────────────
 
@@ -69,38 +87,55 @@ pub fn render(f: &mut Frame, app: &mut ApiApp) {
 // ── Header: info bar ─────────────────────────────────────────────────────────
 
 fn render_info_bar(f: &mut Frame, app: &ApiApp, area: Rect) {
-    // Left side: brand + flow context + stats
-    let mut spans: Vec<Span> = vec![
+    // Split: left content | right shortcuts
+    let halves = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Min(0), Constraint::Length(38)])
+        .split(area);
+
+    // Left: brand + flow info
+    let mut left_spans: Vec<Span> = vec![
         Span::styled(" ◆ WEAVE", Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
         Span::styled("  │  ", Style::default().fg(DIMMER)),
     ];
-
     match app.active_flow() {
         Some(fl) => {
-            spans.push(Span::styled("◈ ", Style::default().fg(CYAN)));
-            spans.push(Span::styled(fl.name.clone(), Style::default().fg(PURPLE).add_modifier(Modifier::BOLD)));
+            left_spans.push(Span::styled("◈ ", Style::default().fg(CYAN)));
+            left_spans.push(Span::styled(fl.name.clone(), Style::default().fg(PURPLE).add_modifier(Modifier::BOLD)));
+            left_spans.push(Span::styled("  │  ", Style::default().fg(DIMMER)));
+            left_spans.push(Span::styled(
+                format!("{} flows  {}  nodes", app.flows.len(), app.nodes.len()),
+                Style::default().fg(DIM),
+            ));
         }
         None => {
-            spans.push(Span::styled("no flow selected", Style::default().fg(DIMMER)));
+            left_spans.push(Span::styled("no flow selected", Style::default().fg(DIMMER)));
+            left_spans.push(Span::styled("  │  ", Style::default().fg(DIMMER)));
+            left_spans.push(Span::styled(
+                format!("{} flows  {}  nodes", app.flows.len(), app.nodes.len()),
+                Style::default().fg(DIM),
+            ));
         }
     }
 
-    spans.push(Span::styled("  │  ", Style::default().fg(DIMMER)));
-    spans.push(Span::styled(
-        format!("{} flows  {}  nodes", app.flows.len(), app.nodes.len()),
-        Style::default().fg(DIM),
-    ));
+    // Right: keyboard shortcuts (right-aligned)
+    let right_spans: Vec<Span> = vec![
+        Span::styled("R", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+        Span::styled(" refresh  ", Style::default().fg(DIMMER)),
+        Span::styled("/", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+        Span::styled(" search  ", Style::default().fg(DIMMER)),
+        Span::styled("?", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+        Span::styled(" help  ", Style::default().fg(DIMMER)),
+        Span::styled("q", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+        Span::styled(" quit ", Style::default().fg(DIMMER)),
+    ];
 
-    // Shortcuts — right side (separated with enough space)
-    spans.push(Span::styled("     ", Style::default()));
-    for (key, label) in &[("R", "refresh"), ("/", "search"), ("?", "help"), ("q", "quit")] {
-        spans.push(Span::styled(key.to_string(), Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)));
-        spans.push(Span::styled(format!(" {}  ", label), Style::default().fg(DIMMER)));
-    }
-
-    let p = Paragraph::new(Line::from(spans))
-        .style(Style::default().bg(BG_HIGHLIGHT));
-    f.render_widget(p, area);
+    let bg = Style::default().bg(BG_SURFACE);
+    f.render_widget(Paragraph::new(Line::from(left_spans)).style(bg), halves[0]);
+    f.render_widget(
+        Paragraph::new(Line::from(right_spans)).style(bg).alignment(Alignment::Right),
+        halves[1],
+    );
 }
 
 // ── Header: tab strip ────────────────────────────────────────────────────────
@@ -114,30 +149,28 @@ fn render_tab_strip(f: &mut Frame, app: &ApiApp, area: Rect) {
         let name = view.label();
 
         if is_active {
-            // Active: solid cyan block  ▌ N · Label ▐
-            spans.push(Span::styled("▌", Style::default().fg(CYAN).bg(BG_HIGHLIGHT)));
+            spans.push(Span::styled("", Style::default().fg(CYAN)));
             spans.push(Span::styled(
-                format!(" {} · {} ", num, name),
+                format!(" {} {} ", num, name),
                 Style::default().fg(BG).bg(CYAN).add_modifier(Modifier::BOLD),
             ));
-            spans.push(Span::styled("▐ ", Style::default().fg(CYAN).bg(BG_HIGHLIGHT)));
+            spans.push(Span::styled("", Style::default().fg(CYAN).bg(BG_SURFACE)));
+            spans.push(Span::raw(" "));
         } else {
             spans.push(Span::styled(
                 format!(" {} ", num),
                 Style::default().fg(DIMMER),
             ));
             spans.push(Span::styled(
-                format!("{}  ", name),
+                format!("{} ", name),
                 Style::default().fg(DIM),
             ));
+            spans.push(Span::styled("│ ", Style::default().fg(DIMMER)));
         }
     }
 
-    // Append flow-switching hint at the end
-    spans.push(Span::styled("   [ ] flows", Style::default().fg(DIMMER)));
-
     let p = Paragraph::new(Line::from(spans))
-        .style(Style::default().bg(BG_HIGHLIGHT));
+        .style(Style::default().bg(BG_SURFACE));
     f.render_widget(p, area);
 }
 
@@ -146,7 +179,7 @@ fn render_tab_strip(f: &mut Frame, app: &ApiApp, area: Rect) {
 fn render_separator(f: &mut Frame, area: Rect) {
     let line = "─".repeat(area.width as usize);
     let p = Paragraph::new(Line::from(vec![
-        Span::styled(line, Style::default().fg(BORDER)),
+        Span::styled(line, Style::default().fg(BORDER_ACTIVE)),
     ]));
     f.render_widget(p, area);
 }
@@ -157,44 +190,56 @@ fn render_status_bar(f: &mut Frame, app: &ApiApp, area: Rect) {
     let mut spans: Vec<Span> = vec![];
 
     if let Some(msg) = app.active_notification() {
-        // Notification toast
         spans.push(Span::styled(" ✦ ", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)));
         spans.push(Span::styled(msg.to_string(), Style::default().fg(YELLOW)));
     } else {
-        // Last run summary
         if let Some(run) = &app.last_run {
             let (icon, color) = if run.passed { ("✔", GREEN) } else { ("✘", RED) };
-            spans.push(Span::styled(format!(" {} ", icon), Style::default().fg(color)));
+            let pass_pct = if run.steps.is_empty() { 0 } else { (run.passed_count() * 100) / run.steps.len() };
             spans.push(Span::styled(
-                format!("{}/{} steps  {}ms avg", run.passed_count(), run.steps.len(), run.avg_latency_ms()),
+                format!(" {} ", icon),
+                Style::default().fg(color).add_modifier(Modifier::BOLD),
+            ));
+            spans.push(Span::styled(
+                format!("{}/{} steps", run.passed_count(), run.steps.len()),
+                Style::default().fg(color),
+            ));
+            spans.push(Span::styled(
+                format!("  {}%", pass_pct),
+                Style::default().fg(if run.passed { GREEN } else { YELLOW }),
+            ));
+            spans.push(Span::styled("  │  ", Style::default().fg(DIMMER)));
+            spans.push(Span::styled(
+                format!("{}ms avg  {}ms total", run.avg_latency_ms(), run.duration_ms()),
                 Style::default().fg(TEXT_DIM),
             ));
             spans.push(Span::styled("  │  ", Style::default().fg(DIMMER)));
         } else {
-            spans.push(Span::styled(" ○ no run yet  │  ", Style::default().fg(DIMMER)));
+            spans.push(Span::styled(" ○ ", Style::default().fg(DIMMER)));
+            spans.push(Span::styled("no run yet", Style::default().fg(DIMMER)));
+            spans.push(Span::styled("  │  ", Style::default().fg(DIMMER)));
         }
 
-        // Search indicator
         if !app.search_input.is_empty() {
             spans.push(Span::styled("/ ", Style::default().fg(YELLOW)));
             spans.push(Span::styled(&app.search_input, Style::default().fg(WHITE).add_modifier(Modifier::BOLD)));
             spans.push(Span::styled("  │  ", Style::default().fg(DIMMER)));
         }
 
-        // Active flow position hint
         if app.flows.len() > 1 {
             spans.push(Span::styled(
                 format!("flow {}/{}", app.active_flow_idx + 1, app.flows.len()),
-                Style::default().fg(DIMMER),
+                Style::default().fg(PURPLE),
             ));
             spans.push(Span::styled("  │  ", Style::default().fg(DIMMER)));
         }
 
-        spans.push(Span::styled("R refresh  [ ] flows  ? help", Style::default().fg(DIMMER)));
+        spans.push(Span::styled("[ ]", Style::default().fg(DIMMER)));
+        spans.push(Span::styled(" flows", Style::default().fg(DIMMER)));
     }
 
     let p = Paragraph::new(Line::from(spans))
-        .style(Style::default().bg(BG_HIGHLIGHT));
+        .style(Style::default().bg(BG_SURFACE));
     f.render_widget(p, area);
 }
 
@@ -239,10 +284,12 @@ fn render_flow_list(f: &mut Frame, app: &ApiApp, area: Rect) {
         let base = flow.base_url.as_deref().unwrap_or("—");
 
         let line = Line::from(vec![
-            Span::styled(format!("{} ", status_icon), Style::default().fg(status_color)),
+            Span::styled(format!(" {} ", status_icon), Style::default().fg(status_color).add_modifier(Modifier::BOLD)),
             Span::styled(format!("{:<22}", truncate(&flow.name, 22)), name_style),
-            Span::styled(format!(" {:>2} nodes", node_count), Style::default().fg(DIM)),
-            Span::styled(format!("  {}", truncate(base, 24)), Style::default().fg(DIMMER)),
+            Span::styled(" │ ", Style::default().fg(DIMMER)),
+            Span::styled(format!("{:>2} node{}", node_count, if node_count == 1 { " " } else { "s" }), Style::default().fg(DIM)),
+            Span::styled("  ", Style::default()),
+            Span::styled(truncate(base, 22), Style::default().fg(DIMMER)),
         ]);
         ListItem::new(line)
     }).collect();
@@ -251,9 +298,9 @@ fn render_flow_list(f: &mut Frame, app: &ApiApp, area: Rect) {
     state.select(Some(app.active_flow_idx));
 
     let hints = if app.flow_running {
-        " Flows  [RUNNING...]"
+        " Flows  ◉ RUNNING... "
     } else {
-        " Flows  Enter·run  a·run-all  ↑↓·select"
+        " Flows  Enter·run  a·run-all  ↑↓·select "
     };
 
     let list = List::new(items)
@@ -261,55 +308,72 @@ fn render_flow_list(f: &mut Frame, app: &ApiApp, area: Rect) {
             Block::default()
                 .title(Span::styled(hints, title_style()))
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .border_style(border_style()),
         )
-        .highlight_style(selected_style());
+        .highlight_style(Style::default().bg(BG_SELECTED).fg(CYAN).add_modifier(Modifier::BOLD));
 
     f.render_stateful_widget(list, area, &mut state);
 }
 
 fn render_quick_stats(f: &mut Frame, app: &ApiApp, area: Rect) {
     let mut lines: Vec<Line> = Vec::new();
-
-    lines.push(Line::from(vec![Span::raw("")]));
+    lines.push(Line::raw(""));
 
     if let Some(run) = &app.last_run {
         let pass_pct = if run.steps.is_empty() { 0 } else {
             (run.passed_count() * 100) / run.steps.len()
         };
+        let result_bg = if run.passed { Style::default().fg(BG).bg(GREEN).add_modifier(Modifier::BOLD) }
+                        else { Style::default().fg(BG).bg(RED).add_modifier(Modifier::BOLD) };
+        let result_text = if run.passed { " ✔  PASSED " } else { " ✘  FAILED " };
 
         lines.push(Line::from(vec![
-            Span::styled("  Last Run ", stat_label()),
-            Span::styled(
-                if run.passed { "PASSED" } else { "FAILED" },
-                Style::default().fg(if run.passed { GREEN } else { RED }).add_modifier(Modifier::BOLD),
-            ),
+            Span::styled("  ", Style::default()),
+            Span::styled(result_text, result_bg),
         ]));
-        lines.push(Line::from(vec![
-            Span::styled("  Steps    ", stat_label()),
-            Span::styled(
-                format!("{}/{} passed", run.passed_count(), run.steps.len()),
-                stat_value(),
-            ),
-        ]));
-        lines.push(Line::from(vec![
-            Span::styled("  Duration ", stat_label()),
-            Span::styled(format!("{}ms", run.duration_ms()), stat_value()),
-        ]));
-        lines.push(Line::from(vec![
-            Span::styled("  Avg lat  ", stat_label()),
-            Span::styled(format!("{}ms", run.avg_latency_ms()), stat_value()),
-        ]));
+        lines.push(Line::raw(""));
+
+        // Stats grid
+        let stat_pairs: &[(&str, String, Color)] = &[
+            ("  Steps    ", format!("{} / {}", run.passed_count(), run.steps.len()), WHITE),
+            ("  Duration ", format!("{}ms", run.duration_ms()), CYAN),
+            ("  Avg lat  ", format!("{}ms", run.avg_latency_ms()), CYAN),
+            ("  Pass rate", format!("{}%", pass_pct), if pass_pct == 100 { GREEN } else if pass_pct > 50 { YELLOW } else { RED }),
+        ];
+        for (label, value, color) in stat_pairs {
+            lines.push(Line::from(vec![
+                Span::styled(*label, stat_label()),
+                Span::styled("  ", Style::default()),
+                Span::styled(value.clone(), Style::default().fg(*color).add_modifier(Modifier::BOLD)),
+            ]));
+        }
 
         lines.push(Line::raw(""));
 
-        // Pass rate gauge
-        let pct_label = format!("Pass rate  {}%", pass_pct);
-        lines.push(Line::from(vec![Span::styled(format!("  {}", pct_label), stat_label())]));
+        // Visual pass rate bar
+        let bar_width = (area.width as usize).saturating_sub(8).min(30);
+        let filled = (pass_pct as usize * bar_width) / 100;
+        let empty = bar_width.saturating_sub(filled);
+        let bar_color = if pass_pct == 100 { GREEN } else if pass_pct > 50 { YELLOW } else { RED };
+        lines.push(Line::from(vec![
+            Span::styled("  ", Style::default()),
+            Span::styled("▓".repeat(filled), Style::default().fg(bar_color)),
+            Span::styled("░".repeat(empty), Style::default().fg(DIMMER)),
+            Span::styled(format!(" {}%", pass_pct), Style::default().fg(bar_color).add_modifier(Modifier::BOLD)),
+        ]));
+
+        lines.push(Line::raw(""));
+        lines.push(Line::from(vec![
+            Span::styled("  Enter · run again  ", Style::default().fg(DIMMER)),
+        ]));
     } else {
         lines.push(Line::from(vec![
-            Span::styled("  No runs yet. Run a flow with: infynon weave flow run <id>", dim_style()),
+            Span::styled("  ○  No runs yet", Style::default().fg(DIM)),
         ]));
+        lines.push(Line::raw(""));
+        lines.push(Line::from(vec![Span::styled("  Press Enter to run", Style::default().fg(DIMMER))]));
+        lines.push(Line::from(vec![Span::styled("  the selected flow.", Style::default().fg(DIMMER))]));
     }
 
     let p = Paragraph::new(lines)
@@ -317,6 +381,7 @@ fn render_quick_stats(f: &mut Frame, app: &ApiApp, area: Rect) {
             Block::default()
                 .title(Span::styled(" Stats ", title_style()))
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .border_style(border_style()),
         )
         .wrap(Wrap { trim: false });
@@ -350,6 +415,7 @@ fn render_graph_canvas(f: &mut Frame, app: &ApiApp, area: Rect) {
     let block = Block::default()
         .title(Span::styled(" Flow Graph ", title_style()))
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(border_style());
     let inner = block.inner(area);
     f.render_widget(block, area);
@@ -519,6 +585,7 @@ fn render_graph_sidebar(f: &mut Frame, app: &ApiApp, flow: &crate::api::types::F
             Block::default()
                 .title(Span::styled(" Info ", title_style()))
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .border_style(border_style()),
         )
         .wrap(Wrap { trim: false });
@@ -542,41 +609,57 @@ fn render_live_execution(f: &mut Frame, app: &ApiApp, area: Rect) {
     };
 
     let items: Vec<ListItem> = steps.iter().map(|step| {
-        let icon = if step.passed {
-            Span::styled("✔ ", Style::default().fg(GREEN))
+        let (icon, icon_color) = if step.passed {
+            ("✔", GREEN)
         } else if step.error.is_some() {
-            Span::styled("✘ ", Style::default().fg(RED))
+            ("✘", RED)
         } else {
-            Span::styled("⚠ ", Style::default().fg(YELLOW))
+            ("⚠", YELLOW)
         };
 
         let status = step.status_code.map(|s| s.to_string()).unwrap_or_else(|| "ERR".to_string());
+        let status_color = match step.status_code {
+            Some(s) if s < 300 => GREEN,
+            Some(s) if s < 400 => YELLOW,
+            Some(_) => RED,
+            None => RED,
+        };
+
+        let method_color = match step.method.as_str() {
+            "GET"    => GREEN,
+            "POST"   => CYAN,
+            "PUT"    => YELLOW,
+            "PATCH"  => ORANGE,
+            "DELETE" => RED,
+            _        => DIM,
+        };
+
         let line = Line::from(vec![
-            icon,
-            Span::styled(format!("{:<18}", step.node_id), Style::default().fg(CYAN)),
-            Span::styled(format!(" {} ", step.method), Style::default().fg(YELLOW)),
-            Span::styled(format!("{:<32}", truncate(&step.url, 32)), Style::default().fg(TEXT_DIM)),
-            Span::styled(format!(" {} ", status), Style::default().fg(WHITE).add_modifier(Modifier::BOLD)),
-            Span::styled(format!("{}ms", step.duration_ms), Style::default().fg(DIM)),
+            Span::styled(format!(" {} ", icon), Style::default().fg(icon_color).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("{:<20}", truncate(&step.node_id, 20)), Style::default().fg(if step.passed { TEXT } else { WHITE })),
+            Span::styled(format!(" {:>6} ", step.method), Style::default().fg(method_color)),
+            Span::styled(format!("{}", status), Style::default().fg(status_color).add_modifier(Modifier::BOLD)),
+            Span::styled("  ", Style::default()),
+            Span::styled(format!("{:<34}", truncate(&step.url, 34)), Style::default().fg(TEXT_DIM)),
+            Span::styled(format!(" {}ms", step.duration_ms), Style::default().fg(DIM)),
         ]);
 
         let mut item_lines = vec![line];
 
-        // Show failed assertions
         for ar in &step.assertion_results {
             if !ar.passed {
                 item_lines.push(Line::from(vec![
-                    Span::raw("   "),
+                    Span::raw("    "),
                     Span::styled("✘ ", Style::default().fg(RED)),
                     Span::styled(&ar.check, Style::default().fg(RED)),
-                    Span::styled(format!("  (actual: {})", ar.actual), Style::default().fg(DIMMER)),
+                    Span::styled(format!("  ({})", ar.actual), Style::default().fg(DIMMER)),
                 ]));
             }
         }
 
         if let Some(err) = &step.error {
             item_lines.push(Line::from(vec![
-                Span::raw("   "),
+                Span::raw("    "),
                 Span::styled(format!("⚡ {}", truncate(err, 60)), Style::default().fg(RED)),
             ]));
         }
@@ -596,13 +679,14 @@ fn render_live_execution(f: &mut Frame, app: &ApiApp, area: Rect) {
             Block::default()
                 .title(Span::styled(title, title_style()))
                 .title_bottom(Span::styled(
-                    " ↑↓ navigate  Enter: inspect step  ",
+                    " ↑↓ navigate  Enter: inspect  r: retry  b: modify body  ",
                     Style::default().fg(DIMMER),
                 ))
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .border_style(border_style()),
         )
-        .highlight_style(selected_style());
+        .highlight_style(Style::default().bg(BG_SELECTED).fg(CYAN));
 
     f.render_stateful_widget(list, area, &mut list_state);
 }
@@ -630,7 +714,7 @@ fn render_latency_profiler(f: &mut Frame, app: &ApiApp, area: Rect) {
                     Span::styled(" to refresh.", dim_style()),
                 ]),
             ])
-            .block(Block::default().borders(Borders::ALL).border_style(border_style()))
+            .block(Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(border_style()))
             .wrap(Wrap { trim: false });
             f.render_widget(p, area);
             return;
@@ -640,6 +724,7 @@ fn render_latency_profiler(f: &mut Frame, app: &ApiApp, area: Rect) {
     let block = Block::default()
         .title(Span::styled(" Latency Profiler ", title_style()))
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(border_style());
     let inner = block.inner(area);
     f.render_widget(block, area);
@@ -667,13 +752,24 @@ fn render_latency_profiler(f: &mut Frame, app: &ApiApp, area: Rect) {
 
     lines.push(Line::raw(""));
     lines.push(Line::from(vec![
+        Span::styled("  ── Summary ─────────────────────────────────────────", Style::default().fg(DIMMER)),
+    ]));
+    lines.push(Line::from(vec![
         Span::styled(
-            format!("  Average: {}ms   P95: {}ms   Max: {}ms",
-                run.avg_latency_ms(),
+            format!(
+                "  P50: {}ms   P95: {}ms   P99: {}ms   Max: {}ms",
+                percentile(&run.steps, 50),
                 percentile(&run.steps, 95),
+                percentile(&run.steps, 99),
                 max_ms,
             ),
             stat_label(),
+        ),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled(
+            format!("  Avg: {}ms   Total: {}ms   {} nodes", run.avg_latency_ms(), run.duration_ms(), run.steps.len()),
+            Style::default().fg(TEXT_DIM),
         ),
     ]));
 
@@ -710,6 +806,7 @@ fn render_security_probes(f: &mut Frame, app: &ApiApp, area: Rect) {
             Block::default()
                 .title(Span::styled(" Security Probes ", title_style()))
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .border_style(border_style()),
         );
         f.render_widget(p, area);
@@ -769,6 +866,7 @@ fn render_security_probes(f: &mut Frame, app: &ApiApp, area: Rect) {
             Block::default()
                 .title(Span::styled(title, title_style()))
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .border_style(border_style()),
         );
 
@@ -808,6 +906,7 @@ fn render_env_panel(f: &mut Frame, app: &mut ApiApp, area: Rect) {
     let block = Block::default()
         .title(Span::styled(block_title, title_style()))
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(border);
     let inner = block.inner(area);
     f.render_widget(block, area);
@@ -972,6 +1071,7 @@ fn render_flow_context_panel(f: &mut Frame, app: &ApiApp, area: Rect) {
     let block = Block::default()
         .title(Span::styled(" Flow Context (last run) ", title_style()))
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(border_style());
     let para = Paragraph::new(lines).block(block).wrap(Wrap { trim: false });
     f.render_widget(para, area);
@@ -989,7 +1089,7 @@ fn render_state_inspector(f: &mut Frame, app: &ApiApp, area: Rect) {
         None => {
             f.render_widget(
                 Paragraph::new("No run yet.").style(dim_style())
-                    .block(Block::default().borders(Borders::ALL).border_style(border_style())),
+                    .block(Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(border_style())),
                 area,
             );
             return;
@@ -1032,6 +1132,7 @@ fn render_context_panel(f: &mut Frame, run: &FlowRunResult, area: Rect) {
             Block::default()
                 .title(Span::styled(" Final Context ", title_style()))
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .border_style(border_style()),
         )
         .wrap(Wrap { trim: false });
@@ -1087,6 +1188,7 @@ fn render_schema_drift_panel(f: &mut Frame, app: &ApiApp, run: &FlowRunResult, a
             Block::default()
                 .title(Span::styled(" Schema Drift ", title_style()))
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .border_style(border_style()),
         )
         .wrap(Wrap { trim: false });
@@ -1120,6 +1222,7 @@ fn render_run_diff(f: &mut Frame, app: &ApiApp, area: Rect) {
                 Block::default()
                     .title(Span::styled(" Run Diff ", title_style()))
                     .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
                     .border_style(border_style()),
             );
             f.render_widget(p, area);
@@ -1171,6 +1274,7 @@ fn render_run_column(f: &mut Frame, run: &FlowRunResult, title: &str, area: Rect
             Block::default()
                 .title(Span::styled(format!(" {} ", title), title_style()))
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .border_style(border_style()),
         )
         .wrap(Wrap { trim: false });
@@ -1232,6 +1336,7 @@ fn render_node_library(f: &mut Frame, app: &ApiApp, area: Rect) {
             .block(Block::default()
                 .title(Span::styled(" Node Library — empty ", title_style()))
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .border_style(border_style()))
             .wrap(Wrap { trim: false });
         f.render_widget(p, area);
@@ -1304,9 +1409,10 @@ fn render_node_library(f: &mut Frame, app: &ApiApp, area: Rect) {
                     Style::default().fg(DIMMER),
                 ))
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .border_style(border_style()),
         )
-        .highlight_style(selected_style());
+        .highlight_style(Style::default().bg(BG_SELECTED).fg(CYAN).add_modifier(Modifier::BOLD));
 
     f.render_stateful_widget(list, panes[0], &mut list_state);
 
@@ -1332,6 +1438,7 @@ fn render_node_library_detail(
                 Block::default()
                     .title(Span::styled(" Node Details ", title_style()))
                     .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
                     .border_style(border_style()),
             );
             f.render_widget(p, area);
@@ -1351,14 +1458,7 @@ fn render_node_library_detail(
     ]));
 
     // Method + Path
-    let method_color = match node.method.as_str() {
-        "GET"    => GREEN,
-        "POST"   => CYAN,
-        "PUT"    => YELLOW,
-        "PATCH"  => ORANGE,
-        "DELETE" => RED,
-        _ => WHITE,
-    };
+    let method_color = crate::tui::theme::method_color(&node.method);
     lines.push(Line::raw(""));
     lines.push(Line::from(vec![
         Span::styled(format!("  {}", node.method), Style::default().fg(method_color).add_modifier(Modifier::BOLD)),
@@ -1481,6 +1581,7 @@ fn render_node_library_detail(
             Block::default()
                 .title(Span::styled(" Node Details ", title_style()))
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .border_style(border_style()),
         )
         .wrap(Wrap { trim: false });
@@ -1578,6 +1679,7 @@ fn render_node_detail_overlay(f: &mut Frame, app: &ApiApp, area: Rect) {
             Block::default()
                 .title(Span::styled(format!(" {} ", node.id), title_style()))
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .border_style(Style::default().fg(CYAN)),
         )
         .wrap(Wrap { trim: false });
@@ -1618,6 +1720,7 @@ fn render_attach_overlay(f: &mut Frame, app: &ApiApp, area: Rect) {
             Block::default()
                 .title(Span::styled(" Attach Node ", title_style()))
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .border_style(Style::default().fg(CYAN)),
         );
 
@@ -1625,47 +1728,129 @@ fn render_attach_overlay(f: &mut Frame, app: &ApiApp, area: Rect) {
 }
 
 fn render_help_overlay(f: &mut Frame, area: Rect) {
-    let w = 56u16;
-    let h = 22u16;
+    let w = 62u16;
+    let h = 26u16;
     let x = area.x + (area.width.saturating_sub(w)) / 2;
     let y = area.y + (area.height.saturating_sub(h)) / 2;
     let overlay_area = Rect { x, y, width: w, height: h };
 
     f.render_widget(Clear, overlay_area);
 
-    let lines = vec![
+    let block = Block::default()
+        .title(Span::styled(" ◆ Keyboard Shortcuts ", title_style()))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(CYAN));
+    let inner = block.inner(overlay_area);
+    f.render_widget(block, overlay_area);
+
+    // Two columns
+    let cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(inner);
+
+    let left_lines = vec![
         Line::raw(""),
-        Line::from(vec![Span::styled("  ── Global ──────────────────────", dim_style())]),
-        Line::from(vec![Span::styled("  1-9    Switch views", normal_style())]),
-        Line::from(vec![Span::styled("  [ ]    Previous/next flow", normal_style())]),
-        Line::from(vec![Span::styled("  R      Refresh data", normal_style())]),
-        Line::from(vec![Span::styled("  /      Search", normal_style())]),
-        Line::from(vec![Span::styled("  ?      This help", normal_style())]),
-        Line::from(vec![Span::styled("  q      Quit", normal_style())]),
+        Line::from(vec![Span::styled(" Global", Style::default().fg(CYAN).add_modifier(Modifier::BOLD))]),
+        Line::from(vec![Span::styled(" ─────────────────────────", Style::default().fg(BORDER))]),
+        Line::from(vec![
+            Span::styled(" 1-9  ", Style::default().fg(YELLOW)),
+            Span::styled("Switch views", normal_style()),
+        ]),
+        Line::from(vec![
+            Span::styled(" [ ]  ", Style::default().fg(YELLOW)),
+            Span::styled("Prev/next flow", normal_style()),
+        ]),
+        Line::from(vec![
+            Span::styled(" R    ", Style::default().fg(YELLOW)),
+            Span::styled("Refresh data", normal_style()),
+        ]),
+        Line::from(vec![
+            Span::styled(" /    ", Style::default().fg(YELLOW)),
+            Span::styled("Search", normal_style()),
+        ]),
+        Line::from(vec![
+            Span::styled(" ?    ", Style::default().fg(YELLOW)),
+            Span::styled("Toggle help", normal_style()),
+        ]),
+        Line::from(vec![
+            Span::styled(" q    ", Style::default().fg(YELLOW)),
+            Span::styled("Quit", normal_style()),
+        ]),
         Line::raw(""),
-        Line::from(vec![Span::styled("  ── Flow Graph ──────────────────", dim_style())]),
-        Line::from(vec![Span::styled("  ↑↓←→   Navigate nodes", normal_style())]),
-        Line::from(vec![Span::styled("  Enter  Inspect node", normal_style())]),
-        Line::from(vec![Span::styled("  a      Attach new node to selected", normal_style())]),
-        Line::from(vec![Span::styled("  d      Detach edge from selected", normal_style())]),
-        Line::from(vec![Span::styled("  x      Chaos inject", normal_style())]),
-        Line::raw(""),
-        Line::from(vec![Span::styled("  ── Run Diff ────────────────────", dim_style())]),
-        Line::from(vec![Span::styled("  d      Load comparison runs", normal_style())]),
-        Line::raw(""),
-        Line::from(vec![Span::styled("  Any key to close this help", dim_style())]),
-        Line::raw(""),
+        Line::from(vec![Span::styled(" Flow Graph", Style::default().fg(CYAN).add_modifier(Modifier::BOLD))]),
+        Line::from(vec![Span::styled(" ─────────────────────────", Style::default().fg(BORDER))]),
+        Line::from(vec![
+            Span::styled(" ↑↓←→ ", Style::default().fg(YELLOW)),
+            Span::styled("Navigate nodes", normal_style()),
+        ]),
+        Line::from(vec![
+            Span::styled(" Enter ", Style::default().fg(YELLOW)),
+            Span::styled("Inspect node", normal_style()),
+        ]),
+        Line::from(vec![
+            Span::styled(" a    ", Style::default().fg(YELLOW)),
+            Span::styled("Attach node", normal_style()),
+        ]),
+        Line::from(vec![
+            Span::styled(" d    ", Style::default().fg(YELLOW)),
+            Span::styled("Detach edge", normal_style()),
+        ]),
+        Line::from(vec![
+            Span::styled(" x    ", Style::default().fg(YELLOW)),
+            Span::styled("Chaos inject", normal_style()),
+        ]),
     ];
 
-    let p = Paragraph::new(lines)
-        .block(
-            Block::default()
-                .title(Span::styled(" Help ", title_style()))
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(CYAN)),
-        );
+    let right_lines = vec![
+        Line::raw(""),
+        Line::from(vec![Span::styled(" Overview", Style::default().fg(CYAN).add_modifier(Modifier::BOLD))]),
+        Line::from(vec![Span::styled(" ─────────────────────────", Style::default().fg(BORDER))]),
+        Line::from(vec![
+            Span::styled(" Enter ", Style::default().fg(YELLOW)),
+            Span::styled("Run selected flow", normal_style()),
+        ]),
+        Line::from(vec![
+            Span::styled(" a     ", Style::default().fg(YELLOW)),
+            Span::styled("Run all flows", normal_style()),
+        ]),
+        Line::raw(""),
+        Line::from(vec![Span::styled(" Node Library", Style::default().fg(CYAN).add_modifier(Modifier::BOLD))]),
+        Line::from(vec![Span::styled(" ─────────────────────────", Style::default().fg(BORDER))]),
+        Line::from(vec![
+            Span::styled(" Enter ", Style::default().fg(YELLOW)),
+            Span::styled("Run node", normal_style()),
+        ]),
+        Line::from(vec![
+            Span::styled(" n/p/m ", Style::default().fg(YELLOW)),
+            Span::styled("Edit name/path/method", normal_style()),
+        ]),
+        Line::from(vec![
+            Span::styled(" b     ", Style::default().fg(YELLOW)),
+            Span::styled("Edit body", normal_style()),
+        ]),
+        Line::raw(""),
+        Line::from(vec![Span::styled(" Env/Context  (tab 6)", Style::default().fg(CYAN).add_modifier(Modifier::BOLD))]),
+        Line::from(vec![Span::styled(" ─────────────────────────", Style::default().fg(BORDER))]),
+        Line::from(vec![
+            Span::styled(" n     ", Style::default().fg(YELLOW)),
+            Span::styled("Add variable", normal_style()),
+        ]),
+        Line::from(vec![
+            Span::styled(" Enter ", Style::default().fg(YELLOW)),
+            Span::styled("Edit variable", normal_style()),
+        ]),
+        Line::from(vec![
+            Span::styled(" d/v   ", Style::default().fg(YELLOW)),
+            Span::styled("Delete / Reveal", normal_style()),
+        ]),
+        Line::raw(""),
+        Line::from(vec![Span::styled("  Esc or any key to close", dim_style())]),
+    ];
 
-    f.render_widget(p, overlay_area);
+    f.render_widget(Paragraph::new(left_lines), cols[0]);
+    f.render_widget(Paragraph::new(right_lines), cols[1]);
 }
 
 // ── Config view (tab 0) ───────────────────────────────────────────────────────
@@ -1703,6 +1888,7 @@ fn render_config(f: &mut Frame, app: &ApiApp, area: Rect) {
             Block::default()
                 .title(Span::styled(" Configuration ", title_style()))
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .border_style(border_style()),
         )
         .wrap(Wrap { trim: false });
@@ -1716,6 +1902,7 @@ fn render_overview_nodes_only(f: &mut Frame, app: &ApiApp, area: Rect) {
     let outer = Block::default()
         .title(Span::styled(" Overview ", title_style()))
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(border_style());
     let inner = outer.inner(area);
     f.render_widget(outer, area);
@@ -1776,6 +1963,7 @@ fn render_no_flows_hint(f: &mut Frame, area: Rect, tab_name: &str) {
         Block::default()
             .title(Span::styled(format!(" {} ", tab_name), title_style()))
             .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
             .border_style(border_style()),
     )
     .wrap(Wrap { trim: false });
@@ -1788,6 +1976,7 @@ fn render_welcome_screen(f: &mut Frame, area: Rect) {
     let outer = Block::default()
         .title(Span::styled(" Weave — API Flow Testing ", title_style()))
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(CYAN));
     let inner = outer.inner(area);
     f.render_widget(outer, area);
@@ -1859,89 +2048,205 @@ fn render_welcome_screen(f: &mut Frame, area: Rect) {
 // ── Prompt modal ──────────────────────────────────────────────────────────────
 
 fn render_prompt_modal(f: &mut Frame, app: &ApiApp, area: Rect) {
+    use crate::api::types::PromptType;
     let modal = match &app.prompt_modal {
         Some(m) => m,
         None => return,
     };
 
-    let input_count = modal.inputs.len() as u16;
-    // height: title(1) + border(2) + subtitle(1) + blank(1) + inputs*(2 each) + footer(1) + blank(1)
-    let h = (input_count * 2 + 6).max(8).min(area.height.saturating_sub(4));
-    let w = (area.width * 60 / 100).max(50).min(area.width.saturating_sub(4));
+    // Calculate height dynamically based on field types
+    let field_heights: Vec<u16> = modal.inputs.iter().map(|pi| match pi.prompt_type {
+        PromptType::Select | PromptType::Multiselect => (2 + pi.options.len() as u16).max(3),
+        _ => 3,
+    }).collect();
+    let total_fields_h: u16 = field_heights.iter().sum();
+    let h = (total_fields_h + 8).max(10).min(area.height.saturating_sub(4));
+    let w = (area.width * 65 / 100).max(52).min(area.width.saturating_sub(4));
     let x = area.x + (area.width.saturating_sub(w)) / 2;
     let y = area.y + (area.height.saturating_sub(h)) / 2;
     let overlay_area = Rect { x, y, width: w, height: h };
 
     f.render_widget(Clear, overlay_area);
 
-    let mut lines: Vec<Line> = vec![
-        Line::raw(""),
-        Line::from(vec![Span::styled(
-            "  This node needs values before it can send the request.",
-            dim_style(),
-        )]),
-        Line::raw(""),
-    ];
+    let node_label = truncate(&modal.node_id, 32);
+    let title = format!(" ◆ Input Required — {} ", node_label);
+
+    let outer_block = Block::default()
+        .title(Span::styled(title, title_style()))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(CYAN));
+    let inner = outer_block.inner(overlay_area);
+    f.render_widget(outer_block, overlay_area);
+
+    // Layout inside: subtitle | inputs... | footer
+    let mut constraints = vec![Constraint::Length(2)]; // subtitle
+    for h in &field_heights {
+        constraints.push(Constraint::Length(*h));
+    }
+    constraints.push(Constraint::Min(1)); // footer
+
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(constraints)
+        .split(inner);
+
+    // Subtitle
+    f.render_widget(
+        Paragraph::new(Line::from(vec![Span::styled(
+            " Provide values before the request fires:",
+            Style::default().fg(TEXT_DIM),
+        )])),
+        sections[0],
+    );
 
     for (i, pi) in modal.inputs.iter().enumerate() {
-        let label = if pi.label.is_empty() { pi.var.as_str() } else { pi.label.as_str() };
+        let field_area = sections[i + 1];
         let is_current = i == modal.current_field;
-
-        let label_style = if is_current {
+        let label = if pi.label.is_empty() { pi.var.as_str() } else { pi.label.as_str() };
+        let border_style = if is_current { Style::default().fg(CYAN) } else { Style::default().fg(BORDER) };
+        let title_style_field = if is_current {
             Style::default().fg(CYAN).add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(DIM)
         };
 
-        lines.push(Line::from(vec![
-            Span::styled("  ", Style::default()),
-            Span::styled(label, label_style),
-        ]));
+        match pi.prompt_type {
+            PromptType::Text => {
+                let raw_val = modal.values.get(i).map(|s| s.as_str()).unwrap_or("");
+                let display_val = if pi.secret {
+                    "•".repeat(raw_val.len())
+                } else if raw_val.is_empty() {
+                    pi.default.as_deref().map(|d| format!("{} (default)", d)).unwrap_or_default()
+                } else {
+                    raw_val.to_string()
+                };
+                let cursor = if is_current { "▌" } else { "" };
+                let val_style = if is_current { Style::default().fg(YELLOW) }
+                    else if raw_val.is_empty() { Style::default().fg(DIMMER) }
+                    else { Style::default().fg(WHITE) };
 
-        let raw_val = modal.values.get(i).map(|s| s.as_str()).unwrap_or("");
-        let display_val = if pi.secret {
-            "*".repeat(raw_val.len())
-        } else if raw_val.is_empty() {
-            if let Some(ref d) = pi.default {
-                format!("{} (default)", d)
-            } else {
-                String::new()
+                let fb = Block::default()
+                    .title(Span::styled(format!(" {} ", label), title_style_field))
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
+                    .border_style(border_style);
+                let fi = fb.inner(field_area);
+                f.render_widget(fb, field_area);
+                f.render_widget(
+                    Paragraph::new(Line::from(vec![
+                        Span::raw(" "),
+                        Span::styled(format!("{}{}", display_val, cursor), val_style),
+                    ])),
+                    fi,
+                );
             }
-        } else {
-            raw_val.to_string()
-        };
-
-        let cursor = if is_current { "▌" } else { "" };
-        let val_style = if is_current {
-            Style::default().fg(YELLOW)
-        } else if raw_val.is_empty() {
-            Style::default().fg(DIMMER)
-        } else {
-            Style::default().fg(WHITE)
-        };
-
-        lines.push(Line::from(vec![
-            Span::styled("  › ", dim_style()),
-            Span::styled(format!("{}{}", display_val, cursor), val_style),
-        ]));
+            PromptType::Boolean => {
+                let is_true = modal.values.get(i).map(|v| v == "true").unwrap_or(false);
+                let fb = Block::default()
+                    .title(Span::styled(format!(" {} ", label), title_style_field))
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
+                    .border_style(border_style);
+                let fi = fb.inner(field_area);
+                f.render_widget(fb, field_area);
+                let (yes_style, no_style) = if is_true {
+                    (Style::default().fg(GREEN).add_modifier(Modifier::BOLD | Modifier::REVERSED), Style::default().fg(DIM))
+                } else {
+                    (Style::default().fg(DIM), Style::default().fg(RED).add_modifier(Modifier::BOLD | Modifier::REVERSED))
+                };
+                f.render_widget(
+                    Paragraph::new(Line::from(vec![
+                        Span::raw(" "),
+                        Span::styled("[ Yes ]", yes_style),
+                        Span::raw("  "),
+                        Span::styled("[ No ]", no_style),
+                        Span::styled("   y/n or Space to toggle", Style::default().fg(DIMMER)),
+                    ])),
+                    fi,
+                );
+            }
+            PromptType::Select => {
+                let cursor_idx = modal.option_cursors.get(i).copied().unwrap_or(0);
+                let fb = Block::default()
+                    .title(Span::styled(format!(" {} ", label), title_style_field))
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
+                    .border_style(border_style);
+                let fi = fb.inner(field_area);
+                f.render_widget(fb, field_area);
+                let items: Vec<ListItem> = pi.options.iter().enumerate().map(|(j, opt)| {
+                    let is_sel = j == cursor_idx;
+                    let style = if is_sel && is_current {
+                        Style::default().fg(CYAN).add_modifier(Modifier::BOLD)
+                    } else if is_sel {
+                        Style::default().fg(WHITE)
+                    } else {
+                        Style::default().fg(DIM)
+                    };
+                    let prefix = if is_sel { "▶ " } else { "  " };
+                    ListItem::new(Line::from(vec![
+                        Span::styled(format!(" {}{}", prefix, opt), style),
+                    ]))
+                }).collect();
+                let mut list_state = ListState::default();
+                list_state.select(Some(cursor_idx));
+                f.render_stateful_widget(
+                    List::new(items).highlight_style(Style::default().bg(BG_SELECTED).fg(CYAN)),
+                    fi,
+                    &mut list_state,
+                );
+            }
+            PromptType::Multiselect => {
+                let cursor_idx = modal.option_cursors.get(i).copied().unwrap_or(0);
+                let checked = modal.multi_checked.get(i).map(|v| v.as_slice()).unwrap_or(&[]);
+                let fb = Block::default()
+                    .title(Span::styled(format!(" {} ", label), title_style_field))
+                    .title_bottom(Span::styled(" Space: toggle  Enter: confirm  ", Style::default().fg(DIMMER)))
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
+                    .border_style(border_style);
+                let fi = fb.inner(field_area);
+                f.render_widget(fb, field_area);
+                let items: Vec<ListItem> = pi.options.iter().enumerate().map(|(j, opt)| {
+                    let is_cur = j == cursor_idx && is_current;
+                    let is_checked = checked.get(j).copied().unwrap_or(false);
+                    let checkbox = if is_checked { "[✔]" } else { "[ ]" };
+                    let cb_style = if is_checked { Style::default().fg(GREEN) } else { Style::default().fg(DIM) };
+                    let label_style = if is_cur {
+                        Style::default().fg(CYAN).add_modifier(Modifier::BOLD)
+                    } else if is_checked {
+                        Style::default().fg(WHITE)
+                    } else {
+                        Style::default().fg(DIM)
+                    };
+                    ListItem::new(Line::from(vec![
+                        Span::raw(" "),
+                        Span::styled(checkbox, cb_style),
+                        Span::raw(" "),
+                        Span::styled(opt.as_str(), label_style),
+                    ]))
+                }).collect();
+                let mut list_state = ListState::default();
+                list_state.select(Some(cursor_idx));
+                f.render_stateful_widget(
+                    List::new(items).highlight_style(Style::default().bg(BG_SELECTED)),
+                    fi,
+                    &mut list_state,
+                );
+            }
+        }
     }
 
-    lines.push(Line::raw(""));
-    lines.push(Line::from(vec![Span::styled(
-        "  Tab/↓ next  ↑ prev  Enter submit  Esc cancel",
-        dim_style(),
-    )]));
-
-    let title = format!(" ◆ Input Required — {} ", modal.node_id);
-    let p = Paragraph::new(lines)
-        .block(
-            Block::default()
-                .title(Span::styled(title, title_style()))
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(CYAN)),
-        );
-
-    f.render_widget(p, overlay_area);
+    // Footer
+    let footer_area = sections[modal.inputs.len() + 1];
+    f.render_widget(
+        Paragraph::new(Line::from(vec![Span::styled(
+            " Tab next field  ↑↓ navigate/select  Enter confirm  Esc cancel",
+            dim_style(),
+        )])),
+        footer_area,
+    );
 }
 
 // ── Body editor modal ─────────────────────────────────────────────────────────
@@ -2027,6 +2332,7 @@ fn render_body_editor(f: &mut Frame, app: &ApiApp, area: Rect) {
             Block::default()
                 .title(Span::styled(title, Style::default().fg(CYAN).add_modifier(Modifier::BOLD)))
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .border_style(Style::default().fg(CYAN)),
         );
 
@@ -2166,8 +2472,10 @@ fn render_step_detail_modal(f: &mut Frame, app: &ApiApp, area: Rect) {
                     Style::default().fg(Color::Rgb(80, 80, 120)),
                 ))
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .border_style(Style::default().fg(CYAN)),
         )
+        .wrap(Wrap { trim: false })
         .scroll((scroll as u16, 0));
 
     f.render_widget(p, overlay);
@@ -2221,6 +2529,7 @@ fn render_node_field_editor_modal(f: &mut Frame, app: &ApiApp, area: Rect) {
             Block::default()
                 .title(Span::styled(title, Style::default().fg(CYAN).add_modifier(Modifier::BOLD)))
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .border_style(Style::default().fg(CYAN)),
         );
 

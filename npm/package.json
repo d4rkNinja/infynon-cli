@@ -1,7 +1,7 @@
 {
   "name": "infynon",
-  "version": "0.2.0-beta.6.7",
-  "description": "Universal package security manager & network firewall — intercepts installs across npm, pip, cargo, go, gem and more with 3-layer CVE verification, plus a real-time reverse proxy WAF with TUI dashboard",
+  "version": "0.2.0-beta.7",
+  "description": "Universal package security manager, network WAF, and API flow tester — intercepts installs across 14 ecosystems with CVE verification, reverse proxy WAF with TUI, and node-based API integration testing with security probes.",
   "bin": {
     "infynon": "./run.js",
     "infynon-pkg": "./run.js"
@@ -26,7 +26,10 @@
     "waf",
     "cve",
     "pentest",
-    "supply-chain"
+    "supply-chain",
+    "api-testing",
+    "integration-testing",
+    "security-probes"
   ],
   "author": "d4rkNinja",
   "license": "MIT",

@@ -16,6 +16,11 @@ pub const BG: Color = Color::Rgb(10, 10, 20);
 pub const BG_HIGHLIGHT: Color = Color::Rgb(25, 25, 45);
 pub const BORDER: Color = Color::Rgb(80, 80, 120);
 pub const WHITE: Color = Color::Rgb(240, 240, 250);
+pub const BG_SURFACE: Color = Color::Rgb(18, 18, 35);
+pub const BG_SELECTED: Color = Color::Rgb(30, 30, 55);
+pub const BORDER_ACTIVE: Color = Color::Rgb(0, 180, 220);
+pub const TEAL: Color = Color::Rgb(0, 200, 180);
+pub const PINK: Color = Color::Rgb(255, 80, 160);
 
 // ── Verdict colors ──────────────────────────────────────────────────────────
 
@@ -69,4 +74,16 @@ pub fn stat_value() -> Style {
 
 pub fn stat_label() -> Style {
     Style::default().fg(TEXT_DIM)
+}
+
+pub fn method_color(method: &str) -> Color {
+    match method {
+        "GET"    => GREEN,
+        "POST"   => CYAN,
+        "PUT"    => YELLOW,
+        "PATCH"  => ORANGE,
+        "DELETE" => RED,
+        "HEAD"   => TEAL,
+        _        => DIM,
+    }
 }

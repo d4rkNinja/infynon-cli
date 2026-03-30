@@ -1132,8 +1132,8 @@ fn execute_api_command(action: ApiCommands) {
             },
             NodeAction::Prompt { node_id, action } => match action {
                 PromptAction::List => node::cmd_node_prompt_list(&node_id),
-                PromptAction::Add { var, label, secret, default } => {
-                    node::cmd_node_prompt_add(&node_id, &var, &label, secret, default)
+                PromptAction::Add { var, label, secret, default, prompt_type, options } => {
+                    node::cmd_node_prompt_add(&node_id, &var, &label, secret, default, &prompt_type, options)
                 }
                 PromptAction::Remove { index } => node::cmd_node_prompt_remove(&node_id, index),
             },

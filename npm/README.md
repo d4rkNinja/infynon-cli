@@ -2,7 +2,7 @@
 
 **🔥 Stop installing vulnerable dependencies blindly**
 
-A security-first CLI: pre-install CVE scanner for 14 ecosystems + reverse proxy WAF for your backend.
+A security-first CLI: pre-install CVE scanner for 14 ecosystems + reverse proxy WAF + node-based API flow tester with security probes.
 
 [![npm](https://img.shields.io/npm/v/infynon?style=flat-square&logo=npm)](https://www.npmjs.com/package/infynon)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/d4rkNinja/infynon-cli/blob/main/LICENSE)
@@ -34,7 +34,7 @@ npm uninstall -g infynon
 
 ## What is INFYNON?
 
-A single binary with two modes:
+A single binary with three modes:
 
 ### 1. `infynon pkg` — Package Security
 
@@ -72,7 +72,41 @@ infynon pkg uv add fastapi --agent --auto-fix      # any ecosystem, machine-read
 
 **Ecosystems:** npm · yarn · pnpm · bun · pip · uv · poetry · cargo · go · gem · composer · nuget · hex · pub
 
-### 2. `infynon` — Network Firewall
+### 2. `infynon weave` — API Flow Testing
+
+Test your entire API as a connected flow. Model endpoints as a directed graph — authentication tokens and extracted values thread automatically between nodes.
+
+```bash
+# Set your API base URL once
+infynon weave env set BASE_URL http://localhost:8001
+
+# Create nodes from natural language
+infynon weave node create --ai "POST /auth/login with email and password, extracts token"
+infynon weave node create --ai "POST /orders — creates order, extracts order_id"
+
+# Wire into a flow and run
+infynon weave flow create "checkout" --ai "login then create order"
+infynon weave flow run checkout
+
+# Run security probes (auth bypass, rate limit, SQL injection)
+infynon weave ai probe checkout
+
+# Open the 10-tab TUI dashboard
+infynon weave tui
+```
+
+**Runtime prompt inputs** — pause and ask for OTPs, passwords, and dynamic values mid-flow, with 4 types:
+```bash
+infynon weave node prompt verify-otp add otp_code --label "OTP Code" --secret
+infynon weave node prompt create-order add env --type select --options "staging,production,dev"
+infynon weave node prompt confirm-delete add confirm --type boolean --default false
+```
+
+**CI ready** — use `--default` values or `--set KEY=val` for fully non-interactive runs.
+
+---
+
+### 3. `infynon` — Network Firewall
 
 A reverse proxy WAF with a real-time TUI dashboard. Sits between the internet and your backend.
 
@@ -110,6 +144,7 @@ infynon logs --verdict block
 
 ## More Commands
 
+### Package Security
 | Command | Description |
 |---------|-------------|
 | `infynon pkg scan` | Scan lock files for CVEs |
@@ -124,6 +159,18 @@ infynon logs --verdict block
 | `infynon pkg clean` | Remove unused dependencies |
 | `infynon pkg migrate <from> <to>` | Migrate between package managers |
 | `infynon pkg eagle-eye setup` | Set up scheduled CVE monitoring with email alerts |
+
+### API Flow Testing (Weave)
+| Command | Description |
+|---------|-------------|
+| `infynon weave node create --ai "..."` | Create a node from a natural language description |
+| `infynon weave flow create "name" --ai "..."` | Build a flow from description |
+| `infynon weave flow run <id>` | Run a flow with live step output |
+| `infynon weave flow run <id> --set key=val` | Pre-seed context vars (skip prompts) |
+| `infynon weave ai probe <id>` | Run auth bypass / rate limit / SQLi security probes |
+| `infynon weave ai explain <id>` | Diagnose the last failed run |
+| `infynon weave validate` | Validate all nodes and flows |
+| `infynon weave tui` | Open 10-tab TUI dashboard |
 
 ---
 

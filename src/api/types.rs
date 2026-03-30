@@ -4,6 +4,16 @@ use chrono::{DateTime, Utc};
 
 // ── PromptInput ───────────────────────────────────────────────────────────────
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum PromptType {
+    #[default]
+    Text,
+    Boolean,
+    Select,
+    Multiselect,
+}
+
 /// A variable that is requested interactively from the user before the node fires.
 /// Useful for OTPs, 2FA codes, captcha responses, dynamic passwords, etc.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,6 +28,11 @@ pub struct PromptInput {
     /// Optional pre-filled default value (user can accept or override)
     #[serde(default)]
     pub default: Option<String>,
+    #[serde(default, rename = "type")]
+    pub prompt_type: PromptType,
+    /// For select/multiselect: the list of options to choose from
+    #[serde(default)]
+    pub options: Vec<String>,
 }
 
 // ── Node ─────────────────────────────────────────────────────────────────────
