@@ -10,6 +10,7 @@ A security-first CLI: pre-install CVE scanner for 14 ecosystems + reverse proxy 
 
 > ⚠️ AI installs packages. You don't verify them. That's the risk.
 > **INFYNON fixes that — blocks threats before they reach your system.**
+> Use `--agent` for structured JSON output when running inside AI agents or CI pipelines.
 
 ---
 
@@ -58,10 +59,15 @@ infynon pkg fix --auto
 infynon pkg audit
 
 # CI / non-interactive flags (no prompts)
-infynon pkg npm install express --strict high      # fail build on critical/high
+infynon pkg npm install express --strict high      # fail build on critical/high (exit 3)
 infynon pkg npm install express --auto-fix         # auto-upgrade to safe versions
 infynon pkg npm install express --skip-vulnerable  # skip bad packages silently
 infynon pkg npm install express --yes              # install everything (audit-only CI)
+
+# AI agent mode — structured JSON output for AI tools and CI parsers
+infynon pkg scan --agent                           # JSON: status/vulnerabilities/summary
+infynon pkg npm install express --agent --strict high   # JSON: installed/blocked/vulns
+infynon pkg uv add fastapi --agent --auto-fix      # any ecosystem, machine-readable
 ```
 
 **Ecosystems:** npm · yarn · pnpm · bun · pip · uv · poetry · cargo · go · gem · composer · nuget · hex · pub
@@ -93,11 +99,12 @@ infynon logs --verdict block
 
 ## How It Works (Package Security)
 
-1. You (or an AI tool) runs `infynon pkg npm install express`
-2. INFYNON resolves the full dependency tree
-3. Queries **OSV.dev** for known CVEs across all packages
-4. Presents an interactive decision for any vulnerable package — block, skip, or install a fixed version
-5. Only approved packages get installed
+1. You (or an AI agent) runs `infynon pkg npm install express`
+2. INFYNON resolves the latest version and queries **OSV.dev** for CVEs
+3. With `--agent`: emits JSON + structured exit code — AI agents parse and react
+4. With `--strict high`: blocks installation if critical/high CVEs are found (exit `3`)
+5. With `--auto-fix`: silently upgrades to the nearest safe version
+6. Only approved packages get installed
 
 ---
 
