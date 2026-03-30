@@ -1057,6 +1057,13 @@ impl ApiApp {
             return;
         }
 
+        // Config URL editor — intercept before global digit keys so typing a number
+        // doesn't switch tabs while editing the base URL.
+        if self.config_editing_url {
+            self.handle_config_key(key);
+            return;
+        }
+
         // Global keys
         match key.code {
             KeyCode::Char('q') => { self.should_quit = true; return; }
