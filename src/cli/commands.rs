@@ -32,7 +32,7 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
                 });
                 let fl   = fix.map(|f| FixLevel::from_str(&f));
                 let file = pkg_file.or(args.pkg_file);
-                run_scan(fmt, fl, file.as_deref());
+                run_scan(fmt, fl, file.as_deref(), args.agent);
                 return Ok(());
             }
             PkgCommands::Audit { pkg_file } => {
@@ -207,12 +207,14 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
     // e.g. "pip" may resolve to "pip3" on Linux; "dart" may resolve to "flutter".
     let actual_binary = detector::resolve_binary(binary_to_check);
 
-    Logger::subtitle("🛡️", "INFYNON Secure Proxy", "Active");
-    Logger::detail("» Ecosystem:", ecosystem);
-    Logger::success(&format!("'{}' binary found — proceeding", actual_binary));
+    if !args.agent {
+        Logger::subtitle("🛡️", "INFYNON Secure Proxy", "Active");
+        Logger::detail("» Ecosystem:", ecosystem);
+        Logger::success(&format!("'{}' binary found — proceeding", actual_binary));
+    }
 
     if !install_packages.is_empty() {
-        let (safe, hits) = check_packages_before_install(&install_packages, ecosystem);
+        let (safe, hits) = check_packages_before_install(&install_packages, ecosystem, args.agent);
 
         let pkgs_to_install = if !safe {
             // ── --strict: block entire install if any hit matches the level ──
@@ -220,6 +222,26 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
                 let level = scan::FixLevel::from_str(strict_level);
                 let blocked = hits.iter().any(|h| level.matches(h.severity));
                 if blocked {
+                    if args.agent {
+                        let vulns: Vec<serde_json::Value> = hits.iter().map(|h| serde_json::json!({
+                            "package":         h.package,
+                            "current_version": "",
+                            "cve_id":          h.cve_id,
+                            "severity":        h.severity,
+                            "summary":         h.summary,
+                            "safe_version":    h.fixed_version,
+                            "fix_cmd":         h.upgrade_cmd
+                        })).collect();
+                        let json = serde_json::json!({
+                            "status":           "blocked",
+                            "packages_checked": install_packages,
+                            "vulnerabilities":  vulns,
+                            "installed":        false,
+                            "blocked_by":       format!("--strict {}", strict_level)
+                        });
+                        println!("{}", serde_json::to_string_pretty(&json).unwrap());
+                        std::process::exit(3);
+                    }
                     let level_label = if strict_level == "all" { "all severities".to_string() } else { format!("{}+", strict_level) };
                     println!(
                         "\n  {}  {} — {}  (blocking: {})\n",
@@ -228,7 +250,7 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
                         "--strict mode active".truecolor(200,80,80),
                         level_label.truecolor(200,120,80)
                     );
-                    std::process::exit(1);
+                    std::process::exit(3);
                 }
             }
 
@@ -312,11 +334,38 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
         let mut cmd_parts = vec![install_action.clone()];
         cmd_parts.extend(pkgs_to_install.iter().cloned());
         let cmd = build_proxy_cmd(ecosystem, &actual_binary, &cmd_parts);
-        println!();
-        Logger::step(&format!("Running: {}", cmd));
-        println!();
-        if let Err(e) = crate::cli::proxy_pkg_cmd(&cmd) {
-            Logger::error(&format!("Failed to execute '{}': {}", actual_binary, e));
+        if !args.agent {
+            println!();
+            Logger::step(&format!("Running: {}", cmd));
+            println!();
+        }
+        let install_ok = crate::cli::proxy_pkg_cmd(&cmd).is_ok();
+        if !install_ok && !args.agent {
+            Logger::error(&format!("Failed to execute '{}'", actual_binary));
+        }
+
+        if args.agent {
+            let vulns: Vec<serde_json::Value> = hits.iter().map(|h| serde_json::json!({
+                "package":         h.package,
+                "current_version": "",
+                "cve_id":          h.cve_id,
+                "severity":        h.severity,
+                "summary":         h.summary,
+                "safe_version":    h.fixed_version,
+                "fix_cmd":         h.upgrade_cmd
+            })).collect();
+            let has_medium_plus = hits.iter().any(|h| matches!(h.severity, "CRITICAL"|"HIGH"|"MEDIUM"));
+            let status = if hits.is_empty() { "clean" } else if has_medium_plus { "vulnerable" } else { "warnings" };
+            let exit_code: i32 = if hits.is_empty() { 0 } else if has_medium_plus { 2 } else { 1 };
+            let json = serde_json::json!({
+                "status":           status,
+                "packages_checked": install_packages,
+                "vulnerabilities":  vulns,
+                "installed":        install_ok,
+                "install_cmd":      cmd
+            });
+            println!("{}", serde_json::to_string_pretty(&json).unwrap());
+            std::process::exit(exit_code);
         }
     } else {
         // Pass-through: forward all args directly to the real package manager binary.

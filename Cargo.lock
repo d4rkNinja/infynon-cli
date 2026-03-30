@@ -966,7 +966,7 @@ dependencies = [
 
 [[package]]
 name = "infynon"
-version = "0.2.0-beta.6.5"
+version = "0.2.0-beta.6.6"
 dependencies = [
  "bytes",
  "chrono",
