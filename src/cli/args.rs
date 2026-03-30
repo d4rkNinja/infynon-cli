@@ -300,6 +300,216 @@ pub enum FirewallCommands {
 
     /// Manually trigger nightly intelligence pipeline immediately
     UpdateIntel,
+
+    /// API Testing — node-based API flow testing with TUI
+    #[command(name = "api")]
+    Api {
+        #[command(subcommand)]
+        action: ApiCommands,
+    },
+}
+
+// ── API Testing commands ──────────────────────────────────────────────────────
+
+#[derive(Subcommand, Debug)]
+pub enum ApiCommands {
+    /// Open the TUI dashboard (flow graph, live execution, security probes)
+    #[command(name = "tui")]
+    Tui {
+        /// Flow ID to open (optional — defaults to overview)
+        #[arg(value_name = "FLOW_ID")]
+        flow_id: Option<String>,
+    },
+
+    /// Node management
+    #[command(name = "node")]
+    Node {
+        #[command(subcommand)]
+        action: NodeAction,
+    },
+
+    /// Flow management
+    #[command(name = "flow")]
+    Flow {
+        #[command(subcommand)]
+        action: FlowAction,
+    },
+
+    /// Attach two nodes (creates an edge in all relevant flows)
+    #[command(name = "attach")]
+    Attach {
+        /// Source node ID
+        from: String,
+        /// Target node ID
+        to: String,
+        /// Variables to carry across the edge (comma-separated)
+        #[arg(long, value_delimiter = ',')]
+        carry: Vec<String>,
+        /// Only follow this edge if condition is true (e.g. "status == 201")
+        #[arg(long, value_name = "EXPR")]
+        condition: Option<String>,
+        /// Let AI infer what to carry
+        #[arg(long)]
+        ai: bool,
+    },
+
+    /// Remove edge between two nodes
+    #[command(name = "detach")]
+    Detach {
+        from: String,
+        to: String,
+    },
+
+    /// AI-powered operations
+    #[command(name = "ai")]
+    Ai {
+        #[command(subcommand)]
+        action: AiAction,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum NodeAction {
+    /// Create a new node (interactive or from --ai description)
+    Create {
+        /// Let AI generate the node from a description
+        #[arg(long, value_name = "DESCRIPTION")]
+        ai: Option<String>,
+    },
+    /// Show full details of a node
+    Get {
+        id: String,
+    },
+    /// List all nodes in the library
+    List,
+    /// Remove a node
+    Remove {
+        id: String,
+    },
+    /// Clone a node with a new ID
+    Clone {
+        id: String,
+        new_id: String,
+    },
+    /// Execute a single node in isolation
+    Run {
+        id: String,
+        /// Base URL for the request
+        #[arg(long, default_value = "http://localhost:3000")]
+        base_url: String,
+        /// Set context variables (key=value)
+        #[arg(long, value_name = "KEY=VALUE", value_parser = parse_key_val)]
+        set: Vec<(String, String)>,
+    },
+    /// Export a node as curl command or JSON
+    Export {
+        id: String,
+        /// Output format: curl | json
+        #[arg(long, default_value = "curl")]
+        format: String,
+        /// Base URL for the exported command
+        #[arg(long)]
+        base_url: Option<String>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum FlowAction {
+    /// Create a new flow
+    Create {
+        /// Flow name
+        name: String,
+        /// Let AI build the flow from a description
+        #[arg(long, value_name = "DESCRIPTION")]
+        ai: Option<String>,
+    },
+    /// List all flows
+    List,
+    /// Show a flow's graph
+    Show {
+        id: String,
+    },
+    /// Run a specific flow
+    Run {
+        id: String,
+        /// Override base URL
+        #[arg(long)]
+        base_url: Option<String>,
+    },
+    /// Run all flows
+    RunAll {
+        #[arg(long)]
+        base_url: Option<String>,
+    },
+    /// Delete a flow (nodes are not deleted)
+    Remove {
+        id: String,
+    },
+    /// Merge two flows into one
+    Merge {
+        flow1: String,
+        flow2: String,
+        /// Node ID where flow2 is attached to flow1
+        #[arg(long)]
+        join_at: String,
+        /// Name for the merged flow
+        #[arg(long, default_value = "merged-flow")]
+        name: String,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum AiAction {
+    /// Suggest the next node after a given node
+    Suggest {
+        #[arg(long, value_name = "NODE_ID")]
+        after: String,
+    },
+    /// Automatically attach the best next node
+    Attach {
+        #[arg(long, value_name = "NODE_ID")]
+        after: String,
+        /// Only update this flow
+        #[arg(long)]
+        flow: Option<String>,
+    },
+    /// Add unconnected nodes to a flow automatically
+    Complete {
+        flow_id: String,
+    },
+    /// Run security probes on a flow
+    Probe {
+        flow_id: String,
+        #[arg(long)]
+        base_url: Option<String>,
+    },
+    /// Build a flow from a list of node IDs
+    BuildFlow {
+        #[arg(long, value_delimiter = ',', value_name = "NODE_IDS")]
+        nodes: Vec<String>,
+        #[arg(long, default_value = "ai-generated-flow")]
+        name: String,
+    },
+    /// Explain why the last run of a flow failed
+    Explain {
+        flow_id: String,
+        /// Which run to explain (0 = most recent)
+        #[arg(long, default_value = "0")]
+        run: usize,
+    },
+    /// Generate assertions for a node
+    Assert {
+        node_id: String,
+    },
+    /// Suggest conditional branches for a node
+    Branch {
+        node_id: String,
+    },
+}
+
+fn parse_key_val(s: &str) -> Result<(String, String), String> {
+    let pos = s.find('=').ok_or_else(|| format!("Expected KEY=VALUE, got '{}'", s))?;
+    Ok((s[..pos].to_string(), s[pos + 1..].to_string()))
 }
 
 #[derive(Subcommand, Debug)]

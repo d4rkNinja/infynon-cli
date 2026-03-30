@@ -1,5 +1,8 @@
 use clap::Parser;
-use crate::cli::args::{PkgArgs, PkgCommands, FirewallArgs, FirewallCommands};
+use crate::cli::args::{
+    AiAction, ApiCommands, FlowAction, NodeAction,
+    PkgArgs, PkgCommands, FirewallArgs, FirewallCommands,
+};
 use crate::cli::scan::{self, run_scan, check_packages_before_install, OutputFormat, FixLevel};
 use crate::cli::features;
 use crate::error::types::InfynonError;
@@ -878,6 +881,11 @@ pub fn execute_firewall_mode(start: std::time::Instant) -> Result<(), InfynonErr
             Logger::title("INFYNON FIREWALL ENGINE", "red");
             Logger::error("Intelligence update pipeline not yet implemented.");
         }
+
+        // ── API Testing ──────────────────────────────────────────────────
+        Some(FirewallCommands::Api { action }) => {
+            execute_api_command(action);
+        }
     }
     Ok(())
 }
@@ -1082,3 +1090,108 @@ fn run_firewall_tui(state: std::sync::Arc<crate::firewall::server::SharedState>)
     let _ = terminal.show_cursor();
 }
 
+
+// ── API command router ────────────────────────────────────────────────────────
+
+fn execute_api_command(action: ApiCommands) {
+    use crate::api::commands::{ai_cmd, attach, flow, node};
+
+    match action {
+        ApiCommands::Tui { flow_id } => {
+            run_api_tui(flow_id.as_deref());
+        }
+
+        ApiCommands::Node { action } => match action {
+            NodeAction::Create { ai } => node::cmd_node_create(ai.as_deref()),
+            NodeAction::Get { id } => node::cmd_node_get(&id),
+            NodeAction::List => node::cmd_node_list(),
+            NodeAction::Remove { id } => node::cmd_node_remove(&id),
+            NodeAction::Clone { id, new_id } => node::cmd_node_clone(&id, &new_id),
+            NodeAction::Run { id, base_url, set } => node::cmd_node_run(&id, &base_url, &set),
+            NodeAction::Export { id, format, base_url } => {
+                node::cmd_node_export(&id, &format, base_url.as_deref())
+            }
+        },
+
+        ApiCommands::Flow { action } => match action {
+            FlowAction::Create { name, ai } => flow::cmd_flow_create(&name, ai.as_deref()),
+            FlowAction::List => flow::cmd_flow_list(),
+            FlowAction::Show { id } => flow::cmd_flow_show(&id),
+            FlowAction::Run { id, base_url } => flow::cmd_flow_run(&id, base_url.as_deref()),
+            FlowAction::RunAll { base_url } => flow::cmd_flow_run_all(base_url.as_deref()),
+            FlowAction::Remove { id } => flow::cmd_flow_remove(&id),
+            FlowAction::Merge { flow1, flow2, join_at, name } => {
+                flow::cmd_flow_merge(&flow1, &flow2, &join_at, &name)
+            }
+        },
+
+        ApiCommands::Attach { from, to, carry, condition, ai } => {
+            attach::cmd_attach(&from, &to, &carry, condition.as_deref(), ai)
+        }
+
+        ApiCommands::Detach { from, to } => attach::cmd_detach(&from, &to),
+
+        ApiCommands::Ai { action } => match action {
+            AiAction::Suggest { after } => ai_cmd::cmd_ai_suggest(&after),
+            AiAction::Attach { after, flow } => ai_cmd::cmd_ai_attach(&after, flow.as_deref()),
+            AiAction::Complete { flow_id } => ai_cmd::cmd_ai_complete(&flow_id),
+            AiAction::Probe { flow_id, base_url } => {
+                ai_cmd::cmd_ai_probe(&flow_id, base_url.as_deref())
+            }
+            AiAction::BuildFlow { nodes, name } => ai_cmd::cmd_ai_build_flow(&nodes, &name),
+            AiAction::Explain { flow_id, run } => ai_cmd::cmd_ai_explain(&flow_id, run),
+            AiAction::Assert { node_id } => ai_cmd::cmd_ai_assert(&node_id),
+            AiAction::Branch { node_id } => ai_cmd::cmd_ai_branch(&node_id),
+        },
+    }
+}
+
+fn run_api_tui(flow_id: Option<&str>) {
+    use crossterm::{
+        event::{self, Event, KeyCode},
+        execute,
+        terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    };
+    use ratatui::{backend::CrosstermBackend, Terminal};
+    use std::io;
+
+    let _ = enable_raw_mode();
+    let mut stdout = io::stdout();
+    let _ = execute!(stdout, EnterAlternateScreen);
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = match Terminal::new(backend) {
+        Ok(t) => t,
+        Err(e) => {
+            let _ = disable_raw_mode();
+            eprintln!("Failed to initialize terminal: {}", e);
+            return;
+        }
+    };
+
+    let mut app = crate::tui::api_app::ApiApp::new(flow_id);
+
+    loop {
+        let _ = terminal.draw(|f| {
+            crate::tui::api_views::render(f, &mut app);
+        });
+
+        if event::poll(std::time::Duration::from_millis(100)).unwrap_or(false) {
+            if let Ok(Event::Key(key)) = event::read() {
+                if key.code == KeyCode::Char('c')
+                    && key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL)
+                {
+                    break;
+                }
+                app.handle_key(key);
+            }
+        }
+
+        if app.should_quit {
+            break;
+        }
+    }
+
+    let _ = disable_raw_mode();
+    let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
+    let _ = terminal.show_cursor();
+}

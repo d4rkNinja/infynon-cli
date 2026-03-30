@@ -2,6 +2,7 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 
+mod api;
 mod cli;
 mod config;
 mod daemon;
