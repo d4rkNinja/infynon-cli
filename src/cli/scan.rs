@@ -35,11 +35,13 @@ impl FixLevel {
 }
 
 /// Main entry point for `infynon pkg scan`
-pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_file: Option<&str>) {
+pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_file: Option<&str>, agent: bool) {
     use std::io::{self, Write};
 
-    println!();
-    Logger::title("INFYNON Package Scanner", "blue");
+    if !agent {
+        println!();
+        Logger::title("INFYNON Package Scanner", "blue");
+    }
 
     // 1. Detect lock files
     if let Some(f) = pkg_file {
@@ -54,6 +56,14 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
         let found_files = scanner::detect_lock_files();
 
         if found_files.is_empty() {
+            if agent {
+                let json = serde_json::json!({
+                    "status": "error",
+                    "error": "No lock/manifest files found in current directory"
+                });
+                println!("{}", serde_json::to_string_pretty(&json).unwrap());
+                std::process::exit(2);
+            }
             Logger::error("No packages found in supported lock/manifest files.");
             Logger::info("Supported: package-lock.json · yarn.lock · pnpm-lock.yaml · requirements.txt");
             Logger::info("           poetry.lock · Cargo.lock · go.sum · Gemfile.lock · composer.lock");
@@ -62,8 +72,11 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
         }
 
         if found_files.len() == 1 {
-            // Single file — use it directly
             scanner::parse_selected_files(&[found_files[0].0])
+        } else if agent {
+            // Agent mode: always scan all files, no interactive prompt
+            let all: Vec<&str> = found_files.iter().map(|(f, _)| *f).collect();
+            scanner::parse_selected_files(&all)
         } else {
             // Multiple lock files detected — let user choose
             println!();
@@ -123,15 +136,122 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
     };
 
     if packages.is_empty() {
+        if agent {
+            let json = serde_json::json!({
+                "status": "error",
+                "error": "No packages found in selected lock/manifest files"
+            });
+            println!("{}", serde_json::to_string_pretty(&json).unwrap());
+            std::process::exit(2);
+        }
         Logger::error("No packages found in selected lock/manifest files.");
         return;
     }
 
-    let mut sources: Vec<String> = packages.iter().map(|p| p.source.clone()).collect();
-    sources.sort();
-    sources.dedup();
-    Logger::success(&format!("Found {} pinned packages from: {}", packages.len(), sources.join(", ")));
-    println!();
+    if !agent {
+        let mut sources: Vec<String> = packages.iter().map(|p| p.source.clone()).collect();
+        sources.sort();
+        sources.dedup();
+        Logger::success(&format!("Found {} pinned packages from: {}", packages.len(), sources.join(", ")));
+        println!();
+    }
+
+    // ── Agent mode: silent scan → JSON output ────────────────────────────────
+    if agent {
+        let tuples: Vec<(String, String, String)> = packages.iter()
+            .map(|p| (p.name.clone(), p.ecosystem.clone(), p.version.clone()))
+            .collect();
+
+        let results = match osv::batch_query(&tuples) {
+            Ok(r) => r,
+            Err(e) => {
+                let json = serde_json::json!({
+                    "status": "error",
+                    "error": format!("Vulnerability DB error: {}", e),
+                    "packages_scanned": packages.len()
+                });
+                println!("{}", serde_json::to_string_pretty(&json).unwrap());
+                std::process::exit(2);
+            }
+        };
+
+        // Collect unique vuln IDs
+        let mut vuln_to_packages: Vec<(String, usize)> = Vec::new();
+        let mut unique_ids: Vec<String> = Vec::new();
+        {
+            use std::collections::HashSet;
+            let mut seen: HashSet<String> = HashSet::new();
+            for (i, vuln_refs) in results.iter().enumerate() {
+                for vref in vuln_refs {
+                    if seen.insert(vref.id.clone()) { unique_ids.push(vref.id.clone()); }
+                    vuln_to_packages.push((vref.id.clone(), i));
+                }
+            }
+        }
+
+        let detail_results = osv::fetch_vuln_details_batch(&unique_ids);
+        let mut detail_map: std::collections::HashMap<String, osv::OsvVulnDetail> =
+            std::collections::HashMap::new();
+        for (id, result) in detail_results {
+            if let Ok(detail) = result { detail_map.insert(id, detail); }
+        }
+
+        let mut vulns: Vec<serde_json::Value> = Vec::new();
+        let mut counts = [0u32; 5]; // [critical, high, medium, low, info]
+        // Deduplicate: one entry per (package, cve_id) pair
+        let mut seen_pairs: std::collections::HashSet<(String, String)> = std::collections::HashSet::new();
+
+        for (vuln_id, pkg_idx) in &vuln_to_packages {
+            let key = (packages[*pkg_idx].name.clone(), vuln_id.clone());
+            if !seen_pairs.insert(key) { continue; }
+            if let Some(detail) = detail_map.get(vuln_id) {
+                let sev = osv::severity_label(detail);
+                let fl_ok = fix_level.as_ref().map_or(true, |fl| fl.matches(sev));
+                if !fl_ok { continue; }
+                match sev {
+                    "CRITICAL" => counts[0] += 1,
+                    "HIGH"     => counts[1] += 1,
+                    "MEDIUM"   => counts[2] += 1,
+                    "LOW"      => counts[3] += 1,
+                    _          => counts[4] += 1,
+                }
+                let fixed = osv::best_fixed_version(detail, &packages[*pkg_idx].name, &packages[*pkg_idx].ecosystem);
+                let fix_cmd = fixed.as_deref().map(|fv| upgrade_cmd(&packages[*pkg_idx], fv));
+                vulns.push(serde_json::json!({
+                    "package":         packages[*pkg_idx].name,
+                    "ecosystem":       packages[*pkg_idx].ecosystem,
+                    "current_version": packages[*pkg_idx].version,
+                    "cve_id":          detail.id,
+                    "severity":        sev,
+                    "summary":         detail.summary.as_deref().unwrap_or(""),
+                    "safe_version":    fixed,
+                    "fix_cmd":         fix_cmd
+                }));
+            }
+        }
+
+        let total: u32 = counts.iter().sum();
+        let status = if total == 0 { "clean" }
+            else if counts[0] > 0 || counts[1] > 0 || counts[2] > 0 { "vulnerable" }
+            else { "warnings" };
+        let exit_code: i32 = if total == 0 { 0 } else if counts[0] > 0 || counts[1] > 0 || counts[2] > 0 { 2 } else { 1 };
+
+        let json = serde_json::json!({
+            "status": status,
+            "packages_scanned": packages.len(),
+            "vulnerabilities": vulns,
+            "summary": {
+                "critical":      counts[0],
+                "high":          counts[1],
+                "medium":        counts[2],
+                "low":           counts[3],
+                "informational": counts[4],
+                "total":         total
+            }
+        });
+        println!("{}", serde_json::to_string_pretty(&json).unwrap());
+        std::process::exit(exit_code);
+    }
 
     // 2. Build batch query — show each package name live in the spinner
     println!();
@@ -625,8 +745,9 @@ pub struct VulnHit {
 }
 
 /// Check packages before install. Returns (all_clear, hits).
-/// Prints a full rich warning block per vulnerable package.
-pub fn check_packages_before_install(names: &[String], ecosystem: &str) -> (bool, Vec<VulnHit>) {
+/// In human mode, prints a full rich warning block per vulnerable package.
+/// In agent mode, runs silently and returns results for the caller to serialize.
+pub fn check_packages_before_install(names: &[String], ecosystem: &str, agent: bool) -> (bool, Vec<VulnHit>) {
     use indicatif::{ProgressBar, ProgressStyle};
 
     // Parse each CLI arg like `picomatch@4.0.3`, `requests==2.28.0`, `serde:1.0`
@@ -634,12 +755,14 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str) -> (bool
     // If NO version is given (bare name like `express`), resolve latest from the registry —
     // OSV requires a real version; sending empty version always returns zero results (false-negative).
     let sp = ProgressBar::new_spinner();
-    sp.set_style(
-        ProgressStyle::with_template("  {spinner:.cyan}  {msg}")
-            .unwrap()
-            .tick_strings(&["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"]),
-    );
-    sp.enable_steady_tick(Duration::from_millis(60));
+    if !agent {
+        sp.set_style(
+            ProgressStyle::with_template("  {spinner:.cyan}  {msg}")
+                .unwrap()
+                .tick_strings(&["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"]),
+        );
+        sp.enable_steady_tick(Duration::from_millis(60));
+    }
 
     // Map tool name (e.g. "pip", "uv", "yarn") to OSV ecosystem string (e.g. "PyPI", "npm")
     let eco_osv = tool_to_osv_ecosystem(ecosystem);
@@ -651,28 +774,32 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str) -> (bool
                 return (name, eco_osv.clone(), ver);
             }
             // No version specified — resolve latest from registry
-            sp.set_message(format!("Resolving latest version of {}...", name));
+            if !agent { sp.set_message(format!("Resolving latest version of {}...", name)); }
             match crate::engine::registry::fetch_latest_version(&name, &eco_osv) {
                 Some(latest) => {
-                    sp.suspend(|| {
-                        println!(
-                            "  {} {} {} {}",
-                            "→".truecolor(80,80,100),
-                            name.bold(),
-                            "latest:".truecolor(100,100,120),
-                            latest.bright_cyan().bold()
-                        );
-                    });
+                    if !agent {
+                        sp.suspend(|| {
+                            println!(
+                                "  {} {} {} {}",
+                                "→".truecolor(80,80,100),
+                                name.bold(),
+                                "latest:".truecolor(100,100,120),
+                                latest.bright_cyan().bold()
+                            );
+                        });
+                    }
                     (name, eco_osv.clone(), latest)
                 }
                 None => {
-                    sp.suspend(|| {
-                        println!(
-                            "  {} Could not resolve latest version for {} — skipping vulnerability check",
-                            "⚠".bright_yellow(),
-                            name.bold()
-                        );
-                    });
+                    if !agent {
+                        sp.suspend(|| {
+                            println!(
+                                "  {} Could not resolve latest version for {} — skipping vulnerability check",
+                                "⚠".bright_yellow(),
+                                name.bold()
+                            );
+                        });
+                    }
                     // Return empty version → will return no hits → fail-open for this pkg
                     (name, eco_osv.clone(), String::new())
                 }
@@ -680,24 +807,26 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str) -> (bool
         })
         .collect();
 
-    sp.set_message(format!(
-        "Checking {} package(s) against vulnerability database...",
-        names.len()
-    ));
+    if !agent {
+        sp.set_message(format!(
+            "Checking {} package(s) against vulnerability database...",
+            names.len()
+        ));
+    }
 
     let results = match osv::batch_query(&tuples) {
         Ok(r)  => r,
         Err(e) => {
-            sp.finish_and_clear();
-            Logger::raw_dim(&format!("  CVE check skipped (API error): {}", e));
+            if !agent { sp.finish_and_clear(); }
+            if !agent { Logger::raw_dim(&format!("  CVE check skipped (API error): {}", e)); }
             return (true, vec![]);
         }
     };
-    sp.finish_and_clear();
+    if !agent { sp.finish_and_clear(); }
 
     let total_hits: usize = results.iter().map(|r| r.len()).sum();
     if total_hits == 0 {
-        Logger::success("Security check passed — no known CVEs for requested packages.");
+        if !agent { Logger::success("Security check passed — no known CVEs for requested packages."); }
         return (true, vec![]);
     }
 
@@ -710,13 +839,15 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str) -> (bool
         let pkg_name = &tuples[i].0;
         let pkg_ver  = &tuples[i].2;
 
-        println!();
-        println!(
-            "  {} {}",
-            "⚠".bright_yellow().bold(),
-            format!("'{}@{}' has {} known vulnerability(ies):", pkg_name, pkg_ver, vuln_refs.len())
-                .bold().bright_yellow()
-        );
+        if !agent {
+            println!();
+            println!(
+                "  {} {}",
+                "⚠".bright_yellow().bold(),
+                format!("'{}@{}' has {} known vulnerability(ies):", pkg_name, pkg_ver, vuln_refs.len())
+                    .bold().bright_yellow()
+            );
+        }
 
         for vref in vuln_refs.iter().take(5) {
             match osv::fetch_vuln_detail(&vref.id) {
@@ -726,38 +857,36 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str) -> (bool
                     let summary  = detail.summary.clone().unwrap_or_else(|| "No description available".to_string());
                     let up_cmd   = fixed.as_deref().map(|fv| install_cmd_for_ecosystem(pkg_name, fv, ecosystem));
 
-                    // Track highest severity across all findings
                     highest_sev = escalate_severity(highest_sev, sev);
 
-                    // Per-CVE block
-                    let sev_label = match sev {
-                        "CRITICAL" => format!(" {} ", sev).bold().on_bright_red().white().to_string(),
-                        "HIGH"     => format!(" {} ", sev).bold().on_red().white().to_string(),
-                        "MEDIUM"   => format!(" {} ", sev).bold().on_yellow().black().to_string(),
-                        "LOW"      => format!(" {} ", sev).bold().on_bright_green().black().to_string(),
-                        _          => format!(" {} ", sev).truecolor(120,120,140).to_string(),
-                    };
-
-                    println!(
-                        "    {}  {}  {}",
-                        sev_label,
-                        vref.id.truecolor(100, 160, 255),
-                        summary.chars().take(80).collect::<String>().truecolor(160, 160, 180)
-                    );
-
-                    if let Some(ref fv) = fixed {
+                    if !agent {
+                        let sev_label = match sev {
+                            "CRITICAL" => format!(" {} ", sev).bold().on_bright_red().white().to_string(),
+                            "HIGH"     => format!(" {} ", sev).bold().on_red().white().to_string(),
+                            "MEDIUM"   => format!(" {} ", sev).bold().on_yellow().black().to_string(),
+                            "LOW"      => format!(" {} ", sev).bold().on_bright_green().black().to_string(),
+                            _          => format!(" {} ", sev).truecolor(120,120,140).to_string(),
+                        };
                         println!(
-                            "       {} safe version: {}   {}",
-                            "→".truecolor(80,80,100),
-                            fv.bright_green().bold(),
-                            up_cmd.as_deref().unwrap_or("").truecolor(100,140,100)
+                            "    {}  {}  {}",
+                            sev_label,
+                            vref.id.truecolor(100, 160, 255),
+                            summary.chars().take(80).collect::<String>().truecolor(160, 160, 180)
                         );
-                    } else {
-                        println!(
-                            "       {} {}",
-                            "→".truecolor(80,80,100),
-                            "No fixed version published yet".truecolor(180,120,50)
-                        );
+                        if let Some(ref fv) = fixed {
+                            println!(
+                                "       {} safe version: {}   {}",
+                                "→".truecolor(80,80,100),
+                                fv.bright_green().bold(),
+                                up_cmd.as_deref().unwrap_or("").truecolor(100,140,100)
+                            );
+                        } else {
+                            println!(
+                                "       {} {}",
+                                "→".truecolor(80,80,100),
+                                "No fixed version published yet".truecolor(180,120,50)
+                            );
+                        }
                     }
 
                     hits.push(VulnHit {
@@ -770,12 +899,14 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str) -> (bool
                     });
                 }
                 Err(_) => {
-                    println!(
-                        "    {}  {}  {}",
-                        " UNKNOWN ".truecolor(120,120,140),
-                        vref.id.truecolor(100,160,255),
-                        "(could not fetch CVE details)".truecolor(120,120,140)
-                    );
+                    if !agent {
+                        println!(
+                            "    {}  {}  {}",
+                            " UNKNOWN ".truecolor(120,120,140),
+                            vref.id.truecolor(100,160,255),
+                            "(could not fetch CVE details)".truecolor(120,120,140)
+                        );
+                    }
                     hits.push(VulnHit {
                         package:       names[i].clone(),
                         cve_id:        vref.id.clone(),
@@ -787,7 +918,7 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str) -> (bool
                 }
             }
         }
-        if vuln_refs.len() > 5 {
+        if !agent && vuln_refs.len() > 5 {
             println!(
                 "       {} {} more CVEs — run 'infynon pkg scan' for full report",
                 "…".truecolor(80,80,100),
@@ -796,7 +927,7 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str) -> (bool
         }
     }
 
-    println!();
+    if !agent { println!(); }
     (false, hits)
 }
 

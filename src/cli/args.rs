@@ -45,6 +45,11 @@ pub struct PkgArgs {
     #[arg(long, global = true, help = "Non-interactive: auto-install fixed versions, skip unfixable packages")]
     pub auto_fix: bool,
 
+    /// Agent/AI mode: emit machine-readable JSON instead of human-formatted output.
+    /// Exit codes — 0: clean  1: warnings (low/info)  2: vulnerabilities found  3: blocked by --strict
+    #[arg(long, global = true, help = "Output machine-readable JSON for AI agents and CI pipelines")]
+    pub agent: bool,
+
     #[command(subcommand)]
     pub command: Option<PkgCommands>,
 

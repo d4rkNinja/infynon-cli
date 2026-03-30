@@ -1,6 +1,6 @@
 {
   "name": "infynon",
-  "version": "0.2.0-beta.6.5",
+  "version": "0.2.0-beta.6.6",
   "description": "Universal package security manager & network firewall — intercepts installs across npm, pip, cargo, go, gem and more with 3-layer CVE verification, plus a real-time reverse proxy WAF with TUI dashboard",
   "bin": {
     "infynon": "./run.js",

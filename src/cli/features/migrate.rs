@@ -159,5 +159,5 @@ pub fn cmd_migrate(from: &str, to: &str) {
     // Run vulnerability scan on new setup
     println!();
     Logger::step("Running post-migration vulnerability scan...");
-    scan::run_scan(None, None, None);
+    scan::run_scan(None, None, None, false);
 }
