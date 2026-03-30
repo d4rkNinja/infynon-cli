@@ -117,16 +117,43 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
         ecosystem = first_arg;
         cmd_idx = 1;
     } else {
-        if Path::new("package.json").exists() { ecosystem = "npm"; }
-        else if Path::new("Cargo.toml").exists() { ecosystem = "cargo"; }
-        else if Path::new("uv.lock").exists() { ecosystem = "uv"; }
-        else if Path::new("poetry.lock").exists() { ecosystem = "poetry"; }
-        else if Path::new("pyproject.toml").exists() || Path::new("requirements.txt").exists() { ecosystem = "pip"; }
-        else if Path::new("go.mod").exists() { ecosystem = "go"; }
-        else if Path::new("composer.json").exists() { ecosystem = "composer"; }
-        else if Path::new("Gemfile").exists() { ecosystem = "gem"; }
-        else if Path::new("pubspec.yaml").exists() { ecosystem = "pub"; }
-        else if Path::new("mix.exs").exists() { ecosystem = "hex"; }
+        let p = |f: &str| Path::new(f).exists();
+
+        // ── JavaScript / Node.js ─────────────────────────────────────────────
+        // Combined (manifest + lock) takes priority; lock alone next; manifest last
+        if      p("package.json") && p("bun.lockb")          { ecosystem = "bun"; }
+        else if p("package.json") && p("pnpm-lock.yaml")     { ecosystem = "pnpm"; }
+        else if p("package.json") && p("yarn.lock")          { ecosystem = "yarn"; }
+        else if p("package.json") && p("package-lock.json")  { ecosystem = "npm"; }
+        else if p("bun.lockb")                               { ecosystem = "bun"; }
+        else if p("pnpm-lock.yaml")                          { ecosystem = "pnpm"; }
+        else if p("yarn.lock")                               { ecosystem = "yarn"; }
+        else if p("package.json") || p("package-lock.json")  { ecosystem = "npm"; }
+        // ── Rust ─────────────────────────────────────────────────────────────
+        else if p("Cargo.toml") && p("Cargo.lock")           { ecosystem = "cargo"; }
+        else if p("Cargo.toml")                              { ecosystem = "cargo"; }
+        // ── Python ───────────────────────────────────────────────────────────
+        // pyproject.toml + lock is most specific; lock alone next; manifest fallback
+        else if p("pyproject.toml") && p("uv.lock")          { ecosystem = "uv"; }
+        else if p("pyproject.toml") && p("poetry.lock")      { ecosystem = "poetry"; }
+        else if p("uv.lock")                                 { ecosystem = "uv"; }
+        else if p("poetry.lock")                             { ecosystem = "poetry"; }
+        else if p("pyproject.toml") || p("requirements.txt") || p("setup.py") || p("setup.cfg") { ecosystem = "pip"; }
+        // ── Go ───────────────────────────────────────────────────────────────
+        else if p("go.mod") && p("go.sum")                   { ecosystem = "go"; }
+        else if p("go.mod")                                  { ecosystem = "go"; }
+        // ── PHP / Composer ───────────────────────────────────────────────────
+        else if p("composer.json") && p("composer.lock")     { ecosystem = "composer"; }
+        else if p("composer.json") || p("composer.lock")     { ecosystem = "composer"; }
+        // ── Ruby ─────────────────────────────────────────────────────────────
+        else if p("Gemfile") && p("Gemfile.lock")            { ecosystem = "gem"; }
+        else if p("Gemfile") || p("Gemfile.lock")            { ecosystem = "gem"; }
+        // ── Dart / Flutter ───────────────────────────────────────────────────
+        else if p("pubspec.yaml") && p("pubspec.lock")       { ecosystem = "pub"; }
+        else if p("pubspec.yaml") || p("pubspec.lock")       { ecosystem = "pub"; }
+        // ── Elixir / Hex ─────────────────────────────────────────────────────
+        else if p("mix.exs") && p("mix.lock")                { ecosystem = "hex"; }
+        else if p("mix.exs") || p("mix.lock")                { ecosystem = "hex"; }
     }
 
     if args.passthrough_args.len() > cmd_idx {
