@@ -8,6 +8,11 @@ Secure proxy for package installation. Checks packages against OSV before passin
 infynon pkg <ecosystem> <command> <packages...> [--strict]
 ```
 
+### Universal Spec Parser & Binary Resolution
+INFYNON features a robust, cross-platform engine that:
+- Uses a **universal package spec parser** to accurately handle different version formats (`name@version`, `name==version`, etc.) for all 14 supported ecosystems.
+- Employs **native OS resolution** (`where` on Windows, `which` on Unix) to reliably detect and execute native binaries (like `npm`, `cargo`, `pip`) without relying on hardcoded paths.
+
 ## Ecosystems & Commands
 
 | Ecosystem | Install Command |
