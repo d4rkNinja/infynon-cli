@@ -45,7 +45,7 @@
 
 ---
 
-## ⚡ 30-Second Demo
+## Demo
 
 ```bash
 # Scan before you install — any ecosystem
