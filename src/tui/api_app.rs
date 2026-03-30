@@ -247,6 +247,28 @@ pub struct ApiApp {
 
     // ── Node field editor modal (Node Library tab) ────────────────────────
     pub node_field_editor: Option<NodeFieldEditor>,
+
+    // ── Env/Context tab (tab 6) ───────────────────────────────────────────
+    pub env_selected: usize,
+    pub env_reveal: bool,
+    pub env_edit: Option<EnvEditState>,
+}
+
+pub struct EnvEditState {
+    pub original_key: String, // empty = new entry
+    pub key_input: String,
+    pub value_input: String,
+    pub editing_key: bool,    // true when adding new entry and cursor is in key field
+}
+
+impl EnvEditState {
+    pub fn new_entry() -> Self {
+        Self { original_key: String::new(), key_input: String::new(), value_input: String::new(), editing_key: true }
+    }
+    pub fn edit_existing(key: &str, value: &str) -> Self {
+        Self { original_key: key.to_string(), key_input: key.to_string(), value_input: value.to_string(), editing_key: false }
+    }
+    pub fn is_new(&self) -> bool { self.original_key.is_empty() }
 }
 
 impl ApiApp {
@@ -327,6 +349,9 @@ impl ApiApp {
             live_selected_step: 0,
             step_detail: None,
             node_field_editor: None,
+            env_selected: 0,
+            env_reveal: false,
+            env_edit: None,
         }
     }
 
@@ -1057,6 +1082,12 @@ impl ApiApp {
             return;
         }
 
+        // Env editor — intercept before global digit keys
+        if self.env_edit.is_some() {
+            self.handle_env_key(key);
+            return;
+        }
+
         // Config URL editor — intercept before global digit keys so typing a number
         // doesn't switch tabs while editing the base URL.
         if self.config_editing_url {
@@ -1106,6 +1137,7 @@ impl ApiApp {
                     _ => self.handle_scroll_key(key),
                 }
             }
+            ApiView::EnvContext => self.handle_env_key(key),
             ApiView::Config => self.handle_config_key(key),
             _ => self.handle_scroll_key(key),
         }
@@ -1208,6 +1240,97 @@ impl ApiApp {
                 self.config_url_input = self.default_base_url.clone();
             }
             KeyCode::Char('R') => self.refresh_data(),
+            _ => {}
+        }
+    }
+
+    pub fn handle_env_key(&mut self, key: KeyEvent) {
+        use crate::api::commands::env as env_cmd;
+
+        // ── Edit mode ──────────────────────────────────────────────────────────
+        if self.env_edit.is_some() {
+            let action: Option<(String, String, String)> = {
+                let edit = self.env_edit.as_mut().unwrap();
+                match key.code {
+                    KeyCode::Esc => {
+                        self.env_edit = None;
+                        return;
+                    }
+                    KeyCode::Tab => {
+                        if edit.is_new() { edit.editing_key = !edit.editing_key; }
+                        return;
+                    }
+                    KeyCode::Enter => {
+                        if edit.is_new() && edit.editing_key {
+                            if !edit.key_input.trim().is_empty() { edit.editing_key = false; }
+                            return;
+                        }
+                        Some((edit.key_input.trim().to_string(), edit.value_input.clone(), edit.original_key.clone()))
+                    }
+                    KeyCode::Backspace => {
+                        if edit.editing_key { edit.key_input.pop(); } else { edit.value_input.pop(); }
+                        return;
+                    }
+                    KeyCode::Char(c) => {
+                        if edit.editing_key { edit.key_input.push(c); } else { edit.value_input.push(c); }
+                        return;
+                    }
+                    _ => return,
+                }
+            };
+            if let Some((key_str, val_str, orig_key)) = action {
+                self.env_edit = None;
+                self.env_reveal = false;
+                if !key_str.is_empty() {
+                    if !orig_key.is_empty() && orig_key != key_str {
+                        let _ = env_cmd::env_delete_key(&orig_key);
+                    }
+                    match env_cmd::env_upsert(&key_str, &val_str) {
+                        Ok(_) => self.notify(&format!("Saved: {}", key_str)),
+                        Err(e) => self.notify(&format!("Save failed: {}", e)),
+                    }
+                }
+            }
+            return;
+        }
+
+        // ── Browse mode ────────────────────────────────────────────────────────
+        let entries = env_cmd::env_list();
+        match key.code {
+            KeyCode::Up | KeyCode::Char('k') => {
+                if self.env_selected > 0 { self.env_selected -= 1; }
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if self.env_selected + 1 < entries.len() { self.env_selected += 1; }
+            }
+            KeyCode::Char('n') => {
+                self.env_edit = Some(EnvEditState::new_entry());
+                self.env_reveal = false;
+            }
+            KeyCode::Enter => {
+                if let Some((k, v)) = entries.get(self.env_selected) {
+                    self.env_edit = Some(EnvEditState::edit_existing(k, v));
+                    self.env_reveal = false;
+                }
+            }
+            KeyCode::Char('d') | KeyCode::Delete => {
+                if let Some((k, _)) = entries.get(self.env_selected) {
+                    let key_clone = k.clone();
+                    match env_cmd::env_delete_key(&key_clone) {
+                        Ok(true) => {
+                            self.notify(&format!("Deleted: {}", key_clone));
+                            let new_len = entries.len().saturating_sub(1);
+                            self.env_selected = self.env_selected.min(new_len.saturating_sub(1));
+                        }
+                        Ok(false) => self.notify("Key not found"),
+                        Err(e) => self.notify(&format!("Error: {}", e)),
+                    }
+                }
+            }
+            KeyCode::Char('v') => {
+                self.env_reveal = !self.env_reveal;
+                self.notify(if self.env_reveal { "Values revealed" } else { "Sensitive values hidden" });
+            }
             _ => {}
         }
     }

@@ -50,14 +50,14 @@ fn write_env_file(entries: &[(String, Option<String>)]) -> std::io::Result<()> {
     std::fs::write(&path, content)
 }
 
-fn looks_sensitive(key: &str) -> bool {
+pub fn looks_sensitive(key: &str) -> bool {
     let upper = key.to_uppercase();
     ["TOKEN", "SECRET", "PASSWORD", "KEY", "PASS", "AUTH", "CREDENTIAL", "PRIVATE"]
         .iter()
         .any(|word| upper.contains(word))
 }
 
-fn mask(value: &str) -> String {
+pub fn mask(value: &str) -> String {
     if value.len() <= 6 {
         "***".to_string()
     } else {
@@ -65,16 +65,53 @@ fn mask(value: &str) -> String {
     }
 }
 
+// ── Public helpers (used by TUI and CLI) ─────────────────────────────────────
+
+/// Return all key-value pairs from .infynon/.env (comments/blanks excluded).
+pub fn env_list() -> Vec<(String, String)> {
+    read_env_file()
+        .into_iter()
+        .filter_map(|(k, v)| v.map(|val| (k, val)))
+        .collect()
+}
+
+/// Upsert a key-value pair in the .env file.
+pub fn env_upsert(key: &str, value: &str) -> std::io::Result<()> {
+    let mut entries = read_env_file();
+    let mut found = false;
+    for (k, v) in entries.iter_mut() {
+        if v.is_some() && k == key {
+            *v = Some(value.to_string());
+            found = true;
+            break;
+        }
+    }
+    if !found {
+        entries.push((key.to_string(), Some(value.to_string())));
+    }
+    write_env_file(&entries)
+}
+
+/// Delete a key. Returns Ok(true) if found and removed, Ok(false) if not found.
+pub fn env_delete_key(key: &str) -> std::io::Result<bool> {
+    let mut entries = read_env_file();
+    let before = entries.len();
+    entries.retain(|(k, v)| !(v.is_some() && k == key));
+    if entries.len() == before {
+        return Ok(false);
+    }
+    write_env_file(&entries)?;
+    Ok(true)
+}
+
+// ── CLI-facing commands ───────────────────────────────────────────────────────
+
 pub fn cmd_env_list() {
     println!();
     Logger::title("Environment Variables", "cyan");
     println!();
 
-    let entries = read_env_file();
-    let pairs: Vec<_> = entries
-        .iter()
-        .filter_map(|(k, v)| v.as_ref().map(|val| (k, val)))
-        .collect();
+    let pairs = env_list();
 
     if pairs.is_empty() {
         println!("  No variables set. Use: infynon weave env set KEY VALUE");
@@ -113,25 +150,13 @@ pub fn cmd_env_set(key: &str, value: &str) {
         return;
     }
 
-    let mut entries = read_env_file();
-    let mut found = false;
-    for (k, v) in entries.iter_mut() {
-        if v.is_some() && k == key {
-            *v = Some(value.to_string());
-            found = true;
-            break;
-        }
-    }
+    let already_exists = read_env_file().iter().any(|(k, v)| v.is_some() && k == key);
 
-    if !found {
-        entries.push((key.to_string(), Some(value.to_string())));
-    }
-
-    match write_env_file(&entries) {
+    match env_upsert(key, value) {
         Ok(()) => {
             let sensitive = looks_sensitive(key);
             let display = if sensitive { mask(value) } else { value.to_string() };
-            let label = if found { "(updated)" } else { "(added)" };
+            let label = if already_exists { "(updated)" } else { "(added)" };
             println!(
                 "  {}  {}={} {}",
                 "✔".bright_green(),
@@ -145,18 +170,9 @@ pub fn cmd_env_set(key: &str, value: &str) {
 }
 
 pub fn cmd_env_delete(key: &str) {
-    let mut entries = read_env_file();
-
-    let before = entries.len();
-    entries.retain(|(k, v)| !(v.is_some() && k == key));
-
-    if entries.len() == before {
-        Logger::error(&format!("Variable '{}' not found.", key));
-        return;
-    }
-
-    match write_env_file(&entries) {
-        Ok(()) => println!("  {}  Deleted: {}", "✔".bright_green(), key.bold()),
+    match env_delete_key(key) {
+        Ok(true) => println!("  {}  Deleted: {}", "✔".bright_green(), key.bold()),
+        Ok(false) => Logger::error(&format!("Variable '{}' not found.", key)),
         Err(e) => Logger::error(&format!("Could not write .env: {}", e)),
     }
 }

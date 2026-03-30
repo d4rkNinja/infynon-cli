@@ -39,7 +39,7 @@ pub fn render(f: &mut Frame, app: &mut ApiApp) {
         ApiView::LiveExecution   => render_live_execution(f, app, chunks[3]),
         ApiView::LatencyProfiler => render_latency_profiler(f, app, chunks[3]),
         ApiView::SecurityProbes  => render_security_probes(f, app, chunks[3]),
-        ApiView::EnvContext      => render_env_context(f, app, chunks[3]),
+        ApiView::EnvContext      => render_env_context(f, app, chunks[3]), // takes &mut ApiApp for list state
         ApiView::StateInspector  => render_state_inspector(f, app, chunks[3]),
         ApiView::RunDiff         => render_run_diff(f, app, chunks[3]),
         ApiView::NodeLibrary     => render_node_library(f, app, chunks[3]),
@@ -777,150 +777,204 @@ fn render_security_probes(f: &mut Frame, app: &ApiApp, area: Rect) {
 
 // ── View 6: Coverage Map ──────────────────────────────────────────────────────
 
-fn render_env_context(f: &mut Frame, app: &ApiApp, area: Rect) {
+fn render_env_context(f: &mut Frame, app: &mut ApiApp, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
         .split(area);
 
-    // ── Left: .infynon/.env variables ─────────────────────────────────────────
-    let env_entries = read_dot_env();
-    let mut env_lines: Vec<Line> = vec![Line::raw("")];
+    render_env_panel(f, app, chunks[0]);
+    render_flow_context_panel(f, app, chunks[1]);
+}
 
-    if env_entries.is_empty() {
-        env_lines.push(Line::from(vec![
-            Span::styled("  No variables set.", Style::default().fg(DIM)),
-        ]));
-        env_lines.push(Line::raw(""));
-        env_lines.push(Line::from(vec![
-            Span::styled("  Use: infynon weave env set KEY VALUE", Style::default().fg(DIMMER)),
-        ]));
-        env_lines.push(Line::from(vec![
-            Span::styled("  Reference in nodes as {$KEY}", Style::default().fg(DIMMER)),
-        ]));
+fn render_env_panel(f: &mut Frame, app: &mut ApiApp, area: Rect) {
+    use crate::api::commands::env as env_cmd;
+
+    let entries = env_cmd::env_list();
+
+    // Clamp selection
+    if entries.is_empty() {
+        app.env_selected = 0;
     } else {
-        env_lines.push(Line::from(vec![
-            Span::styled(format!("  {:<24} {}", "KEY", "VALUE"), Style::default().fg(DIMMER)),
-        ]));
-        env_lines.push(Line::from(vec![
-            Span::styled(format!("  {}", "─".repeat(50)), Style::default().fg(DIM)),
-        ]));
-        for (key, value) in &env_entries {
-            let display = if env_looks_sensitive(key) { env_mask(value) } else { value.clone() };
-            env_lines.push(Line::from(vec![
-                Span::styled(format!("  {:<24}", truncate(key, 24)), Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
-                Span::styled(display, Style::default().fg(TEXT_DIM)),
-            ]));
-        }
-        env_lines.push(Line::raw(""));
-        env_lines.push(Line::from(vec![
-            Span::styled(format!("  {} variable(s) — reference as {{$KEY}}", env_entries.len()), Style::default().fg(DIMMER)),
-        ]));
+        app.env_selected = app.env_selected.min(entries.len() - 1);
     }
 
-    let env_block = Block::default()
-        .title(Span::styled(" .env Variables ", title_style()))
-        .borders(Borders::ALL)
-        .border_style(border_style());
-    let env_para = Paragraph::new(env_lines)
-        .block(env_block)
-        .wrap(Wrap { trim: false });
-    f.render_widget(env_para, chunks[0]);
+    let editing = app.env_edit.is_some();
+    let bottom_height: u16 = if editing { 5 } else { 2 };
 
-    // ── Right: current flow context (last run or empty) ────────────────────────
-    let mut ctx_lines: Vec<Line> = vec![Line::raw("")];
+    // Outer block (yellow border while editing)
+    let border = if editing { Style::default().fg(YELLOW) } else { border_style() };
+    let block_title = if editing { " Environment Variables — editing " } else { " Environment Variables (.infynon/.env) " };
+    let block = Block::default()
+        .title(Span::styled(block_title, title_style()))
+        .borders(Borders::ALL)
+        .border_style(border);
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    // Split inner: header | list | editor-or-hints
+    let splits = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(2),
+            Constraint::Min(0),
+            Constraint::Length(bottom_height),
+        ])
+        .split(inner);
+
+    // Header row
+    let header = Paragraph::new(vec![
+        Line::from(vec![
+            Span::styled(format!("  {:<30}", "KEY"), Style::default().fg(DIMMER)),
+            Span::styled("VALUE", Style::default().fg(DIMMER)),
+        ]),
+        Line::from(vec![Span::styled(format!("  {}", "─".repeat(62)), Style::default().fg(DIM))]),
+    ]);
+    f.render_widget(header, splits[0]);
+
+    // List
+    if entries.is_empty() {
+        let hint = Paragraph::new(vec![
+            Line::raw(""),
+            Line::from(vec![Span::styled("  No variables set.", Style::default().fg(DIM))]),
+            Line::raw(""),
+            Line::from(vec![Span::styled("  Press [n] to add one.", Style::default().fg(DIMMER))]),
+            Line::from(vec![Span::styled("  Reference in nodes as {$KEY}", Style::default().fg(DIMMER))]),
+        ]);
+        f.render_widget(hint, splits[1]);
+    } else {
+        let items: Vec<ListItem> = entries.iter().enumerate().map(|(i, (key, value))| {
+            let selected = i == app.env_selected;
+            let sensitive = env_cmd::looks_sensitive(key);
+            let display = if !app.env_reveal && sensitive {
+                env_cmd::mask(value)
+            } else {
+                truncate(value, 35).to_string()
+            };
+            let (key_style, val_style) = if selected {
+                (
+                    Style::default().fg(CYAN).add_modifier(Modifier::BOLD),
+                    Style::default().fg(WHITE),
+                )
+            } else {
+                (
+                    Style::default().fg(CYAN),
+                    Style::default().fg(TEXT_DIM),
+                )
+            };
+            let tag = if sensitive && !app.env_reveal {
+                Span::styled(" [hidden]", Style::default().fg(DIMMER))
+            } else {
+                Span::raw("")
+            };
+            ListItem::new(Line::from(vec![
+                Span::styled(format!("  {:<30}", truncate(key, 30)), key_style),
+                Span::styled(display, val_style),
+                tag,
+            ]))
+        }).collect();
+
+        let mut list_state = ListState::default();
+        list_state.select(Some(app.env_selected));
+
+        let list = List::new(items)
+            .highlight_style(Style::default().bg(BG_HIGHLIGHT));
+
+        f.render_stateful_widget(list, splits[1], &mut list_state);
+    }
+
+    // Editor section or keyboard hints
+    if let Some(edit) = &app.env_edit {
+        let key_cursor  = if edit.editing_key  { "▌" } else { "" };
+        let val_cursor  = if !edit.editing_key { "▌" } else { "" };
+        let key_label_style = if edit.editing_key  { Style::default().fg(YELLOW) } else { Style::default().fg(TEXT_DIM) };
+        let val_label_style = if !edit.editing_key { Style::default().fg(YELLOW) } else { Style::default().fg(TEXT_DIM) };
+        let field_hint = if edit.is_new() {
+            "  [Enter] Next/Save  [Tab] Switch field  [Esc] Cancel"
+        } else {
+            "  [Enter] Save  [Esc] Cancel"
+        };
+        let editor = Paragraph::new(vec![
+            Line::from(vec![Span::styled(format!("  {}", "─".repeat(62)), Style::default().fg(DIM))]),
+            Line::from(vec![
+                Span::styled("  Key:   ", Style::default().fg(DIMMER)),
+                Span::styled(format!("{}{}", edit.key_input, key_cursor), key_label_style),
+            ]),
+            Line::from(vec![
+                Span::styled("  Value: ", Style::default().fg(DIMMER)),
+                Span::styled(format!("{}{}", edit.value_input, val_cursor), val_label_style),
+            ]),
+            Line::from(vec![Span::styled(field_hint, Style::default().fg(DIMMER))]),
+        ]);
+        f.render_widget(editor, splits[2]);
+    } else {
+        let hints = Paragraph::new(vec![
+            Line::from(vec![Span::styled(
+                "  [n] Add  [Enter] Edit  [d] Delete  [v] Reveal  ↑↓/jk Navigate",
+                Style::default().fg(DIMMER),
+            )]),
+        ]);
+        f.render_widget(hints, splits[2]);
+    }
+}
+
+fn render_flow_context_panel(f: &mut Frame, app: &ApiApp, area: Rect) {
+    let mut lines: Vec<Line> = vec![Line::raw("")];
 
     match &app.last_run {
         None => {
-            ctx_lines.push(Line::from(vec![
-                Span::styled("  No flow run yet.", Style::default().fg(DIM)),
-            ]));
-            ctx_lines.push(Line::raw(""));
-            ctx_lines.push(Line::from(vec![
-                Span::styled("  Run a flow to see extracted context here.", Style::default().fg(DIMMER)),
-            ]));
-            ctx_lines.push(Line::raw(""));
-            ctx_lines.push(Line::from(vec![
-                Span::styled("  Tip: seed initial values with --set KEY=VALUE", Style::default().fg(DIMMER)),
-            ]));
+            lines.push(Line::from(vec![Span::styled("  No flow run yet.", Style::default().fg(DIM))]));
+            lines.push(Line::raw(""));
+            lines.push(Line::from(vec![Span::styled("  Run a flow to see", Style::default().fg(DIMMER))]));
+            lines.push(Line::from(vec![Span::styled("  extracted context here.", Style::default().fg(DIMMER))]));
+            lines.push(Line::raw(""));
+            lines.push(Line::from(vec![Span::styled("  Tip: seed initial vars with", Style::default().fg(DIMMER))]));
+            lines.push(Line::from(vec![Span::styled("  --set KEY=VALUE at run time.", Style::default().fg(DIMMER))]));
+        }
+        Some(run) if run.final_context.is_empty() => {
+            lines.push(Line::from(vec![Span::styled("  No context captured.", Style::default().fg(DIM))]));
+            lines.push(Line::raw(""));
+            lines.push(Line::from(vec![Span::styled("  Nodes must declare capture", Style::default().fg(DIMMER))]));
+            lines.push(Line::from(vec![Span::styled("  rules to extract variables.", Style::default().fg(DIMMER))]));
         }
         Some(run) => {
-            if run.final_context.is_empty() {
-                ctx_lines.push(Line::from(vec![
-                    Span::styled("  No variables captured in last run.", Style::default().fg(DIM)),
-                ]));
-            } else {
-                ctx_lines.push(Line::from(vec![
-                    Span::styled(format!("  {:<24} {}", "VARIABLE", "VALUE"), Style::default().fg(DIMMER)),
-                ]));
-                ctx_lines.push(Line::from(vec![
-                    Span::styled(format!("  {}", "─".repeat(50)), Style::default().fg(DIM)),
-                ]));
-                let mut sorted: Vec<_> = run.final_context.iter().collect();
-                sorted.sort_by_key(|(k, _)| k.as_str());
-                for (key, val) in &sorted {
-                    let display = match val {
-                        serde_json::Value::String(s) => {
-                            if s.len() > 40 { format!("{}…", &s[..40]) } else { s.clone() }
-                        }
-                        other => truncate(&other.to_string(), 40),
-                    };
-                    let masked = if env_looks_sensitive(key) { env_mask(&display) } else { display };
-                    ctx_lines.push(Line::from(vec![
-                        Span::styled(format!("  {:<24}", truncate(key, 24)), Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
-                        Span::styled(masked, Style::default().fg(TEXT_DIM)),
-                    ]));
-                }
-                ctx_lines.push(Line::raw(""));
-                ctx_lines.push(Line::from(vec![
-                    Span::styled(
-                        format!("  {} variable(s) captured from last run", run.final_context.len()),
-                        Style::default().fg(DIMMER),
-                    ),
+            lines.push(Line::from(vec![
+                Span::styled(format!("  {:<22}", "VARIABLE"), Style::default().fg(DIMMER)),
+                Span::styled("VALUE", Style::default().fg(DIMMER)),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled(format!("  {}", "─".repeat(36)), Style::default().fg(DIM)),
+            ]));
+            let mut sorted: Vec<_> = run.final_context.iter().collect();
+            sorted.sort_by_key(|(k, _)| k.as_str());
+            for (key, val) in &sorted {
+                use crate::api::commands::env as env_cmd;
+                let raw = match val {
+                    serde_json::Value::String(s) => truncate(s, 18).to_string(),
+                    other => truncate(&other.to_string(), 18).to_string(),
+                };
+                let display = if env_cmd::looks_sensitive(key) { env_cmd::mask(&raw) } else { raw };
+                lines.push(Line::from(vec![
+                    Span::styled(format!("  {:<22}", truncate(key, 22)), Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
+                    Span::styled(display, Style::default().fg(TEXT_DIM)),
                 ]));
             }
+            lines.push(Line::raw(""));
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!("  {} var(s) from last run", run.final_context.len()),
+                    Style::default().fg(DIMMER),
+                ),
+            ]));
         }
     }
 
-    let ctx_block = Block::default()
+    let block = Block::default()
         .title(Span::styled(" Flow Context (last run) ", title_style()))
         .borders(Borders::ALL)
         .border_style(border_style());
-    let ctx_para = Paragraph::new(ctx_lines)
-        .block(ctx_block)
-        .wrap(Wrap { trim: false });
-    f.render_widget(ctx_para, chunks[1]);
-}
-
-fn read_dot_env() -> Vec<(String, String)> {
-    let path = std::path::Path::new(".infynon").join(".env");
-    let content = match std::fs::read_to_string(&path) {
-        Ok(s) => s,
-        Err(_) => return Vec::new(),
-    };
-    content
-        .lines()
-        .filter_map(|line| {
-            let line = line.trim();
-            if line.is_empty() || line.starts_with('#') { return None; }
-            line.find('=').map(|eq| {
-                let key = line[..eq].trim().to_string();
-                let value = line[eq + 1..].to_string();
-                (key, value)
-            })
-        })
-        .collect()
-}
-
-fn env_looks_sensitive(key: &str) -> bool {
-    let upper = key.to_uppercase();
-    ["TOKEN", "SECRET", "PASSWORD", "KEY", "PASS", "AUTH", "CREDENTIAL", "PRIVATE"]
-        .iter()
-        .any(|w| upper.contains(w))
-}
-
-fn env_mask(value: &str) -> String {
-    if value.len() <= 6 { "***".to_string() } else { format!("{}***", &value[..4]) }
+    let para = Paragraph::new(lines).block(block).wrap(Wrap { trim: false });
+    f.render_widget(para, area);
 }
 
 // ── View 7: State Inspector ───────────────────────────────────────────────────
