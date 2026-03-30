@@ -546,7 +546,15 @@ impl ApiApp {
             None => return,
         };
         let nodes = self.nodes.clone();
-        let base_url = flow.base_url.clone().unwrap_or_else(|| "http://localhost:3000".to_string());
+        let base_url = match flow.base_url.clone()
+            .or_else(|| crate::api::commands::env::env_base_url())
+        {
+            Some(u) => u,
+            None => {
+                self.notify("BASE_URL not set — add it in Env tab or .infynon/.env");
+                return;
+            }
+        };
 
         let (tx, rx) = mpsc::sync_channel::<LiveEvent>(100);
         self.run_rx = Some(rx);
@@ -595,9 +603,16 @@ impl ApiApp {
                 return;
             }
         };
-        let base_url = self.active_flow()
+        let base_url = match self.active_flow()
             .and_then(|f| f.base_url.clone())
-            .unwrap_or_else(|| "http://localhost:3000".to_string());
+            .or_else(|| crate::api::commands::env::env_base_url())
+        {
+            Some(u) => u,
+            None => {
+                self.notify("BASE_URL not set — add it in Env tab or .infynon/.env");
+                return;
+            }
+        };
 
         let (tx, rx) = mpsc::sync_channel::<LiveEvent>(100);
         self.run_rx = Some(rx);

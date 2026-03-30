@@ -75,6 +75,11 @@ pub fn env_list() -> Vec<(String, String)> {
         .collect()
 }
 
+/// Return the BASE_URL entry from .infynon/.env, if set.
+pub fn env_base_url() -> Option<String> {
+    env_list().into_iter().find(|(k, _)| k == "BASE_URL").map(|(_, v)| v)
+}
+
 /// Upsert a key-value pair in the .env file.
 pub fn env_upsert(key: &str, value: &str) -> std::io::Result<()> {
     let mut entries = read_env_file();

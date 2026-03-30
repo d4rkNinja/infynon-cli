@@ -1107,7 +1107,18 @@ fn execute_api_command(action: ApiCommands) {
             NodeAction::List => node::cmd_node_list(),
             NodeAction::Remove { id } => node::cmd_node_remove(&id),
             NodeAction::Clone { id, new_id } => node::cmd_node_clone(&id, &new_id),
-            NodeAction::Run { id, base_url, set, prompt } => node::cmd_node_run(&id, &base_url, &set, prompt),
+            NodeAction::Run { id, base_url, set, prompt } => {
+                let url = match base_url
+                    .or_else(|| crate::api::commands::env::env_base_url())
+                {
+                    Some(u) => u,
+                    None => {
+                        crate::tui::logger::Logger::error("BASE_URL is not set. Add it to .infynon/.env or pass --base-url <url>");
+                        return;
+                    }
+                };
+                node::cmd_node_run(&id, &url, &set, prompt);
+            }
             NodeAction::Export { id, format, base_url } => {
                 node::cmd_node_export(&id, &format, base_url.as_deref())
             }

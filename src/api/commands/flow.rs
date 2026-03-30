@@ -227,12 +227,17 @@ pub fn cmd_flow_run(id: &str, base_url_override: Option<&str>, set_vars: &[(Stri
 
     let nodes = storage::load_nodes_map();
 
-    let base_url = base_url_override
+    let base_url = match base_url_override
         .map(|s| s.to_string())
         .or_else(|| flow.base_url.clone())
-        .unwrap_or_else(|| {
-            prompt("  Base URL (e.g. http://localhost:3000): ")
-        });
+        .or_else(|| super::env::env_base_url())
+    {
+        Some(u) => u,
+        None => {
+            Logger::error("BASE_URL is not set. Add it to .infynon/.env or pass --base-url <url>");
+            return;
+        }
+    };
 
     let initial_context = variables::parse_set_vars(set_vars);
 

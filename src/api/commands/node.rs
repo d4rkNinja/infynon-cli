@@ -512,11 +512,10 @@ pub fn cmd_node_export(id: &str, format: &str, base_url: Option<&str>) {
         Err(e) => { Logger::error(&e); return; }
     };
 
-    let url = format!(
-        "{}{}",
-        base_url.unwrap_or("http://localhost:3000"),
-        node.path
-    );
+    let resolved_base = base_url.map(|s| s.to_string())
+        .or_else(|| super::env::env_base_url())
+        .unwrap_or_else(|| "http://localhost:3000".to_string());
+    let url = format!("{}{}", resolved_base, node.path);
 
     match format.to_lowercase().as_str() {
         "curl" => {

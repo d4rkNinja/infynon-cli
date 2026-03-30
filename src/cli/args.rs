@@ -481,9 +481,10 @@ pub enum NodeAction {
     Run {
         /// Node ID to execute
         id: String,
-        /// Base URL prepended to the node's path (e.g. http://localhost:3000)
-        #[arg(long, default_value = "http://localhost:3000")]
-        base_url: String,
+        /// Base URL prepended to the node's path (e.g. http://localhost:3000).
+        /// If not provided, falls back to BASE_URL in .infynon/.env.
+        #[arg(long)]
+        base_url: Option<String>,
         /// Inject context variables as KEY=VALUE pairs. Used to fill {placeholder} fields
         /// in the request path, headers, or body. Repeat for multiple variables.
         /// Example: --set token=abc123 --set user_id=42
