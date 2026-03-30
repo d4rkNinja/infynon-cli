@@ -116,7 +116,8 @@ Internet → INFYNON WAF → Your App Server
 
 ## 👥 Who Is This For
 
-- **Developers using AI tools** (Copilot, Cursor, ChatGPT) — AI installs packages, INFYNON verifies them
+- **Vibe coders & AI coding users** (Claude Code, Cursor, Copilot) — AI suggests and installs packages, INFYNON intercepts and verifies them before anything touches disk
+- **AI agents running autonomously** — `--agent` mode emits structured JSON so agents can parse results and react without screen-scraping
 - **Backend engineers** managing APIs exposed to the internet
 - **DevOps / security-conscious teams** enforcing CVE policies in CI
 - **Anyone installing dependencies** without auditing every transitive package
@@ -132,6 +133,7 @@ Internet → INFYNON WAF → Your App Server
 - **Auto-fix suggestions** — upgrade to the nearest safe version automatically
 - **15+ lock file parsers** — works with your existing project, no setup
 - **CI enforcement** — non-zero exit on violation, configurable severity threshold
+- **`--agent` mode** — machine-readable JSON output for AI agents and CI parsers
 
 ### 🛡️ Network Protection
 
@@ -196,7 +198,7 @@ infynon pkg npm install express --yes
 
 | Flag | Behavior | Exit Code |
 |------|----------|-----------|
-| `--strict [LEVEL]` | Fail build if vulnerabilities at or above level are found | `1` on block |
+| `--strict [LEVEL]` | Block if vulnerabilities at or above level are found | `3` on block |
 | `--auto-fix` | Upgrade to safe versions silently, skip if no fix exists | `0` |
 | `--skip-vulnerable` | Skip vulnerable packages, install clean ones | `0` |
 | `--yes` | Install all packages including vulnerable ones | `0` |
@@ -209,6 +211,52 @@ Severity levels: `critical` · `high` · `medium` · `low` · `all`
 - name: Secure install
   run: infynon pkg npm install --strict high
 ```
+
+---
+
+## 🤖 AI Agent Mode
+
+Add `--agent` to any command for machine-readable JSON output — designed for AI agents (Claude Code, Cursor), CI parsers, and shell scripts that need structured results.
+
+```bash
+# Scan — JSON output, auto-scans all lock files, no interactive prompts
+infynon pkg scan --agent
+
+# Install with JSON result
+infynon pkg npm install express lodash --agent --strict high
+infynon pkg uv add fastapi sqlalchemy --agent --auto-fix
+infynon pkg cargo add serde tokio --agent --strict high
+```
+
+**Scan output:**
+```json
+{
+  "status": "vulnerable",
+  "packages_scanned": 142,
+  "vulnerabilities": [
+    {
+      "package": "requests",
+      "ecosystem": "PyPI",
+      "current_version": "2.28.0",
+      "cve_id": "CVE-2023-32681",
+      "severity": "MEDIUM",
+      "summary": "HTTP library improperly forwards proxy-authorization headers",
+      "safe_version": "2.31.0",
+      "fix_cmd": "pip install requests==2.31.0"
+    }
+  ],
+  "summary": { "critical": 0, "high": 0, "medium": 1, "low": 0, "informational": 0, "total": 1 }
+}
+```
+
+**Exit codes in `--agent` mode:**
+
+| Code | Meaning |
+|------|---------|
+| `0` | Clean — no vulnerabilities |
+| `1` | Warnings only (LOW / INFORMATIONAL) |
+| `2` | Vulnerabilities found (MEDIUM, HIGH, or CRITICAL) |
+| `3` | Blocked by `--strict` |
 
 ---
 
@@ -351,9 +399,11 @@ Watch [github.com/d4rkNinja/infynon-cli/tree/development](https://github.com/d4r
 
 ## 🔮 Upcoming
 
+- SBOM generation (CycloneDX / SPDX) after every install
+- Typosquatting / hallucinated-package detection
+- Phantom package detection (AI-hallucinated names)
+- License compliance gate (`--deny-license GPL-3.0`)
+- Policy-as-code (`.infynon-policy.toml`)
 - Geo-IP blocking (MaxMind GeoLite2)
-- SQLite event database for historical queries
-- Webhook alerts (Slack, Discord)
-- LLM-based deep inspection (local Ollama)
-- SBOM generation (CycloneDX) after every install
+- Webhook alerts (Slack, Discord, Teams)
 - TLS termination support
