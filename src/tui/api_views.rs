@@ -17,103 +17,188 @@ use crate::tui::theme::*;
 pub fn render(f: &mut Frame, app: &mut ApiApp) {
     let area = f.size();
 
-    // Layout: tab bar (2) | content (fill) | status (1)
+    // Layout: info bar (1) | tab strip (1) | separator (1) | content (fill) | status (1)
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(2),
-            Constraint::Min(0),
-            Constraint::Length(1),
+            Constraint::Length(1), // info bar
+            Constraint::Length(1), // tab strip
+            Constraint::Length(1), // separator line
+            Constraint::Min(0),    // content
+            Constraint::Length(1), // status bar
         ])
         .split(area);
 
-    render_tab_bar(f, app, chunks[0]);
+    render_info_bar(f, app, chunks[0]);
+    render_tab_strip(f, app, chunks[1]);
+    render_separator(f, chunks[2]);
 
     match app.current_view {
-        ApiView::Overview        => render_overview(f, app, chunks[1]),
-        ApiView::FlowGraph       => render_flow_graph(f, app, chunks[1]),
-        ApiView::LiveExecution   => render_live_execution(f, app, chunks[1]),
-        ApiView::LatencyProfiler => render_latency_profiler(f, app, chunks[1]),
-        ApiView::SecurityProbes  => render_security_probes(f, app, chunks[1]),
-        ApiView::CoverageMap     => render_coverage_map(f, app, chunks[1]),
-        ApiView::StateInspector  => render_state_inspector(f, app, chunks[1]),
-        ApiView::RunDiff         => render_run_diff(f, app, chunks[1]),
-        ApiView::NodeLibrary     => render_node_library(f, app, chunks[1]),
+        ApiView::Overview        => render_overview(f, app, chunks[3]),
+        ApiView::FlowGraph       => render_flow_graph(f, app, chunks[3]),
+        ApiView::LiveExecution   => render_live_execution(f, app, chunks[3]),
+        ApiView::LatencyProfiler => render_latency_profiler(f, app, chunks[3]),
+        ApiView::SecurityProbes  => render_security_probes(f, app, chunks[3]),
+        ApiView::CoverageMap     => render_coverage_map(f, app, chunks[3]),
+        ApiView::StateInspector  => render_state_inspector(f, app, chunks[3]),
+        ApiView::RunDiff         => render_run_diff(f, app, chunks[3]),
+        ApiView::NodeLibrary     => render_node_library(f, app, chunks[3]),
     }
 
-    render_status_bar(f, app, chunks[2]);
+    render_status_bar(f, app, chunks[4]);
 
-    // Overlays
+    // Overlays (always on top)
     if app.show_help {
         render_help_overlay(f, area);
     }
-
-    // Detail panel overlay in graph view
     if app.current_view == ApiView::FlowGraph && app.detail_panel.is_some() {
         render_node_detail_overlay(f, app, area);
     }
-
-    // Attach mode input overlay
     if app.attach_mode != AttachMode::Idle {
         render_attach_overlay(f, app, area);
     }
 }
 
-// ── Tab bar ──────────────────────────────────────────────────────────────────
+// ── Header: info bar ─────────────────────────────────────────────────────────
 
-fn render_tab_bar(f: &mut Frame, app: &ApiApp, area: Rect) {
-    let flow_label = app.active_flow()
-        .map(|f| format!(" [{}]", f.name))
-        .unwrap_or_default();
-
+fn render_info_bar(f: &mut Frame, app: &ApiApp, area: Rect) {
+    // Left side: brand + flow context + stats
     let mut spans: Vec<Span> = vec![
-        Span::styled(" INFYNON API", Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
-        Span::styled(&flow_label, Style::default().fg(PURPLE)),
-        Span::raw("  "),
+        Span::styled(" ◆ WEAVE", Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
+        Span::styled("  │  ", Style::default().fg(DIMMER)),
     ];
 
-    for view in ApiView::all() {
-        let is_active = app.current_view == *view;
-        let label = format!("[{}]{} ", view.key(), view.label());
-        if is_active {
-            spans.push(Span::styled(
-                label,
-                Style::default().fg(BG).bg(CYAN).add_modifier(Modifier::BOLD),
-            ));
-        } else {
-            spans.push(Span::styled(label, Style::default().fg(DIM)));
+    match app.active_flow() {
+        Some(fl) => {
+            spans.push(Span::styled("◈ ", Style::default().fg(CYAN)));
+            spans.push(Span::styled(fl.name.clone(), Style::default().fg(PURPLE).add_modifier(Modifier::BOLD)));
+        }
+        None => {
+            spans.push(Span::styled("no flow selected", Style::default().fg(DIMMER)));
         }
     }
 
-    spans.push(Span::styled("  [[][ ] flows  [?] help  [q] quit", Style::default().fg(DIMMER)));
+    spans.push(Span::styled("  │  ", Style::default().fg(DIMMER)));
+    spans.push(Span::styled(
+        format!("{} flows  {}  nodes", app.flows.len(), app.nodes.len()),
+        Style::default().fg(DIM),
+    ));
 
-    let line = Line::from(spans);
-    let tabs = Paragraph::new(line).block(Block::default().borders(Borders::BOTTOM).border_style(border_style()));
-    f.render_widget(tabs, area);
+    // Shortcuts — right side (separated with enough space)
+    spans.push(Span::styled("     ", Style::default()));
+    for (key, label) in &[("R", "refresh"), ("/", "search"), ("?", "help"), ("q", "quit")] {
+        spans.push(Span::styled(key.to_string(), Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)));
+        spans.push(Span::styled(format!(" {}  ", label), Style::default().fg(DIMMER)));
+    }
+
+    let p = Paragraph::new(Line::from(spans))
+        .style(Style::default().bg(BG_HIGHLIGHT));
+    f.render_widget(p, area);
+}
+
+// ── Header: tab strip ────────────────────────────────────────────────────────
+
+fn render_tab_strip(f: &mut Frame, app: &ApiApp, area: Rect) {
+    let mut spans: Vec<Span> = vec![Span::raw(" ")];
+
+    for view in ApiView::all() {
+        let is_active = app.current_view == *view;
+        let num = view.key().to_string();
+        let name = view.label();
+
+        if is_active {
+            // Active: solid cyan block  ▌ N · Label ▐
+            spans.push(Span::styled("▌", Style::default().fg(CYAN).bg(BG_HIGHLIGHT)));
+            spans.push(Span::styled(
+                format!(" {} · {} ", num, name),
+                Style::default().fg(BG).bg(CYAN).add_modifier(Modifier::BOLD),
+            ));
+            spans.push(Span::styled("▐ ", Style::default().fg(CYAN).bg(BG_HIGHLIGHT)));
+        } else {
+            spans.push(Span::styled(
+                format!(" {} ", num),
+                Style::default().fg(DIMMER),
+            ));
+            spans.push(Span::styled(
+                format!("{}  ", name),
+                Style::default().fg(DIM),
+            ));
+        }
+    }
+
+    // Append flow-switching hint at the end
+    spans.push(Span::styled("   [ ] flows", Style::default().fg(DIMMER)));
+
+    let p = Paragraph::new(Line::from(spans))
+        .style(Style::default().bg(BG_HIGHLIGHT));
+    f.render_widget(p, area);
+}
+
+// ── Header: separator line ────────────────────────────────────────────────────
+
+fn render_separator(f: &mut Frame, area: Rect) {
+    let line = "─".repeat(area.width as usize);
+    let p = Paragraph::new(Line::from(vec![
+        Span::styled(line, Style::default().fg(BORDER)),
+    ]));
+    f.render_widget(p, area);
 }
 
 // ── Status bar ────────────────────────────────────────────────────────────────
 
 fn render_status_bar(f: &mut Frame, app: &ApiApp, area: Rect) {
-    let msg = if let Some(msg) = app.active_notification() {
-        Span::styled(format!(" ✦ {}", msg), Style::default().fg(YELLOW))
+    let mut spans: Vec<Span> = vec![];
+
+    if let Some(msg) = app.active_notification() {
+        // Notification toast
+        spans.push(Span::styled(" ✦ ", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)));
+        spans.push(Span::styled(msg.to_string(), Style::default().fg(YELLOW)));
     } else {
-        Span::styled(
-            format!(
-                " {} flows  {} nodes  [R] refresh",
-                app.flows.len(),
-                app.nodes.len(),
-            ),
-            Style::default().fg(DIM),
-        )
-    };
-    let p = Paragraph::new(Line::from(vec![msg]));
+        // Last run summary
+        if let Some(run) = &app.last_run {
+            let (icon, color) = if run.passed { ("✔", GREEN) } else { ("✘", RED) };
+            spans.push(Span::styled(format!(" {} ", icon), Style::default().fg(color)));
+            spans.push(Span::styled(
+                format!("{}/{} steps  {}ms avg", run.passed_count(), run.steps.len(), run.avg_latency_ms()),
+                Style::default().fg(TEXT_DIM),
+            ));
+            spans.push(Span::styled("  │  ", Style::default().fg(DIMMER)));
+        } else {
+            spans.push(Span::styled(" ○ no run yet  │  ", Style::default().fg(DIMMER)));
+        }
+
+        // Search indicator
+        if !app.search_input.is_empty() {
+            spans.push(Span::styled("/ ", Style::default().fg(YELLOW)));
+            spans.push(Span::styled(&app.search_input, Style::default().fg(WHITE).add_modifier(Modifier::BOLD)));
+            spans.push(Span::styled("  │  ", Style::default().fg(DIMMER)));
+        }
+
+        // Active flow position hint
+        if app.flows.len() > 1 {
+            spans.push(Span::styled(
+                format!("flow {}/{}", app.active_flow_idx + 1, app.flows.len()),
+                Style::default().fg(DIMMER),
+            ));
+            spans.push(Span::styled("  │  ", Style::default().fg(DIMMER)));
+        }
+
+        spans.push(Span::styled("R refresh  [ ] flows  ? help", Style::default().fg(DIMMER)));
+    }
+
+    let p = Paragraph::new(Line::from(spans))
+        .style(Style::default().bg(BG_HIGHLIGHT));
     f.render_widget(p, area);
 }
 
 // ── View 1: Overview ─────────────────────────────────────────────────────────
 
 fn render_overview(f: &mut Frame, app: &ApiApp, area: Rect) {
+    if app.flows.is_empty() {
+        render_welcome_screen(f, area);
+        return;
+    }
+
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
@@ -198,7 +283,7 @@ fn render_quick_stats(f: &mut Frame, app: &ApiApp, area: Rect) {
         lines.push(Line::from(vec![Span::styled(format!("  {}", pct_label), stat_label())]));
     } else {
         lines.push(Line::from(vec![
-            Span::styled("  No runs yet. Run a flow with: infynon api flow run <id>", dim_style()),
+            Span::styled("  No runs yet. Run a flow with: infynon weave flow run <id>", dim_style()),
         ]));
     }
 
@@ -220,10 +305,7 @@ fn render_flow_graph(f: &mut Frame, app: &ApiApp, area: Rect) {
     let flow = match app.active_flow() {
         Some(f) => f,
         None => {
-            let p = Paragraph::new("No flows. Create one: infynon api flow create <name>")
-                .style(dim_style())
-                .block(Block::default().borders(Borders::ALL).border_style(border_style()));
-            f.render_widget(p, area);
+            render_welcome_screen(f, area);
             return;
         }
     };
@@ -337,23 +419,18 @@ fn render_graph_canvas(f: &mut Frame, app: &ApiApp, area: Rect) {
         // Draw arrows to successors
         if let Some(flow) = app.active_flow() {
             for edge in flow.successors(&gnode.node_id) {
-                // Find target node position
                 if let Some(target) = app.graph_layout.iter().find(|g| g.node_id == edge.to) {
-                    let tx = inner.x + (target.col as u16) * (node_w + h_gap);
                     let ty = inner.y + (target.layer as u16) * (node_h + v_gap);
-
-                    // Draw a simple vertical arrow between layers
                     let arrow_x = x + node_w / 2;
                     let arrow_start_y = y + node_h;
                     let arrow_end_y = ty.saturating_sub(1);
 
-                    if arrow_start_y < inner.bottom() && arrow_end_y < inner.bottom() && arrow_x < inner.right() {
-                        // Render "│" lines and "↓" arrow
-                        let mid_y = (arrow_start_y + arrow_end_y) / 2;
-                        if mid_y < inner.bottom() && mid_y > arrow_start_y {
-                            let arrow_rect = Rect { x: arrow_x, y: mid_y, width: 1, height: 1 };
-                            let arrow_p = Paragraph::new("↓").style(Style::default().fg(DIMMER));
-                            f.render_widget(arrow_p, arrow_rect);
+                    if arrow_x < inner.right() && arrow_start_y <= arrow_end_y {
+                        for y_pos in arrow_start_y..=arrow_end_y {
+                            if y_pos >= inner.bottom() { break; }
+                            let sym = if y_pos == arrow_end_y { "↓" } else { "│" };
+                            let r = Rect { x: arrow_x, y: y_pos, width: 1, height: 1 };
+                            f.render_widget(Paragraph::new(sym).style(Style::default().fg(DIMMER)), r);
                         }
                     }
                 }
@@ -361,8 +438,6 @@ fn render_graph_canvas(f: &mut Frame, app: &ApiApp, area: Rect) {
         }
     }
 
-    // Suppress unused warnings
-    let _ = (max_layer, max_col);
 }
 
 fn render_graph_sidebar(f: &mut Frame, app: &ApiApp, flow: &crate::api::types::Flow, area: Rect) {
@@ -499,9 +574,21 @@ fn render_latency_profiler(f: &mut Frame, app: &ApiApp, area: Rect) {
     let run = match &app.last_run {
         Some(r) => r,
         None => {
-            let p = Paragraph::new("No run data. Run a flow first: infynon api flow run <id>")
-                .style(dim_style())
-                .block(Block::default().borders(Borders::ALL).border_style(border_style()));
+            let p = Paragraph::new(vec![
+                Line::raw(""),
+                Line::from(vec![Span::styled("  No run data yet.", Style::default().fg(WHITE).add_modifier(Modifier::BOLD))]),
+                Line::raw(""),
+                Line::from(vec![Span::styled("  Run a flow first:", dim_style())]),
+                Line::from(vec![Span::styled("    infynon weave flow run <flow-id> --base-url http://localhost:3000", Style::default().fg(CYAN))]),
+                Line::raw(""),
+                Line::from(vec![
+                    Span::styled("  Then press ", dim_style()),
+                    Span::styled("R", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+                    Span::styled(" to refresh.", dim_style()),
+                ]),
+            ])
+            .block(Block::default().borders(Borders::ALL).border_style(border_style()))
+            .wrap(Wrap { trim: false });
             f.render_widget(p, area);
             return;
         }
@@ -570,7 +657,7 @@ fn render_security_probes(f: &mut Frame, app: &ApiApp, area: Rect) {
             Line::from(vec![Span::styled("  No security probes run yet.", dim_style())]),
             Line::raw(""),
             Line::from(vec![Span::styled("  Run probes with:", dim_style())]),
-            Line::from(vec![Span::styled("  infynon api ai probe <flow-id>", Style::default().fg(CYAN))]),
+            Line::from(vec![Span::styled("  infynon weave ai probe <flow-id>", Style::default().fg(CYAN))]),
         ])
         .block(
             Block::default()
@@ -926,6 +1013,46 @@ fn render_node_library(f: &mut Frame, app: &ApiApp, area: Rect) {
         node_list.iter().collect()
     };
 
+    if filtered.is_empty() {
+        let msg = if !app.search_input.is_empty() {
+            vec![
+                Line::raw(""),
+                Line::from(vec![
+                    Span::styled("  No nodes match: ", dim_style()),
+                    Span::styled(&app.search_input, Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+                ]),
+                Line::raw(""),
+                Line::from(vec![Span::styled("  Press Esc to clear search.", dim_style())]),
+            ]
+        } else {
+            vec![
+                Line::raw(""),
+                Line::from(vec![Span::styled("  No nodes yet.", Style::default().fg(WHITE).add_modifier(Modifier::BOLD))]),
+                Line::raw(""),
+                Line::from(vec![Span::styled("  Create nodes with:", dim_style())]),
+                Line::raw(""),
+                Line::from(vec![Span::styled("    infynon weave node create", Style::default().fg(CYAN))]),
+                Line::from(vec![Span::styled("    infynon weave node create --ai \"POST /auth/login extracts token\"", Style::default().fg(CYAN))]),
+                Line::raw(""),
+                Line::from(vec![Span::styled("  Nodes are stored in .infynon/api/nodes/", dim_style())]),
+                Line::raw(""),
+                Line::from(vec![
+                    Span::styled("  Press ", dim_style()),
+                    Span::styled("R", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+                    Span::styled(" to refresh after creating nodes.", dim_style()),
+                ]),
+            ]
+        };
+        let p = Paragraph::new(msg)
+            .block(Block::default()
+                .title(Span::styled(" Node Library — empty ", title_style()))
+                .borders(Borders::ALL)
+                .border_style(border_style()))
+            .wrap(Wrap { trim: false });
+        f.render_widget(p, area);
+        return;
+    }
+
     let items: Vec<ListItem> = filtered.iter().enumerate().map(|(i, (id, node))| {
         let in_flow = flow_node_ids.contains(*id);
         let flow_marker = if in_flow {
@@ -1166,6 +1293,80 @@ fn render_help_overlay(f: &mut Frame, area: Rect) {
         );
 
     f.render_widget(p, overlay_area);
+}
+
+// ── Welcome / empty-state screen ─────────────────────────────────────────────
+
+fn render_welcome_screen(f: &mut Frame, area: Rect) {
+    let outer = Block::default()
+        .title(Span::styled(" Weave — API Flow Testing ", title_style()))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(CYAN));
+    let inner = outer.inner(area);
+    f.render_widget(outer, area);
+
+    let sep = "  ─────────────────────────────────────────────────────────────────";
+
+    let lines = vec![
+        Line::raw(""),
+        Line::from(vec![
+            Span::raw("  "),
+            Span::styled("No flows detected. ", Style::default().fg(WHITE).add_modifier(Modifier::BOLD)),
+            Span::styled("Build an API test in 4 commands:", Style::default().fg(TEXT_DIM)),
+        ]),
+        Line::raw(""),
+        Line::from(vec![Span::styled(sep, Style::default().fg(DIMMER))]),
+        Line::raw(""),
+        Line::from(vec![
+            Span::styled("  1 ", Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
+            Span::styled("Create nodes  ", Style::default().fg(TEXT_DIM)),
+            Span::styled(
+                "infynon weave node create --ai \"POST /auth/login extracts token\"",
+                Style::default().fg(CYAN),
+            ),
+        ]),
+        Line::raw(""),
+        Line::from(vec![
+            Span::styled("  2 ", Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
+            Span::styled("Create a flow  ", Style::default().fg(TEXT_DIM)),
+            Span::styled("infynon weave flow create my-flow", Style::default().fg(CYAN)),
+        ]),
+        Line::raw(""),
+        Line::from(vec![
+            Span::styled("  3 ", Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
+            Span::styled("Connect nodes  ", Style::default().fg(TEXT_DIM)),
+            Span::styled(
+                "infynon weave attach login-node --to dashboard-node",
+                Style::default().fg(CYAN),
+            ),
+        ]),
+        Line::raw(""),
+        Line::from(vec![
+            Span::styled("  4 ", Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
+            Span::styled("Run the flow   ", Style::default().fg(TEXT_DIM)),
+            Span::styled(
+                "infynon weave flow run my-flow --base-url http://localhost:3000",
+                Style::default().fg(CYAN),
+            ),
+        ]),
+        Line::raw(""),
+        Line::from(vec![Span::styled(sep, Style::default().fg(DIMMER))]),
+        Line::raw(""),
+        Line::from(vec![
+            Span::styled("  Shortcuts:  ", Style::default().fg(TEXT_DIM)),
+            Span::styled("R", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+            Span::styled(" refresh  ", Style::default().fg(DIM)),
+            Span::styled("9", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+            Span::styled(" node library  ", Style::default().fg(DIM)),
+            Span::styled("?", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+            Span::styled(" help  ", Style::default().fg(DIM)),
+            Span::styled("q", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+            Span::styled(" quit", Style::default().fg(DIM)),
+        ]),
+    ];
+
+    let p = Paragraph::new(lines).wrap(Wrap { trim: false });
+    f.render_widget(p, inner);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

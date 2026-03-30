@@ -21,6 +21,7 @@ Infynon CLI is a Rust-based dual-mode security tool:
 
 1. **Network Firewall** (`infynon`): A real-time reverse proxy WAF with TUI dashboard. Sits between the internet and your backend, inspecting and filtering HTTP traffic through a multi-stage pipeline (IP filter → rate limiter → WAF → custom rules). Supports multi-upstream routing, maintenance mode, hot config reload, and live TUI config editing.
 2. **Package Security Manager** (`infynon pkg`): Intercepts package install commands across 14 ecosystems (npm, yarn, pnpm, bun, pip, uv, poetry, cargo, go, gem, composer, nuget, hex, pub) and runs a 3-layer CVE verification pipeline before allowing installation.
+3. **Weave API Tester** (`infynon weave`): Node-based API flow testing TUI. Models your API as a directed graph of HTTP nodes, threads context variables between them, and runs security probes. CLI command is `weave` (renamed from `nexus` in v0.2.0-beta.6.7).
 
 ## Build & Run Commands
 
@@ -38,6 +39,11 @@ cargo run -- monitor                 # Open TUI monitor
 # Package manager mode
 cargo run -- pkg <args>              # Run in package manager mode
 cargo run -- pkg scan                # Scan lock files for CVEs
+
+# Nexus API testing mode (renamed from "api" in beta.6.7)
+cargo run -- weave tui               # Open Weave TUI
+cargo run -- weave node create       # Create a node
+cargo run -- weave flow run <id>     # Run a flow
 ```
 
 There are no tests or linting commands configured yet. The project uses default `rustfmt` and has `#![allow(dead_code, unused_variables, unused_imports)]` in main.rs during beta.

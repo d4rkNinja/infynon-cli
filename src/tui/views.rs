@@ -2,7 +2,7 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{
-    Block, Borders, Cell, Clear, Paragraph, Row, Sparkline, Table, Tabs, Wrap,
+    Block, Borders, Cell, Clear, Paragraph, Row, Sparkline, Table, Wrap,
 };
 use ratatui::Frame;
 
@@ -14,73 +14,119 @@ use crate::utils::{truncate_str, format_number, format_bytes_short};
 // ── Main render dispatcher ──────────────────────────────────────────────────
 
 pub fn render(f: &mut Frame, app: &App) {
+    let area = f.size();
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Tab bar
-            Constraint::Min(0),    // Content
-            Constraint::Length(1), // Status line
+            Constraint::Length(1), // info bar
+            Constraint::Length(1), // tab strip
+            Constraint::Length(1), // separator
+            Constraint::Min(0),    // content
+            Constraint::Length(1), // status bar
         ])
-        .split(f.size());
+        .split(area);
 
-    render_tabs(f, app, chunks[0]);
+    render_info_bar(f, app, chunks[0]);
+    render_tab_strip(f, app, chunks[1]);
+    render_separator(f, chunks[2]);
 
     match app.current_view {
-        View::Dashboard => render_dashboard(f, app, chunks[1]),
-        View::LiveFeed => render_live_feed(f, app, chunks[1]),
-        View::Blocked => render_blocked(f, app, chunks[1]),
-        View::IpInspector => render_ip_inspector(f, app, chunks[1]),
-        View::Rules => render_rules(f, app, chunks[1]),
-        View::Stats => render_stats(f, app, chunks[1]),
-        View::Config => render_config(f, app, chunks[1]),
+        View::Dashboard   => render_dashboard(f, app, chunks[3]),
+        View::LiveFeed    => render_live_feed(f, app, chunks[3]),
+        View::Blocked     => render_blocked(f, app, chunks[3]),
+        View::IpInspector => render_ip_inspector(f, app, chunks[3]),
+        View::Rules       => render_rules(f, app, chunks[3]),
+        View::Stats       => render_stats(f, app, chunks[3]),
+        View::Config      => render_config(f, app, chunks[3]),
     }
 
-    render_status_line(f, app, chunks[2]);
+    render_status_line(f, app, chunks[4]);
 
-    // Help overlay
     if app.show_help {
-        render_help_overlay(f, f.size());
+        render_help_overlay(f, area);
     }
 }
 
-// ── Tab bar ─────────────────────────────────────────────────────────────────
+// ── Header: info bar ────────────────────────────────────────────────────────
 
-fn render_tabs(f: &mut Frame, app: &App, area: Rect) {
-    let titles: Vec<Line> = View::all()
-        .iter()
-        .map(|v| {
-            let style = if *v == app.current_view {
-                Style::default().fg(theme::CYAN).add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(theme::DIM)
-            };
-            Line::from(Span::styled(format!("[{}]{}", v.key(), v.label()), style))
-        })
-        .collect();
+fn render_info_bar(f: &mut Frame, app: &App, area: Rect) {
+    let snap = app.stats_snapshot();
 
-    let maint_indicator = if app.is_maintenance() {
-        Span::styled(" [MAINTENANCE] ", Style::default().fg(theme::ORANGE).add_modifier(Modifier::BOLD))
-    } else {
-        Span::raw("")
-    };
-
-    let title_spans = vec![
-        Span::styled(" INFYNON FIREWALL ", theme::title_style()),
-        maint_indicator,
+    let mut spans = vec![
+        Span::styled(" ◆ INFYNON FIREWALL", theme::title_style()),
+        Span::styled("  │  ", Style::default().fg(theme::DIMMER)),
     ];
 
-    let selected_idx = View::all().iter().position(|v| *v == app.current_view).unwrap_or(0);
+    if app.is_maintenance() {
+        spans.push(Span::styled("⚠ MAINTENANCE  │  ", Style::default().fg(theme::ORANGE).add_modifier(Modifier::BOLD)));
+    }
 
-    let tabs = Tabs::new(titles)
-        .block(Block::default()
-            .borders(Borders::BOTTOM)
-            .border_style(theme::border_style())
-            .title(Line::from(title_spans)))
-        .select(selected_idx)
-        .highlight_style(Style::default().fg(theme::CYAN).add_modifier(Modifier::BOLD))
-        .divider(Span::styled(" | ", theme::dim_style()));
+    spans.push(Span::styled(
+        format!("↑ {:.0}/s  ", snap.requests_per_second),
+        Style::default().fg(theme::CYAN),
+    ));
+    spans.push(Span::styled(
+        format!("✘ {:.0}/s blocked  ", snap.blocks_per_second),
+        Style::default().fg(theme::RED),
+    ));
+    spans.push(Span::styled("│  ", Style::default().fg(theme::DIMMER)));
+    spans.push(Span::styled(
+        format!("{} conn", snap.active_connections),
+        Style::default().fg(theme::DIM),
+    ));
 
-    f.render_widget(tabs, area);
+    if app.paused {
+        spans.push(Span::styled("  │  ⏸ PAUSED", Style::default().fg(theme::YELLOW).add_modifier(Modifier::BOLD)));
+    }
+
+    // Shortcuts
+    spans.push(Span::styled("     ", Style::default()));
+    for (key, label) in &[("m", "maint"), ("r", "reload"), ("/", "search"), ("?", "help"), ("q", "quit")] {
+        spans.push(Span::styled(key.to_string(), Style::default().fg(theme::YELLOW).add_modifier(Modifier::BOLD)));
+        spans.push(Span::styled(format!(" {}  ", label), Style::default().fg(theme::DIMMER)));
+    }
+
+    let p = Paragraph::new(Line::from(spans))
+        .style(Style::default().bg(theme::BG_HIGHLIGHT));
+    f.render_widget(p, area);
+}
+
+// ── Header: tab strip ────────────────────────────────────────────────────────
+
+fn render_tab_strip(f: &mut Frame, app: &App, area: Rect) {
+    let mut spans: Vec<Span> = vec![Span::raw(" ")];
+
+    for view in View::all() {
+        let is_active = app.current_view == *view;
+        let num = view.key().to_string();
+        let name = view.label();
+
+        if is_active {
+            spans.push(Span::styled("▌", Style::default().fg(theme::CYAN).bg(theme::BG_HIGHLIGHT)));
+            spans.push(Span::styled(
+                format!(" {} · {} ", num, name),
+                Style::default().fg(theme::BG).bg(theme::CYAN).add_modifier(Modifier::BOLD),
+            ));
+            spans.push(Span::styled("▐ ", Style::default().fg(theme::CYAN).bg(theme::BG_HIGHLIGHT)));
+        } else {
+            spans.push(Span::styled(format!(" {} ", num), Style::default().fg(theme::DIMMER)));
+            spans.push(Span::styled(format!("{}  ", name), Style::default().fg(theme::DIM)));
+        }
+    }
+
+    let p = Paragraph::new(Line::from(spans))
+        .style(Style::default().bg(theme::BG_HIGHLIGHT));
+    f.render_widget(p, area);
+}
+
+// ── Header: separator ────────────────────────────────────────────────────────
+
+fn render_separator(f: &mut Frame, area: Rect) {
+    let line = "─".repeat(area.width as usize);
+    let p = Paragraph::new(Line::from(vec![
+        Span::styled(line, Style::default().fg(theme::BORDER)),
+    ]));
+    f.render_widget(p, area);
 }
 
 // ── Status line ─────────────────────────────────────────────────────────────
@@ -88,24 +134,36 @@ fn render_tabs(f: &mut Frame, app: &App, area: Rect) {
 fn render_status_line(f: &mut Frame, app: &App, area: Rect) {
     let snap = app.stats_snapshot();
 
-    // Show notification if active
+    // Notification toast takes over
     if let Some(notif) = app.active_notification() {
-        let p = Paragraph::new(format!(" {} ", notif))
-            .style(Style::default().fg(theme::GREEN).bg(theme::BG_HIGHLIGHT).add_modifier(Modifier::BOLD));
+        let p = Paragraph::new(Line::from(vec![
+            Span::styled(" ✦ ", Style::default().fg(theme::YELLOW).add_modifier(Modifier::BOLD)),
+            Span::styled(notif, Style::default().fg(theme::YELLOW)),
+        ]))
+        .style(Style::default().bg(theme::BG_HIGHLIGHT));
         f.render_widget(p, area);
         return;
     }
 
-    let status = format!(
-        " {} | {:.0} req/s | {:.0} block/s | {} conn | q:quit /:search ?:help {}{}",
-        app.current_view.label(),
-        snap.requests_per_second,
-        snap.blocks_per_second,
-        snap.active_connections,
-        if app.paused { "| PAUSED " } else { "" },
-        if app.is_maintenance() { "| MAINT " } else { "" },
-    );
-    let p = Paragraph::new(status).style(Style::default().fg(theme::TEXT_DIM).bg(theme::BG_HIGHLIGHT));
+    let mut spans = vec![
+        Span::styled(" ● RUNNING  │  ", Style::default().fg(theme::GREEN)),
+        Span::styled(
+            format!("{} req  {} blocked  {} flagged", format_number(snap.total_requests), format_number(snap.total_blocked), snap.total_flagged),
+            Style::default().fg(theme::TEXT_DIM),
+        ),
+        Span::styled("  │  ", Style::default().fg(theme::DIMMER)),
+    ];
+
+    if !app.search_input.is_empty() {
+        spans.push(Span::styled("/ ", Style::default().fg(theme::YELLOW)));
+        spans.push(Span::styled(&app.search_input, Style::default().fg(theme::WHITE).add_modifier(Modifier::BOLD)));
+        spans.push(Span::styled("  │  ", Style::default().fg(theme::DIMMER)));
+    }
+
+    spans.push(Span::styled("p pause  f filter  b/u block/unblock", Style::default().fg(theme::DIMMER)));
+
+    let p = Paragraph::new(Line::from(spans))
+        .style(Style::default().bg(theme::BG_HIGHLIGHT));
     f.render_widget(p, area);
 }
 

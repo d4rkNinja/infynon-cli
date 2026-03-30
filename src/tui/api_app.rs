@@ -23,15 +23,15 @@ pub enum ApiView {
 impl ApiView {
     pub fn label(&self) -> &str {
         match self {
-            ApiView::Overview       => "Overview",
-            ApiView::FlowGraph      => "Flow Graph",
-            ApiView::LiveExecution  => "Live",
+            ApiView::Overview        => "Overview",
+            ApiView::FlowGraph       => "Flow Graph",
+            ApiView::LiveExecution   => "Live",
             ApiView::LatencyProfiler => "Latency",
             ApiView::SecurityProbes  => "Security",
             ApiView::CoverageMap     => "Coverage",
             ApiView::StateInspector  => "State",
             ApiView::RunDiff         => "Diff",
-            ApiView::NodeLibrary     => "Nodes",
+            ApiView::NodeLibrary     => "Node Lib",
         }
     }
 
@@ -550,18 +550,18 @@ pub fn compute_graph_layout(flow: &Flow) -> Vec<GraphNode> {
 
     // BFS to assign layers
     let mut layers: HashMap<String, usize> = HashMap::new();
-    let mut queue = vec![(flow.entry.clone(), 0usize)];
+    let mut queue: std::collections::VecDeque<(String, usize)> = std::collections::VecDeque::new();
+    queue.push_back((flow.entry.clone(), 0usize));
     let mut visited: std::collections::HashSet<String> = std::collections::HashSet::new();
 
-    while let Some((node_id, layer)) = queue.first().cloned() {
-        queue.remove(0);
+    while let Some((node_id, layer)) = queue.pop_front() {
         if visited.contains(&node_id) { continue; }
         visited.insert(node_id.clone());
         layers.entry(node_id.clone()).or_insert(layer);
 
         for edge in flow.successors(&node_id) {
             if !visited.contains(&edge.to) {
-                queue.push((edge.to.clone(), layer + 1));
+                queue.push_back((edge.to.clone(), layer + 1));
             }
         }
     }

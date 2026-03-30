@@ -14,7 +14,7 @@ pub const TEXT: Color = Color::Rgb(220, 220, 230);
 pub const TEXT_DIM: Color = Color::Rgb(160, 160, 180);
 pub const BG: Color = Color::Rgb(10, 10, 20);
 pub const BG_HIGHLIGHT: Color = Color::Rgb(25, 25, 45);
-pub const BORDER: Color = Color::Rgb(50, 50, 80);
+pub const BORDER: Color = Color::Rgb(80, 80, 120);
 pub const WHITE: Color = Color::Rgb(240, 240, 250);
 
 // ── Verdict colors ──────────────────────────────────────────────────────────

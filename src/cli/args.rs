@@ -301,8 +301,8 @@ pub enum FirewallCommands {
     /// Manually trigger nightly intelligence pipeline immediately
     UpdateIntel,
 
-    /// API Testing — node-based API flow testing with TUI
-    #[command(name = "api")]
+    /// Weave — node-based API flow testing & security probes TUI
+    #[command(name = "weave")]
     Api {
         #[command(subcommand)]
         action: ApiCommands,

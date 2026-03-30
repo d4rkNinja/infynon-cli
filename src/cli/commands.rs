@@ -1175,14 +1175,17 @@ fn run_api_tui(flow_id: Option<&str>) {
             crate::tui::api_views::render(f, &mut app);
         });
 
-        if event::poll(std::time::Duration::from_millis(100)).unwrap_or(false) {
+        if event::poll(std::time::Duration::from_millis(50)).unwrap_or(false) {
             if let Ok(Event::Key(key)) = event::read() {
-                if key.code == KeyCode::Char('c')
-                    && key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL)
-                {
-                    break;
+                // Only handle Press events — ignore Repeat and Release (Windows key-repeat fix)
+                if key.kind == crossterm::event::KeyEventKind::Press {
+                    if key.code == KeyCode::Char('c')
+                        && key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL)
+                    {
+                        break;
+                    }
+                    app.handle_key(key);
                 }
-                app.handle_key(key);
             }
         }
 
