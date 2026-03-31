@@ -1,6 +1,6 @@
 {
   "name": "infynon",
-  "version": "0.2.0-beta.7",
+  "version": "0.2.0-beta.7.1",
   "description": "Universal package security manager, network WAF, and API flow tester — intercepts installs across 14 ecosystems with CVE verification, reverse proxy WAF with TUI, and node-based API integration testing with security probes.",
   "bin": {
     "infynon": "./run.js",
