@@ -170,14 +170,16 @@ impl Flow {
 
     /// All node IDs reachable in this flow (BFS order).
     pub fn all_node_ids(&self) -> Vec<String> {
+        use std::collections::{HashSet, VecDeque};
         let mut visited = vec![self.entry.clone()];
-        let mut queue = vec![self.entry.clone()];
-        while let Some(current) = queue.first().cloned() {
-            queue.remove(0);
+        let mut seen: HashSet<String> = vec![self.entry.clone()].into_iter().collect();
+        let mut queue: VecDeque<String> = vec![self.entry.clone()].into_iter().collect();
+        while let Some(current) = queue.pop_front() {
             for edge in &self.edges {
-                if edge.from == current && !visited.contains(&edge.to) {
+                if edge.from == current && !seen.contains(&edge.to) {
+                    seen.insert(edge.to.clone());
                     visited.push(edge.to.clone());
-                    queue.push(edge.to.clone());
+                    queue.push_back(edge.to.clone());
                 }
             }
         }
