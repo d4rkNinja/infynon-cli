@@ -12,6 +12,10 @@ A security-first CLI — one binary, three shields:
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/d4rkNinja/infynon-cli/blob/main/LICENSE)
 [![GitHub](https://img.shields.io/badge/source-GitHub-black?style=flat-square&logo=github)](https://github.com/d4rkNinja/infynon-cli)
 
+<p align="center">
+  <video src="https://raw.githubusercontent.com/d4rkNinja/infynon-cli/main/assets/InfynonDemo.mp4" autoplay loop muted playsinline width="100%"></video>
+</p>
+
 > ⚠️ AI installs packages. You don't verify them. That's the risk.
 > **INFYNON fixes that — blocks threats before they reach your system.**
 > Use `--agent` for structured JSON output inside AI agents or CI pipelines.

@@ -31,6 +31,10 @@
 </p>
 
 <p align="center">
+  <video src="assets/InfynonDemo.mp4" autoplay loop muted playsinline width="100%"></video>
+</p>
+
+<p align="center">
   <a href="#why-infynon">Why It Exists</a> •
   <a href="#what-infynon-does">What It Does</a> •
   <a href="#who-should-use-this">Who It's For</a> •
