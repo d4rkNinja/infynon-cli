@@ -1,6 +1,6 @@
-<p align="center">
-  <h1 align="center">INFYNON</h1>
-</p>
+# INFYNON — Security CLI: CVE Scanning, Reverse Proxy WAF & API Flow Testing
+
+<!-- keywords: security cli, vulnerability scanner, cve scanner, npm security, pip security, cargo security, reverse proxy waf, web application firewall, api testing, supply chain security, devsecops, package audit, dependency scanner, rate limiter, ip filter -->
 
 <p align="center">
   <strong>Secure before execution.</strong>
@@ -27,6 +27,7 @@
   <a href="https://www.npmjs.com/package/infynon">
     <img src="https://img.shields.io/npm/v/infynon?style=for-the-badge&logo=npm&label=npm" />
   </a>
+  <img src="https://img.shields.io/github/last-commit/d4rkNinja/infynon-cli?style=for-the-badge" />
 </p>
 
 <p align="center">
@@ -61,15 +62,14 @@ INFYNON flips that:
 
 ## What INFYNON does
 
-### 1. Dependency Security (`infynon pkg`)
+### 1. Package Vulnerability Scanner (`infynon pkg`)
 
-- Intercepts installs across 14 ecosystems
-- Detects vulnerabilities before install
-- Shows full dependency tree
-- Highlights install scripts
-- Explains why a package exists
-- Compares versions (size, deps, CVEs)
-- Detects outdated / unused / broken deps
+- Intercepts installs across 14 ecosystems — CVE check before anything touches disk
+- Shows full dependency tree with vulnerability annotations
+- Highlights install scripts before they run
+- Explains why a package exists in your tree
+- Compares versions: size, deps, CVEs side by side
+- Detects outdated, unused, and broken dependencies
 
 ```bash
 infynon pkg audit
@@ -83,16 +83,14 @@ infynon pkg clean
 infynon pkg migrate <from> <to>
 ```
 
-**Ecosystems:** `npm · yarn · pnpm · bun · pip · uv · poetry · cargo · go · gem · composer · nuget · hex · pub`
-
 ---
 
-### 2. API Flow Testing (`infynon weave`)
+### 2. API Flow Security Testing (`infynon weave`)
 
-- Model API workflows as connected nodes
-- Automatically pass tokens and IDs between steps
-- Save and replay full flows
-- Run security probes on flows
+- Model API workflows as connected nodes — not isolated requests
+- Automatically thread tokens and IDs between steps
+- Save and replay full flows with one command
+- Run built-in security probes: auth bypass, rate limit abuse, SQL injection
 - Replace manual Postman chaining
 
 ```bash
@@ -107,13 +105,13 @@ infynon weave tui
 
 ---
 
-### 3. Traffic Protection (`infynon`)
+### 3. Reverse Proxy WAF (`infynon`)
 
-- Reverse proxy firewall
-- Rate limiting
-- IP filtering
-- Multi-upstream routing
-- Protect exposed backend services
+- Self-hosted reverse proxy web application firewall
+- Rate limiting: per-IP, per-path, global sliding window
+- IP filtering: blocklist, allowlist, CIDR, auto-reputation banning
+- Multi-upstream routing for microservices
+- Real-time TUI dashboard — live feed, stats, config editing
 
 ```bash
 infynon init --port 8080 --upstream-port 3000
@@ -125,12 +123,20 @@ infynon logs --verdict block --count 50
 
 ---
 
+## Supported Ecosystems
+
+`npm` · `yarn` · `pnpm` · `bun` · `pip` · `uv` · `poetry` · `cargo` · `go` · `gem` · `composer` · `nuget` · `hex` · `pub`
+
+14 package managers. One security layer.
+
+---
+
 ## Who should use this
 
 - Backend developers
-- AI-assisted coding workflows
-- Security-conscious teams
-- API-heavy systems
+- AI-assisted coding workflows (Claude Code, Cursor, Copilot)
+- Security-conscious teams enforcing CVE policy in CI
+- API-heavy systems with multi-step auth flows
 - CLI-first developers
 
 ---
@@ -146,9 +152,26 @@ It is a control layer before execution.
 
 ---
 
+## INFYNON vs Other Security Tools
+
+| Feature | INFYNON | Snyk CLI | Safety CLI | OSV-Scanner |
+|---|---|---|---|---|
+| npm / yarn / pnpm / bun | ✓ | ✓ | — | ✓ |
+| pip / uv / poetry | ✓ | ✓ | ✓ | ✓ |
+| cargo | ✓ | ✓ | — | ✓ |
+| go / gem / composer / nuget | ✓ | Partial | — | ✓ |
+| **Pre-install interception** | ✓ | — | — | — |
+| Reverse proxy WAF | ✓ | — | — | — |
+| API flow security testing | ✓ | — | — | — |
+| Self-hosted, no account | ✓ | — | ✓ | ✓ |
+| TUI dashboard | ✓ | — | — | — |
+| CI / `--strict` flag | ✓ | ✓ | ✓ | ✓ |
+
+---
+
 ## ⚡ Quick Start
 
-### Dependency Firewall
+### Package Vulnerability Scanning
 
 ```bash
 npm install -g infynon
@@ -166,7 +189,7 @@ infynon pkg fix --auto
 infynon pkg audit
 ```
 
-### Network Firewall
+### Reverse Proxy WAF
 
 ```bash
 # Initialize config for port 8080 → upstream at 3000
@@ -182,7 +205,7 @@ infynon block 203.0.113.50
 infynon logs --verdict block --count 50
 ```
 
-### API Flow Testing (Weave)
+### API Flow Security Testing
 
 ```bash
 # Set base URL for this project
@@ -220,7 +243,7 @@ infynon weave ai probe user-journey
 
 ---
 
-## 🔬 Dependency Intelligence
+## 🔬 Dependency Intelligence Commands
 
 | Command | Description |
 |---------|-------------|
@@ -352,9 +375,9 @@ cargo install --git https://github.com/d4rkNinja/infynon-cli
 
 ---
 
-## 🦅 Eagle Eye — Scheduled Monitoring
+## 🦅 Eagle Eye — Scheduled CVE Monitoring
 
-Background CVE scanner for your projects. Runs on a configurable timer, scans all lock files, sends email alerts when vulnerabilities match your risk threshold.
+Background dependency scanner for your projects. Runs on a configurable timer, scans all lock files, sends email alerts when vulnerabilities match your risk threshold.
 
 ```bash
 infynon pkg eagle-eye setup    # Interactive setup: SMTP, paths, risk level, schedule
