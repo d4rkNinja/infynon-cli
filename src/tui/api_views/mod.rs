@@ -22,6 +22,24 @@ use crate::tui::theme::*;
 
 // ── Shared helpers ───────────────────────────────────────────────────────────
 
+pub(super) fn section_header(title: &str, width: usize) -> Line<'static> {
+    let inner_w = width.saturating_sub(2);
+    let dashes = inner_w.saturating_sub(title.len() + 4);
+    let left_d = dashes / 2;
+    let right_d = dashes - left_d;
+    Line::from(vec![
+        Span::styled("  ", Style::default()),
+        Span::styled(
+            format!("{} {} {}", "\u{2500}".repeat(left_d), title, "\u{2500}".repeat(right_d)),
+            Style::default().fg(DIMMER),
+        ),
+    ])
+}
+
+pub(super) fn blank_line() -> Line<'static> {
+    Line::raw("")
+}
+
 pub(crate) fn truncate(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
         s.to_string()
