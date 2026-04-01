@@ -3,16 +3,13 @@
 <!-- keywords: security cli, vulnerability scanner, cve scanner, npm security, pip security, cargo security, reverse proxy waf, web application firewall, api testing, supply chain security, devsecops, package audit, dependency scanner, rate limiter, ip filter -->
 
 <p align="center">
-  <strong>Secure before execution.</strong>
+  <strong>One binary. Three security layers. Zero trust by default.</strong>
 </p>
 
 <p align="center">
-  INFYNON is a developer security CLI that protects what enters, runs through, and connects to your stack.<br/><br/>
-  It adds three checkpoints:<br/><br/>
-  1. Dependencies → before install<br/>
-  2. API flows → before trust<br/>
-  3. Traffic → before exposure<br/><br/>
-  One binary. Three security layers.
+  INFYNON enforces a <em>verify-before-execute</em> policy across your entire stack —<br/>
+  intercepting vulnerable packages before install, testing API flows before trust,<br/>
+  and filtering live traffic before exposure.
 </p>
 
 <p align="center">
@@ -28,10 +25,6 @@
     <img src="https://img.shields.io/npm/v/infynon?style=for-the-badge&logo=npm&label=npm" />
   </a>
   <img src="https://img.shields.io/github/last-commit/d4rkNinja/infynon-cli?style=for-the-badge" />
-</p>
-
-<p align="center">
-  <img src="assets/infynon-demo-small.gif" alt="INFYNON Demo" width="100%" />
 </p>
 
 <p align="center">
@@ -127,6 +120,12 @@ infynon logs --verdict block --count 50
 
 ---
 
+<p align="center">
+  <img src="assets/infynon-demo-small.gif" alt="INFYNON Demo" width="100%" />
+</p>
+
+---
+
 ## Supported Ecosystems
 
 `npm` · `yarn` · `pnpm` · `bun` · `pip` · `uv` · `poetry` · `cargo` · `go` · `gem` · `composer` · `nuget` · `hex` · `pub`
@@ -160,16 +159,47 @@ It is a control layer before execution.
 
 | Feature | INFYNON | Snyk CLI | Safety CLI | OSV-Scanner |
 |---|---|---|---|---|
+| **ECOSYSTEM COVERAGE** | | | | |
 | npm / yarn / pnpm / bun | ✓ | ✓ | — | ✓ |
 | pip / uv / poetry | ✓ | ✓ | ✓ | ✓ |
 | cargo | ✓ | ✓ | — | ✓ |
-| go / gem / composer / nuget | ✓ | Partial | — | ✓ |
+| go / gem / composer / nuget / hex / pub | ✓ | Partial | — | Partial |
+| **PACKAGE SECURITY** | | | | |
 | **Pre-install interception** | ✓ | — | — | — |
-| Reverse proxy WAF | ✓ | — | — | — |
-| API flow security testing | ✓ | — | — | — |
-| Self-hosted, no account | ✓ | — | ✓ | ✓ |
-| TUI dashboard | ✓ | — | — | — |
-| CI / `--strict` flag | ✓ | ✓ | ✓ | ✓ |
+| Interactive install decisions (fix/skip/install) | ✓ | — | — | — |
+| Auto-fix to safe version | ✓ | ✓ | — | — |
+| Dependency tree audit with risk score | ✓ | ✓ | — | — |
+| `why` — trace dependency origin | ✓ | — | — | — |
+| Package version diff (size, deps, CVEs) | ✓ | — | — | — |
+| Doctor / dependency health check | ✓ | — | — | — |
+| Package size & bundle weight analysis | ✓ | — | — | — |
+| Cross-ecosystem package search | ✓ | — | — | — |
+| Remove unused dependencies (`clean`) | ✓ | — | — | — |
+| Migrate between package managers | ✓ | — | — | — |
+| Multi-lock file detection + selector | ✓ | — | — | — |
+| **MONITORING & ALERTS** | | | | |
+| **Eagle Eye — scheduled CVE monitoring** | ✓ | Paid | — | — |
+| Email alerts on new vulnerabilities | ✓ | Paid | — | — |
+| Daily digest reports | ✓ | Paid | — | — |
+| **AI & CI INTEGRATION** | | | | |
+| **Claude Code skills + plugins** | ✓ | — | — | — |
+| `--agent` structured JSON output | ✓ | — | — | — |
+| CI / `--strict [level]` flag | ✓ | ✓ | ✓ | ✓ |
+| `--auto-fix` / `--skip-vulnerable` flags | ✓ | ✓ | — | — |
+| Self-hosted, no account required | ✓ | — | ✓ | ✓ |
+| **FIREWALL & TRAFFIC** | | | | |
+| **Reverse proxy WAF** | ✓ | — | — | — |
+| Rate limiting (per-IP, per-path, global) | ✓ | — | — | — |
+| IP blocking / CIDR / auto-reputation ban | ✓ | — | — | — |
+| Custom firewall rules engine | ✓ | — | — | — |
+| SQLi / XSS / path traversal detection | ✓ | — | — | — |
+| Real-time TUI dashboard | ✓ | — | — | — |
+| **API FLOW TESTING** | | | | |
+| **Node-based API flow testing** | ✓ | — | — | — |
+| AI-generated test flows from natural language | ✓ | — | — | — |
+| Auto token threading between steps | ✓ | — | — | — |
+| Built-in security probes (auth bypass, SQLi) | ✓ | — | — | — |
+| Runtime prompt inputs (OTP, 2FA, mid-flow) | ✓ | — | — | — |
 
 ---
 
