@@ -338,6 +338,52 @@ infynon weave node prompt register add email --label "Email" --default "ci@examp
 
 ---
 
+## 🤖 Claude Code Integration
+
+INFYNON has dedicated Claude Code plugins at [d4rkNinja/code-guardian](https://github.com/d4rkNinja/code-guardian). Install them so Claude automatically knows how to use every INFYNON command — correct flags, right mode, right ecosystem.
+
+### Install plugins
+
+```bash
+/plugin marketplace add d4rkNinja/code-guardian
+/plugin install infynon-pkg@d4rkNinja
+/plugin install infynon-firewall@d4rkNinja
+/plugin install infynon-weave@d4rkNinja
+/reload-plugins
+```
+
+Or load locally for development:
+
+```bash
+claude --plugin-dir ./infynon-pkg --plugin-dir ./infynon-firewall --plugin-dir ./infynon-weave
+```
+
+### What the plugins do
+
+Once installed, Claude automatically:
+
+- Routes every install through `infynon pkg` — never runs raw `npm install`, `pip install`, etc.
+- Picks the right CI flag (`--strict high`, `--auto-fix`, etc.) based on context
+- Detects lock files in the project and suggests scanning
+- Helps write `infynon.toml` firewall configs and custom WAF rules
+- Guides through TUI keyboard shortcuts for both firewall and weave
+- Explains CVE findings and how to prioritize fixes
+- Designs API test flows with nodes, edges, assertions, and prompt inputs
+
+### Available plugins and skills
+
+| Plugin | Skill | Auto-triggers when |
+|--------|-------|--------------------|
+| `infynon-pkg` | `package-security` | User asks about packages/CVEs, or lock files detected |
+| `infynon-pkg` | `cve-triage` | User has scan results and needs to prioritize |
+| `infynon-pkg` | `eagle-eye-monitor` | User wants scheduled CVE monitoring |
+| `infynon-firewall` | `firewall-setup` | User asks about WAF/rate limiting, or `infynon.toml` detected |
+| `infynon-firewall` | `attack-response` | User is under attack or investigating traffic |
+| `infynon-firewall` | `rule-writer` | User wants to write custom firewall rules |
+| `infynon-weave` | `api-testing` | User asks about API testing/flows, or `.infynon/api/` detected |
+
+---
+
 ## 🔥 Installation
 
 ### npm (recommended — all platforms)
