@@ -9,27 +9,7 @@ use ratatui::{
 use crate::tui::api_app::ApiApp;
 use crate::tui::theme::*;
 
-use super::truncate;
-
-// ── Section header helper ─────────────────────────────────────────────────────
-
-fn section_header(title: &str, width: usize) -> Line<'static> {
-    let inner_w = width.saturating_sub(2);
-    let dashes = inner_w.saturating_sub(title.len() + 4);
-    let left_d = dashes / 2;
-    let right_d = dashes - left_d;
-    Line::from(vec![
-        Span::styled("  ", Style::default()),
-        Span::styled(
-            format!("{} {} {}", "─".repeat(left_d), title, "─".repeat(right_d)),
-            Style::default().fg(DIMMER),
-        ),
-    ])
-}
-
-fn blank_line() -> Line<'static> {
-    Line::raw("")
-}
+use super::{blank_line, section_header, truncate};
 
 // ── JSON syntax highlighter ───────────────────────────────────────────────────
 

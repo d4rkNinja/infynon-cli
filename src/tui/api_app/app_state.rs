@@ -314,20 +314,21 @@ impl ApiApp {
             return;
         }
 
-        if let AttachMode::SelectingTarget { from_node } = &self.attach_mode.clone() {
-            if !self.nodes.contains_key(&to_node) && !self.attach_input.starts_with('!') {
-                self.notify(&format!("Node '{}' not found in library", to_node));
-                return;
-            }
+        let from = if let AttachMode::SelectingTarget { from_node } = &self.attach_mode {
+            from_node.clone()
+        } else {
+            return;
+        };
 
-            let from = from_node.clone();
-            // Perform the attach
-            // We can't call the full cmd here (it uses stdout), so do it inline
-            self.do_attach(&from, &to_node);
-            self.attach_mode = AttachMode::Idle;
-            self.attach_input.clear();
-            self.refresh_data();
+        if !self.nodes.contains_key(&to_node) && !self.attach_input.starts_with('!') {
+            self.notify(&format!("Node '{}' not found in library", to_node));
+            return;
         }
+
+        self.do_attach(&from, &to_node);
+        self.attach_mode = AttachMode::Idle;
+        self.attach_input.clear();
+        self.refresh_data();
     }
 
     fn do_attach(&mut self, from: &str, to: &str) {
