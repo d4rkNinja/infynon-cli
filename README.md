@@ -1,17 +1,18 @@
 <p align="center">
-  <h1 align="center">🛡️ INFYNON</h1>
+  <h1 align="center">INFYNON</h1>
 </p>
 
 <p align="center">
-  <strong>Stop trusting installs, traffic, and API flows blindly.</strong>
+  <strong>Secure before execution.</strong>
 </p>
 
 <p align="center">
-  A <strong>security-first CLI</strong> that intercepts threats at every layer of your stack:<br/><br/>
-  • 📦 <strong>Dependency Firewall</strong> — CVE scan before any package touches your disk<br/>
-  • 🛡️ <strong>Network Firewall</strong> — reverse proxy WAF between the internet and your backend<br/>
-  • 🧪 <strong>API Flow Tester</strong> — node-based integration testing with built-in security probes<br/><br/>
-  → One binary. Three shields. Security <strong>before execution</strong>, not after damage.
+  INFYNON is a developer security CLI that protects what enters, runs through, and connects to your stack.<br/><br/>
+  It adds three checkpoints:<br/><br/>
+  1. Dependencies → before install<br/>
+  2. API flows → before trust<br/>
+  3. Traffic → before exposure<br/><br/>
+  One binary. Three security layers.
 </p>
 
 <p align="center">
@@ -22,17 +23,17 @@
     <img src="https://img.shields.io/github/license/d4rkNinja/infynon-cli?style=for-the-badge" />
   </a>
   <img src="https://img.shields.io/badge/ecosystems-14-blue?style=for-the-badge" />
-  <img src="https://img.shields.io/badge/version-0.2.0--beta.7-orange?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/version-0.2.0--beta.7.2-orange?style=for-the-badge" />
   <a href="https://www.npmjs.com/package/infynon">
     <img src="https://img.shields.io/npm/v/infynon?style=for-the-badge&logo=npm&label=npm" />
   </a>
 </p>
 
 <p align="center">
-  <a href="#-what-is-infynon">What It Is</a> •
-  <a href="#-why-infynon-exists">Why It Exists</a> •
+  <a href="#why-infynon">Why It Exists</a> •
+  <a href="#what-infynon-does">What It Does</a> •
+  <a href="#who-should-use-this">Who It's For</a> •
   <a href="#-quick-start">Quick Start</a> •
-  <a href="#-core-capabilities">Features</a> •
   <a href="#-installation">Install</a> •
   <a href="#-ci--ai-agent-mode">CI / Agents</a> •
   <a href="https://cli.infynon.com/docs">Docs</a>
@@ -40,43 +41,59 @@
 
 ---
 
-## 📦 What is INFYNON?
+## Why INFYNON
 
-INFYNON is a single Rust binary with three modes — each one plugging a gap that traditional tools leave open.
+Modern development is no longer manual.
 
-### Module 1 — `infynon pkg` · Dependency Firewall
+AI suggests packages.
+Dependencies pull hidden trees.
+Install scripts execute automatically.
+APIs are tested in isolation, not flows.
+Traffic is exposed before validation.
 
-Intercepts package install commands across **14 ecosystems** and runs a 3-layer CVE check **before anything touches your disk**. Drop-in wrapper — same commands, same behavior, zero vulnerable packages.
+Most systems assume trust first.
+
+INFYNON flips that:
+
+**Verify first. Execute later.**
+
+---
+
+## What INFYNON does
+
+### 1. Dependency Security (`infynon pkg`)
+
+- Intercepts installs across 14 ecosystems
+- Detects vulnerabilities before install
+- Shows full dependency tree
+- Highlights install scripts
+- Explains why a package exists
+- Compares versions (size, deps, CVEs)
+- Detects outdated / unused / broken deps
 
 ```bash
-infynon pkg npm install express          # instead of: npm install express
-infynon pkg cargo add serde             # instead of: cargo add serde
-infynon pkg pip install requests        # instead of: pip install requests
+infynon pkg audit
+infynon pkg why <pkg>
+infynon pkg outdated
+infynon pkg diff <pkg> v1 v2
+infynon pkg doctor
+infynon pkg size <pkg>
+infynon pkg search <query>
+infynon pkg clean
+infynon pkg migrate <from> <to>
 ```
 
 **Ecosystems:** `npm · yarn · pnpm · bun · pip · uv · poetry · cargo · go · gem · composer · nuget · hex · pub`
 
 ---
 
-### Module 2 — `infynon` · Network Firewall
+### 2. API Flow Testing (`infynon weave`)
 
-A self-hosted reverse proxy WAF with a real-time TUI dashboard. Sits between the internet and your backend — filtering HTTP traffic in real time.
-
-```
-Internet → INFYNON WAF → Your App Server
-```
-
-```bash
-infynon init --port 8080 --upstream-port 3000
-infynon start                        # firewall + TUI dashboard
-infynon start --headless             # for servers, no TUI
-```
-
----
-
-### Module 3 — `infynon weave` · API Flow Testing
-
-Test your entire API as a **connected flow**, not as isolated endpoints. Model each endpoint as a node in a directed graph — authentication tokens and extracted values thread automatically between nodes. No more manual token copy-paste between test steps.
+- Model API workflows as connected nodes
+- Automatically pass tokens and IDs between steps
+- Save and replay full flows
+- Run security probes on flows
+- Replace manual Postman chaining
 
 ```bash
 infynon weave env set BASE_URL http://localhost:8001
@@ -84,25 +101,48 @@ infynon weave node create --ai "POST /auth/login — extracts token"
 infynon weave node create --ai "POST /orders — creates order, extracts order_id"
 infynon weave flow create "checkout" --ai "login then create order"
 infynon weave flow run checkout
-infynon weave ai probe checkout      # auth bypass, rate limit, SQLi probes
-infynon weave tui                    # 10-tab TUI dashboard
+infynon weave ai probe checkout
+infynon weave tui
 ```
 
 ---
 
-## 🚨 Why INFYNON Exists
+### 3. Traffic Protection (`infynon`)
 
-### Packages: AI installs. You don't verify.
+- Reverse proxy firewall
+- Rate limiting
+- IP filtering
+- Multi-upstream routing
+- Protect exposed backend services
 
-Claude Code, Cursor, Copilot — they suggest packages and run installs. You don't check every transitive dependency for CVEs. INFYNON sits in between: every install gets scanned, blocked, or auto-fixed before it runs.
+```bash
+infynon init --port 8080 --upstream-port 3000
+infynon start
+infynon start --headless
+infynon block 203.0.113.50
+infynon logs --verdict block --count 50
+```
 
-### Traffic: Your backend is exposed. You don't see it.
+---
 
-Rate abuse, SQL injection, path traversal — happening on your server while you're writing code. INFYNON WAF sits in front and filters in real time, with a live TUI feed and configurable rules.
+## Who should use this
 
-### API Workflows: Postman collections rot. You maintain them.
+- Backend developers
+- AI-assisted coding workflows
+- Security-conscious teams
+- API-heavy systems
+- CLI-first developers
 
-Multi-step API tests break when tokens expire, request bodies change, or auth flows evolve. Weave models flows as a graph — AI-generated, context-threaded, re-runnable. Security probes run automatically after every flow.
+---
+
+## What INFYNON is not
+
+- Not a package manager
+- Not a replacement for npm/pip
+- Not just a firewall
+- Not just an API tool
+
+It is a control layer before execution.
 
 ---
 
@@ -180,38 +220,7 @@ infynon weave ai probe user-journey
 
 ---
 
-## 🚀 Core Capabilities
-
-### 🔐 Dependency Security
-
-- **Pre-install CVE scanning** via OSV.dev — before the package hits your disk
-- **Blocks vulnerable packages** — interactive decision or fully automated
-- **Auto-fix** — upgrade to nearest safe version automatically
-- **15+ lock file parsers** — works with your existing project, zero config
-- **CI enforcement** — non-zero exit on violation, configurable severity threshold
-- **`--agent` mode** — machine-readable JSON for AI agents and CI parsers
-
-### 🛡️ Network Protection
-
-- **Reverse proxy WAF** — SQLi, XSS, path traversal, command injection detection
-- **Rate limiting** — per-IP, per-path, and global sliding window limits
-- **IP filtering** — blocklist, allowlist, CIDR ranges, auto-reputation banning
-- **Multi-upstream routing** — route paths to different backend services
-- **Hot config reload** — changes applied in seconds, no restart needed
-- **Email alerts** — SMTP/SES notifications on suspicious activity + daily digest
-
-### 🧪 API Flow Testing (Weave)
-
-- **Node-based flows** — each node is one HTTP request; graph edges thread values forward
-- **Context threading** — tokens, IDs, extracted values flow automatically between nodes
-- **Runtime prompt inputs** — pause and ask for OTPs, passwords, dynamic values mid-flow
-- **4 prompt types** — `text`, `boolean`, `select`, `multiselect`
-- **AI flow builder** — describe in English, Weave wires the graph
-- **Security probes** — auth bypass, rate limit, SQL injection checks out of the box
-- **10-tab TUI dashboard** — live execution feed, latency profiler, security results, env manager
-- **CI ready** — `--default` values or `--set KEY=val` for fully non-interactive runs
-
-### 🔬 Dependency Intelligence
+## 🔬 Dependency Intelligence
 
 | Command | Description |
 |---------|-------------|
@@ -306,16 +315,6 @@ infynon weave node prompt register add email --label "Email" --default "ci@examp
 
 ---
 
-## 👥 Who Is This For
-
-- **AI coding users** (Claude Code, Cursor, Copilot) — AI suggests and installs packages; INFYNON intercepts and verifies them before anything touches disk
-- **AI agents running autonomously** — `--agent` mode emits structured JSON so agents can parse results and react without screen-scraping
-- **Backend engineers** testing APIs that have multi-step auth flows and context dependencies
-- **DevOps / security teams** enforcing CVE policies in CI pipelines
-- **Anyone installing dependencies** without auditing every transitive package
-
----
-
 ## 🔥 Installation
 
 ### npm (recommended — all platforms)
@@ -362,14 +361,6 @@ infynon pkg eagle-eye setup    # Interactive setup: SMTP, paths, risk level, sch
 infynon pkg eagle-eye start    # Start monitoring in foreground
 infynon pkg eagle-eye status   # View current configuration
 ```
-
----
-
-## 💡 Core Idea
-
-Security should happen **before execution**, not after damage.
-
-INFYNON enforces that — at the dependency level, the network level, and the API flow level.
 
 ---
 
