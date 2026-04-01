@@ -181,6 +181,28 @@ infynon weave flow run auth-flow --set email=ci@example.com --set password=Test@
 
 ---
 
+## Claude Code Integration
+
+INFYNON has dedicated Claude Code plugins at [d4rkNinja/code-guardian](https://github.com/d4rkNinja/code-guardian). Install them so Claude knows how to use every INFYNON command correctly — right mode, right flags, right ecosystem.
+
+```bash
+/plugin marketplace add d4rkNinja/code-guardian
+/plugin install infynon-pkg@d4rkNinja
+/plugin install infynon-firewall@d4rkNinja
+/plugin install infynon-weave@d4rkNinja
+/reload-plugins
+```
+
+Once installed, Claude automatically routes installs through `infynon pkg`, picks the right CI flag, detects lock files, helps write firewall configs, explains CVE findings, and designs API test flows.
+
+| Plugin | Skills included |
+|--------|----------------|
+| `infynon-pkg` | package-security · cve-triage · eagle-eye-monitor |
+| `infynon-firewall` | firewall-setup · attack-response · rule-writer |
+| `infynon-weave` | api-testing |
+
+---
+
 ## Full Documentation
 
 **[cli.infynon.com/docs](https://cli.infynon.com/docs)**
