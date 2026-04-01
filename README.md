@@ -31,7 +31,7 @@
 </p>
 
 <p align="center">
-  <video src="assets/InfynonDemo.mp4" autoplay loop muted playsinline width="100%"></video>
+  <img src="assets/infynon-demo-small.gif" alt="INFYNON Demo" width="100%" />
 </p>
 
 <p align="center">

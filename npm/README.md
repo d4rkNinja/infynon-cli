@@ -13,7 +13,7 @@ A security-first CLI — one binary, three shields:
 [![GitHub](https://img.shields.io/badge/source-GitHub-black?style=flat-square&logo=github)](https://github.com/d4rkNinja/infynon-cli)
 
 <p align="center">
-  <video src="https://raw.githubusercontent.com/d4rkNinja/infynon-cli/main/assets/InfynonDemo.mp4" autoplay loop muted playsinline width="100%"></video>
+  <img src="https://raw.githubusercontent.com/d4rkNinja/infynon-cli/main/assets/infynon-demo-small.gif" alt="INFYNON Demo" width="100%" />
 </p>
 
 > ⚠️ AI installs packages. You don't verify them. That's the risk.
