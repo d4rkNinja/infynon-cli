@@ -1,12 +1,8 @@
 # INFYNON
 
-**Stop trusting installs, traffic, and API flows blindly.**
+**One binary. Three security layers. Zero trust by default.**
 
-A security-first CLI — one binary, three shields:
-
-- 📦 **Dependency Firewall** — pre-install CVE scanner across 14 ecosystems
-- 🛡️ **Network Firewall** — reverse proxy WAF with real-time TUI dashboard
-- 🧪 **API Flow Tester** — node-based integration testing with security probes
+INFYNON enforces a *verify-before-execute* policy across your entire stack — intercepting vulnerable packages before install, testing API flows before trust, and filtering live traffic before exposure.
 
 [![npm](https://img.shields.io/npm/v/infynon?style=flat-square&logo=npm)](https://www.npmjs.com/package/infynon)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/d4rkNinja/infynon-cli/blob/main/LICENSE)
@@ -16,9 +12,7 @@ A security-first CLI — one binary, three shields:
   <img src="https://raw.githubusercontent.com/d4rkNinja/infynon-cli/main/assets/infynon-demo-small.gif" alt="INFYNON Demo" width="100%" />
 </p>
 
-> ⚠️ AI installs packages. You don't verify them. That's the risk.
-> **INFYNON fixes that — blocks threats before they reach your system.**
-> Use `--agent` for structured JSON output inside AI agents or CI pipelines.
+> Use `--agent` for structured JSON output inside AI agents and CI pipelines.
 
 ---
 
@@ -141,7 +135,55 @@ infynon weave flow run auth-flow --set email=ci@example.com --set password=Test@
 
 ---
 
-## Traditional Testing vs INFYNON Weave
+## INFYNON vs Other Security Tools
+
+| Feature | INFYNON | Snyk CLI | Safety CLI | OSV-Scanner |
+|---|---|---|---|---|
+| **ECOSYSTEM COVERAGE** | | | | |
+| npm / yarn / pnpm / bun | ✓ | ✓ | — | ✓ |
+| pip / uv / poetry | ✓ | ✓ | ✓ | ✓ |
+| cargo | ✓ | ✓ | — | ✓ |
+| go / gem / composer / nuget / hex / pub | ✓ | Partial | — | Partial |
+| **PACKAGE SECURITY** | | | | |
+| **Pre-install interception** | ✓ | — | — | — |
+| Interactive install decisions (fix/skip/install) | ✓ | — | — | — |
+| Auto-fix to safe version | ✓ | ✓ | — | — |
+| Dependency tree audit with risk score | ✓ | ✓ | — | — |
+| `why` — trace dependency origin | ✓ | — | — | — |
+| Package version diff (size, deps, CVEs) | ✓ | — | — | — |
+| Doctor / dependency health check | ✓ | — | — | — |
+| Package size & bundle weight analysis | ✓ | — | — | — |
+| Cross-ecosystem package search | ✓ | — | — | — |
+| Remove unused dependencies (`clean`) | ✓ | — | — | — |
+| Migrate between package managers | ✓ | — | — | — |
+| Multi-lock file detection + selector | ✓ | — | — | — |
+| **MONITORING & ALERTS** | | | | |
+| **Eagle Eye — scheduled CVE monitoring** | ✓ | Paid | — | — |
+| Email alerts on new vulnerabilities | ✓ | Paid | — | — |
+| Daily digest reports | ✓ | Paid | — | — |
+| **AI & CI INTEGRATION** | | | | |
+| **Claude Code skills + plugins** | ✓ | — | — | — |
+| `--agent` structured JSON output | ✓ | — | — | — |
+| CI / `--strict [level]` flag | ✓ | ✓ | ✓ | ✓ |
+| `--auto-fix` / `--skip-vulnerable` flags | ✓ | ✓ | — | — |
+| Self-hosted, no account required | ✓ | — | ✓ | ✓ |
+| **FIREWALL & TRAFFIC** | | | | |
+| **Reverse proxy WAF** | ✓ | — | — | — |
+| Rate limiting (per-IP, per-path, global) | ✓ | — | — | — |
+| IP blocking / CIDR / auto-reputation ban | ✓ | — | — | — |
+| Custom firewall rules engine | ✓ | — | — | — |
+| SQLi / XSS / path traversal detection | ✓ | — | — | — |
+| Real-time TUI dashboard | ✓ | — | — | — |
+| **API FLOW TESTING** | | | | |
+| **Node-based API flow testing** | ✓ | — | — | — |
+| AI-generated test flows from natural language | ✓ | — | — | — |
+| Auto token threading between steps | ✓ | — | — | — |
+| Built-in security probes (auth bypass, SQLi) | ✓ | — | — | — |
+| Runtime prompt inputs (OTP, 2FA, mid-flow) | ✓ | — | — | — |
+
+---
+
+## Traditional API Testing vs INFYNON Weave
 
 | | Traditional (Postman / pytest) | INFYNON Weave |
 |---|---|---|
