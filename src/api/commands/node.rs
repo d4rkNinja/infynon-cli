@@ -663,10 +663,7 @@ pub fn cmd_node_assertion_enable(node_id: &str, idx: usize) {
         Ok(n) => n,
         Err(e) => { Logger::error(&e); return; }
     };
-    if idx >= node.assertions.len() {
-        Logger::error(&format!("Index {} out of range (0..{})", idx, node.assertions.len()));
-        return;
-    }
+    if !check_index(idx, node.assertions.len()) { return; }
     node.assertions[idx].enabled = true;
     match storage::save_node(&node) {
         Ok(_) => println!("  {}  Assertion [{}] enabled.", "✔".bright_green(), idx),
@@ -679,10 +676,7 @@ pub fn cmd_node_assertion_disable(node_id: &str, idx: usize) {
         Ok(n) => n,
         Err(e) => { Logger::error(&e); return; }
     };
-    if idx >= node.assertions.len() {
-        Logger::error(&format!("Index {} out of range (0..{})", idx, node.assertions.len()));
-        return;
-    }
+    if !check_index(idx, node.assertions.len()) { return; }
     node.assertions[idx].enabled = false;
     match storage::save_node(&node) {
         Ok(_) => println!("  {}  Assertion [{}] disabled.", "✔".bright_green(), idx),
@@ -695,10 +689,7 @@ pub fn cmd_node_assertion_toggle(node_id: &str, idx: usize) {
         Ok(n) => n,
         Err(e) => { Logger::error(&e); return; }
     };
-    if idx >= node.assertions.len() {
-        Logger::error(&format!("Index {} out of range (0..{})", idx, node.assertions.len()));
-        return;
-    }
+    if !check_index(idx, node.assertions.len()) { return; }
     node.assertions[idx].enabled = !node.assertions[idx].enabled;
     let state = if node.assertions[idx].enabled { "enabled" } else { "disabled" };
     match storage::save_node(&node) {
@@ -728,10 +719,7 @@ pub fn cmd_node_assertion_remove(node_id: &str, idx: usize) {
         Ok(n) => n,
         Err(e) => { Logger::error(&e); return; }
     };
-    if idx >= node.assertions.len() {
-        Logger::error(&format!("Index {} out of range (0..{})", idx, node.assertions.len()));
-        return;
-    }
+    if !check_index(idx, node.assertions.len()) { return; }
     let removed = node.assertions.remove(idx);
     match storage::save_node(&node) {
         Ok(_) => println!("  {}  Assertion [{}] removed: {}", "✔".bright_green(), idx, removed.check.bright_cyan()),
@@ -827,10 +815,7 @@ pub fn cmd_node_prompt_remove(node_id: &str, index: usize) {
         Ok(n) => n,
         Err(e) => { Logger::error(&e); return; }
     };
-    if index >= node.prompt_inputs.len() {
-        Logger::error(&format!("Index {} out of range (0..{})", index, node.prompt_inputs.len()));
-        return;
-    }
+    if !check_index(index, node.prompt_inputs.len()) { return; }
     let removed = node.prompt_inputs.remove(index);
     match storage::save_node(&node) {
         Ok(_) => println!("  {}  Prompt input [{}] removed: {}", "✔".bright_green(), index, removed.var.bright_cyan()),
@@ -839,6 +824,14 @@ pub fn cmd_node_prompt_remove(node_id: &str, index: usize) {
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
+
+fn check_index(idx: usize, len: usize) -> bool {
+    if idx >= len {
+        Logger::error(&format!("Index {} out of range (0..{})", idx, len));
+        return false;
+    }
+    true
+}
 
 fn prompt(message: &str) -> String {
     print!("{}", message);

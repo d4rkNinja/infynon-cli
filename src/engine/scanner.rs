@@ -334,11 +334,7 @@ fn parse_pyproject_toml(path: &str) -> Vec<LockedPackage> {
                     } else {
                         raw
                     };
-                    let version = ver_str
-                        .trim_start_matches(">=").trim_start_matches("==")
-                        .trim_start_matches("~=").trim_start_matches('^')
-                        .trim_start_matches('~')
-                        .split(',').next().unwrap_or("").trim().to_string();
+                    let version = strip_version_prefix(ver_str);
                     if !name.is_empty() && !version.is_empty() && version != "*" {
                         out.push(LockedPackage { name, version, ecosystem: "PyPI".to_string(), source: src.clone() });
                     }
@@ -350,6 +346,16 @@ fn parse_pyproject_toml(path: &str) -> Vec<LockedPackage> {
     let mut seen = HashSet::new();
     out.retain(|p| seen.insert(p.name.clone()));
     out
+}
+
+/// Strip leading version specifier characters and return only the version string.
+/// Handles `>=`, `==`, `~=`, `!=`, `>`, `<`, `^`, `~` and takes the first segment before any comma.
+fn strip_version_prefix(s: &str) -> String {
+    s.trim_start_matches(">=").trim_start_matches("==")
+        .trim_start_matches("~=").trim_start_matches("!=")
+        .trim_start_matches('>').trim_start_matches('<')
+        .trim_start_matches('^').trim_start_matches('~')
+        .split(',').next().unwrap_or("").trim().to_string()
 }
 
 /// Parse PEP 621 dependency strings from a comma-separated or newline-separated
@@ -373,12 +379,7 @@ fn parse_pep621_dep_list(input: &str) -> Vec<(String, String)> {
             }
         };
         let name = name_part.trim().to_string();
-        let version = rest
-            .trim_start_matches(">=").trim_start_matches("==")
-            .trim_start_matches("~=").trim_start_matches("!=")
-            .trim_start_matches('>').trim_start_matches('<')
-            .trim_start_matches('^').trim_start_matches('~')
-            .split(',').next().unwrap_or("").trim().to_string();
+        let version = strip_version_prefix(rest);
         if !name.is_empty() {
             deps.push((name, version));
         }

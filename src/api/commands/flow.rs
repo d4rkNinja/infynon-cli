@@ -323,24 +323,22 @@ pub fn save_run_report_pub(result: &crate::api::types::FlowRunResult, format: &s
 fn save_run_report(result: &crate::api::types::FlowRunResult, format: &str) {
     let md = build_run_markdown(result);
     let ts = result.started_at.format("%Y%m%d-%H%M%S");
+    std::fs::create_dir_all("reports").ok();
 
     match format.to_lowercase().as_str() {
         "markdown" | "md" => {
             let path = format!("reports/{}-{}.md", result.flow_id, ts);
-            std::fs::create_dir_all("reports").ok();
             std::fs::write(&path, &md).ok();
             println!("  {}  Report saved: {}", "✔".bright_green(), path);
         }
         "pdf" => {
             let path = format!("reports/{}-{}.pdf.md", result.flow_id, ts);
-            std::fs::create_dir_all("reports").ok();
             std::fs::write(&path, &md).ok();
             println!("  {}  Report saved: {}", "✔".bright_green(), path);
         }
         "both" => {
             let md_path = format!("reports/{}-{}.md", result.flow_id, ts);
             let pdf_path = format!("reports/{}-{}.pdf.md", result.flow_id, ts);
-            std::fs::create_dir_all("reports").ok();
             std::fs::write(&md_path, &md).ok();
             std::fs::write(&pdf_path, &md).ok();
             println!("  {}  Reports saved: {} and {}", "✔".bright_green(), md_path, pdf_path);
