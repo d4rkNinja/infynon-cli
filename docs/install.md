@@ -1,6 +1,6 @@
 # infynon pkg &lt;ecosystem&gt; install
 
-Secure proxy for package installation. Checks packages against OSV before passing through to the native package manager.
+Package intelligence wrapper for secure installation. Checks packages against OSV before passing through to the native package manager.
 
 ## Usage
 

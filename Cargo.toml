@@ -1,11 +1,11 @@
 [package]
 name = "infynon"
-version = "0.2.0-beta.7.2"
+version = "0.2.0-beta.8"
 edition = "2021"
-description = "Universal package security manager & network firewall — intercepts installs across npm, pip, cargo, go, gem, composer, nuget, hex, pub with 3-layer CVE verification, plus a real-time reverse proxy WAF with TUI dashboard"
+description = "Package intelligence, API flow testing, and shared coding memory for AI-assisted development"
 license = "MIT"
 repository = "https://github.com/d4rkNinja/infynon-cli"
-keywords = ["security", "package-manager", "vulnerability", "firewall", "waf"]
+keywords = ["security", "package-manager", "vulnerability", "api-testing", "memory"]
 categories = ["command-line-utilities", "development-tools", "network-programming"]
 readme = "README.md"
 
@@ -29,6 +29,10 @@ reqwest     = { version = "0.12", default-features = false, features = ["blockin
 serde       = { version = "1.0", features = ["derive"] }
 serde_json  = "1.0"
 printpdf    = "0.7"
+redis       = "0.27"
+postgres    = "0.19"
+mysql       = "26.0"
+rusqlite    = { version = "0.32", features = ["bundled"] }
 
 # Firewall dependencies
 tokio       = { version = "1", features = ["rt-multi-thread", "net", "io-util", "macros", "signal", "sync", "time", "fs"] }

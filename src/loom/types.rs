@@ -1,0 +1,239 @@
+use serde::{Deserialize, Serialize};
+use std::str::FromStr;
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum LoomLayer {
+    Canonical,
+    Team,
+    User,
+}
+
+impl LoomLayer {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            LoomLayer::Canonical => "canonical",
+            LoomLayer::Team => "team",
+            LoomLayer::User => "user",
+        }
+    }
+}
+
+impl FromStr for LoomLayer {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "canonical" => Ok(Self::Canonical),
+            "team" => Ok(Self::Team),
+            "user" => Ok(Self::User),
+            _ => Err(format!("invalid layer '{}'", s)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum LoomScope {
+    Repo,
+    Branch,
+    PullRequest,
+    File,
+    User,
+    Session,
+    Package,
+}
+
+impl LoomScope {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            LoomScope::Repo => "repo",
+            LoomScope::Branch => "branch",
+            LoomScope::PullRequest => "pr",
+            LoomScope::File => "file",
+            LoomScope::User => "user",
+            LoomScope::Session => "session",
+            LoomScope::Package => "package",
+        }
+    }
+}
+
+impl FromStr for LoomScope {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "repo" => Ok(Self::Repo),
+            "branch" => Ok(Self::Branch),
+            "pr" | "pullrequest" | "pull-request" => Ok(Self::PullRequest),
+            "file" => Ok(Self::File),
+            "user" => Ok(Self::User),
+            "session" => Ok(Self::Session),
+            "package" => Ok(Self::Package),
+            _ => Err(format!("invalid scope '{}'", s)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum NoteStatus {
+    Active,
+    Stale,
+    Archived,
+}
+
+impl NoteStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            NoteStatus::Active => "active",
+            NoteStatus::Stale => "stale",
+            NoteStatus::Archived => "archived",
+        }
+    }
+}
+
+impl FromStr for NoteStatus {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "active" => Ok(Self::Active),
+            "stale" => Ok(Self::Stale),
+            "archived" => Ok(Self::Archived),
+            _ => Err(format!("invalid status '{}'", s)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum SourceKind {
+    Redis,
+    Postgres,
+    Mysql,
+    Sqlite,
+}
+
+impl SourceKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SourceKind::Redis => "redis",
+            SourceKind::Postgres => "postgres",
+            SourceKind::Mysql => "mysql",
+            SourceKind::Sqlite => "sqlite",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum SyncDirection {
+    Pull,
+    Push,
+    Both,
+}
+
+impl SyncDirection {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SyncDirection::Pull => "pull",
+            SyncDirection::Push => "push",
+            SyncDirection::Both => "both",
+        }
+    }
+}
+
+impl FromStr for SyncDirection {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "pull" => Ok(Self::Pull),
+            "push" => Ok(Self::Push),
+            "both" => Ok(Self::Both),
+            _ => Err(format!("invalid direction '{}'", s)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LoomConfig {
+    #[serde(default)]
+    pub repo_name: String,
+    #[serde(default)]
+    pub owner: String,
+    #[serde(default)]
+    pub default_user: Option<String>,
+    #[serde(default)]
+    pub default_source: Option<String>,
+    #[serde(default)]
+    pub sources: Vec<LoomSource>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoomSource {
+    pub id: String,
+    pub kind: SourceKind,
+    pub url: String,
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub owner_user: Option<String>,
+    #[serde(default)]
+    pub database: Option<String>,
+    #[serde(default)]
+    pub namespace: Option<String>,
+    #[serde(default)]
+    pub username: Option<String>,
+    #[serde(default)]
+    pub password_env: Option<String>,
+    #[serde(default)]
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoomNote {
+    pub id: String,
+    pub title: String,
+    pub body: String,
+    pub layer: LoomLayer,
+    pub scope: LoomScope,
+    pub target: String,
+    #[serde(default)]
+    pub files: Vec<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub related_pr: Option<u64>,
+    #[serde(default)]
+    pub author: String,
+    #[serde(default)]
+    pub actor: Option<String>,
+    pub status: NoteStatus,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SyncState {
+    #[serde(default)]
+    pub runs: Vec<SyncRun>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncRun {
+    pub timestamp: String,
+    pub direction: SyncDirection,
+    #[serde(default)]
+    pub source_id: Option<String>,
+    #[serde(default)]
+    pub summary: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct PackageRisk {
+    pub package: String,
+    pub version: String,
+    pub ecosystem: String,
+    pub severity: String,
+    pub vulnerability_id: String,
+    pub source_file: String,
+    pub installed_by: Option<String>,
+}
