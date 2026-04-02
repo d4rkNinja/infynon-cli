@@ -49,15 +49,10 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y musl-tools
           if [[ "${{ matrix.target }}" == "aarch64"* ]]; then
-            sudo apt-get install -y gcc-aarch64-linux-gnu
-            echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-            echo "CC_aarch64_unknown_linux_musl=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-            # aarch64-linux-gnu-gcc uses glibc headers which expose open64/stat64/mmap64
-            # and fortify wrappers (__memmove_chk etc.) that don't exist in musl.
-            # -D_FILE_OFFSET_BITS=64 uses transparent 64-bit I/O instead of explicit *64 symbols.
-            # -D_FORTIFY_SOURCE=0 disables __*_chk wrappers.
-            # -U_LARGEFILE64_SOURCE suppresses the explicit LFS64 API surface.
-            echo "CFLAGS=-D_FILE_OFFSET_BITS=64 -D_FORTIFY_SOURCE=0 -U_LARGEFILE64_SOURCE" >> $GITHUB_ENV
+            # cargo-zigbuild uses zig's bundled musl headers instead of glibc cross-compiler
+            # headers, which avoids open64/stat64/__*_chk symbols that don't exist in musl.
+            pip3 install ziglang
+            cargo install cargo-zigbuild --locked
           fi
 
       - uses: Swatinem/rust-cache@v2
@@ -65,7 +60,13 @@ jobs:
           key: ${{ matrix.target }}
 
       - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
+        shell: bash
+        run: |
+          if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-musl" ]]; then
+            cargo zigbuild --release --target "${{ matrix.target }}"
+          else
+            cargo build --release --target "${{ matrix.target }}"
+          fi
 
       - name: Package binary
         shell: bash
