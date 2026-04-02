@@ -2,8 +2,8 @@
 
 This document explains what each command area is for and when to use each major command.
 
-Recommended Claude Code skill for Loom:
-`https://github.com/d4rkNinja/code-guardian`
+Claude Code companion:
+[d4rkNinja/code-guardian](https://github.com/d4rkNinja/code-guardian)
 
 ## Root
 
@@ -17,10 +17,10 @@ Top-level command areas:
   Use this when you want to scan, audit, install, trace, or fix dependencies.
 - `infynon weave`
   Use this when you want to model, run, validate, or probe API flows.
-- `infynon loom`
-  Use this when you want to store, retrieve, sync, or inspect shared coding memory.
+- `infynon trace`
+  Use this when you want to store, retrieve, sync, or inspect repo memory and provenance.
 
-If you use Claude Code with Loom, pair it with `code-guardian` so shared memory can be pulled before work and updated again after the task.
+If you use Claude Code with Trace, pair it with `code-guardian` so handoff context can be pulled before work and updated again after the task.
 
 ## Package Intelligence
 
@@ -338,59 +338,59 @@ What each one is for:
 
 For deeper Weave usage, see `docs/weave.md`.
 
-## Loom
+## Trace
 
 ```bash
-infynon loom <subcommand>
+infynon trace <subcommand>
 ```
 
-Loom commands manage shared coding memory, package ownership notes, and backend sync.
+Trace commands manage repo memory, package provenance, handoff context, and backend sync.
 
 Recommended Claude Code companion:
-`https://github.com/d4rkNinja/code-guardian`
+[d4rkNinja/code-guardian](https://github.com/d4rkNinja/code-guardian)
 
 ### Overview And Setup
 
 ```bash
-infynon loom overview
-infynon loom init --owner team --user alien
-infynon loom source add-redis team-redis --url redis://localhost:6379/0 --namespace infynon --user alien --default
-infynon loom source add-sql team-db --engine sqlite --url sqlite://.infynon/loom/loom.db --user alien --default
-infynon loom source list
-infynon loom source default team-db
-infynon loom source remove team-db
+infynon trace overview
+infynon trace init --owner team --user alien
+infynon trace source add-redis team-redis --url redis://localhost:6379/0 --namespace infynon --user alien --default
+infynon trace source add-sql team-db --engine sqlite --url sqlite://.infynon/trace/trace.db --user alien --default
+infynon trace source list
+infynon trace source default team-db
+infynon trace source remove team-db
 ```
 
 What each one is for:
 
 - `overview`
-  Prints the current Loom state summary for the repo.
+  Prints the current Trace state summary for the repo.
 - `init`
-  Creates the local Loom configuration for the repo and stores owner/default-user identity.
+  Creates the local Trace configuration for the repo and stores owner/default-user identity.
 - `source add-redis`
   Adds a Redis backend for lower-latency retrieval and live-style coordination.
 - `source add-sql`
   Adds a SQL backend for durable history and structured filtering.
 - `source list`
-  Shows all configured Loom sources.
+  Shows all configured Trace sources.
 - `source default`
   Chooses which source is used as the default target.
 - `source remove`
-  Removes a configured source from local Loom configuration.
+  Removes a configured source from local Trace configuration.
 
 ### Notes
 
 ```bash
-infynon loom note add repo-handoff --title "Auth changed" --body "Refresh moved to middleware" --layer team --scope branch --target feature/auth-refresh --files src/auth.rs --tags auth,handoff
-infynon loom note update repo-handoff --status stale
-infynon loom note remove repo-handoff
-infynon loom note list
+infynon trace note add repo-handoff --title "Auth changed" --body "Refresh moved to middleware" --layer team --scope branch --target feature/auth-refresh --files src/auth.rs --tags auth,handoff
+infynon trace note update repo-handoff --status stale
+infynon trace note remove repo-handoff
+infynon trace note list
 ```
 
 What each one is for:
 
 - `note add`
-  Creates a new memory note and attaches it to a layer and scope.
+  Creates a new note and attaches it to a layer and scope.
 - `note update`
   Changes note content or state after the fact.
 - `note remove`
@@ -401,18 +401,18 @@ What each one is for:
 ### Retrieval
 
 ```bash
-infynon loom retrieve --scope branch --target auth
-infynon loom retrieve --scope package --target chrono
-infynon loom retrieve --author alien
-infynon loom retrieve --file Cargo.toml
+infynon trace retrieve --scope branch --target auth
+infynon trace retrieve --scope package --target chrono
+infynon trace retrieve --author alien
+infynon trace retrieve --file Cargo.toml
 ```
 
-Use `retrieve` when you want the right memory for a repo task instead of reading all notes manually.
+Use `retrieve` when you want the right context for a repo task instead of reading all notes manually.
 
 What each pattern is for:
 
 - `--scope branch --target auth`
-  Pull branch-related memory for a branch or branch-like target.
+  Pull branch-related context for a branch or branch-like target.
 - `--scope package --target chrono`
   Pull package ownership or package-risk memory for one package.
 - `--author alien`
@@ -423,13 +423,13 @@ What each pattern is for:
 ### Sync, Schema, And TUI
 
 ```bash
-infynon loom sync --direction push
-infynon loom sync --direction pull
-infynon loom sync --direction both
-infynon loom compact
-infynon loom schema sql
-infynon loom schema redis
-infynon loom tui
+infynon trace sync --direction push
+infynon trace sync --direction pull
+infynon trace sync --direction both
+infynon trace compact
+infynon trace schema sql
+infynon trace schema redis
+infynon trace tui
 ```
 
 What each one is for:
@@ -437,7 +437,7 @@ What each one is for:
 - `sync --direction push`
   Pushes local notes and findings to the configured backend.
 - `sync --direction pull`
-  Pulls remote notes and findings into local Loom storage.
+  Pulls remote notes and findings into local Trace storage.
 - `sync --direction both`
   Runs a bidirectional sync.
 - `compact`
@@ -447,6 +447,6 @@ What each one is for:
 - `schema redis`
   Prints the Redis key model for Redis-backed setups.
 - `tui`
-  Opens the Loom terminal UI for sources, notes, and package ownership inspection.
+  Opens the Trace terminal UI for sources, notes, and package ownership inspection.
 
-For deeper Loom usage, see `docs/loom.md`.
+For deeper Trace usage, see `docs/trace.md`.

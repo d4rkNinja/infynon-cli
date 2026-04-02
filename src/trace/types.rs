@@ -3,23 +3,23 @@ use std::str::FromStr;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub enum LoomLayer {
+pub enum TraceLayer {
     Canonical,
     Team,
     User,
 }
 
-impl LoomLayer {
+impl TraceLayer {
     pub fn as_str(&self) -> &'static str {
         match self {
-            LoomLayer::Canonical => "canonical",
-            LoomLayer::Team => "team",
-            LoomLayer::User => "user",
+            TraceLayer::Canonical => "canonical",
+            TraceLayer::Team => "team",
+            TraceLayer::User => "user",
         }
     }
 }
 
-impl FromStr for LoomLayer {
+impl FromStr for TraceLayer {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_ascii_lowercase().as_str() {
@@ -33,7 +33,7 @@ impl FromStr for LoomLayer {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub enum LoomScope {
+pub enum TraceScope {
     Repo,
     Branch,
     PullRequest,
@@ -43,21 +43,21 @@ pub enum LoomScope {
     Package,
 }
 
-impl LoomScope {
+impl TraceScope {
     pub fn as_str(&self) -> &'static str {
         match self {
-            LoomScope::Repo => "repo",
-            LoomScope::Branch => "branch",
-            LoomScope::PullRequest => "pr",
-            LoomScope::File => "file",
-            LoomScope::User => "user",
-            LoomScope::Session => "session",
-            LoomScope::Package => "package",
+            TraceScope::Repo => "repo",
+            TraceScope::Branch => "branch",
+            TraceScope::PullRequest => "pr",
+            TraceScope::File => "file",
+            TraceScope::User => "user",
+            TraceScope::Session => "session",
+            TraceScope::Package => "package",
         }
     }
 }
 
-impl FromStr for LoomScope {
+impl FromStr for TraceScope {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_ascii_lowercase().as_str() {
@@ -154,7 +154,7 @@ impl FromStr for SyncDirection {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct LoomConfig {
+pub struct TraceConfig {
     #[serde(default)]
     pub repo_name: String,
     #[serde(default)]
@@ -164,11 +164,11 @@ pub struct LoomConfig {
     #[serde(default)]
     pub default_source: Option<String>,
     #[serde(default)]
-    pub sources: Vec<LoomSource>,
+    pub sources: Vec<TraceSource>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LoomSource {
+pub struct TraceSource {
     pub id: String,
     pub kind: SourceKind,
     pub url: String,
@@ -189,12 +189,12 @@ pub struct LoomSource {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LoomNote {
+pub struct TraceNote {
     pub id: String,
     pub title: String,
     pub body: String,
-    pub layer: LoomLayer,
-    pub scope: LoomScope,
+    pub layer: TraceLayer,
+    pub scope: TraceScope,
     pub target: String,
     #[serde(default)]
     pub files: Vec<String>,

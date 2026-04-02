@@ -93,7 +93,7 @@ impl Logger {
         Self::cont("Secure installs, CVE scanning, audit, diff, doctor, and remediation.");
         Self::row("2", "weave", "API flow testing and security probes");
         Self::cont("Node graphs, context threading, run diff, prompts, and OpenAPI import.");
-        Self::row("3", "loom", "Shared coding memory");
+        Self::row("3", "trace", "Repo memory & provenance");
         Self::cont("Redis or SQL-backed memory for teams, agents, package ownership, and retrieval.");
 
         Self::divider();
@@ -103,30 +103,30 @@ impl Logger {
         Self::cmd_row("infynon pkg audit", "Deep dependency audit with risk breakdown");
         Self::cmd_row("infynon weave flow run <id>", "Run a saved API flow end-to-end");
         Self::cmd_row("infynon weave ai probe <id>", "Run built-in flow security probes");
-        Self::cmd_row("infynon loom overview", "Show Loom commands and backend guidance");
+        Self::cmd_row("infynon trace overview", "Show Trace commands and backend guidance");
 
         Self::divider();
         println!();
     }
 
-    pub fn loom_overview() {
+    pub fn trace_overview() {
         println!();
         println!(
             "  {} {}",
-            "infynon loom".bold().truecolor(120, 220, 120),
-            "· shared coding memory".truecolor(120, 120, 140).italic()
+            "infynon trace".bold().truecolor(120, 220, 120),
+            "· repo memory & provenance".truecolor(120, 120, 140).italic()
         );
         println!("  {}\n", "-".repeat(52).truecolor(60, 90, 60));
 
         Self::divider();
         Self::section("::", "Main Commands");
 
-        Self::cmd_row("infynon loom init", "Initialize local Loom state");
-        Self::cmd_row("infynon loom source add-redis", "Add Redis for fast live retrieval");
-        Self::cmd_row("infynon loom source add-sql", "Add SQL for durable structured memory");
-        Self::cmd_row("infynon loom retrieve", "Query notes by user, file, tag, or scope");
-        Self::cmd_row("infynon loom note add", "Create notes for repo, PR, file, branch, or package");
-        Self::cmd_row("infynon loom tui", "Open Loom TUI with notes, sources, and package risk");
+        Self::cmd_row("infynon trace init", "Initialize local Trace state");
+        Self::cmd_row("infynon trace source add-redis", "Add Redis for fast live retrieval");
+        Self::cmd_row("infynon trace source add-sql", "Add SQL for durable structured memory");
+        Self::cmd_row("infynon trace retrieve", "Query notes by user, file, tag, or scope");
+        Self::cmd_row("infynon trace note add", "Create notes for repo, PR, file, branch, or package");
+        Self::cmd_row("infynon trace tui", "Open Trace TUI with notes, sources, and package risk");
 
         Self::divider();
         println!();

@@ -1,7 +1,7 @@
 # infynon weave
 
-If your team also uses Loom for shared coding memory, the recommended Claude Code companion skill is:
-`https://github.com/d4rkNinja/code-guardian`
+If your team also uses Trace for repo memory and provenance, the recommended Claude Code companion is:
+[d4rkNinja/code-guardian](https://github.com/d4rkNinja/code-guardian)
 
 Node-based API flow testing TUI. Model your API as a directed graph of HTTP nodes, thread context variables between them, and run security scans — all from the terminal.
 

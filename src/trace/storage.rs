@@ -1,8 +1,8 @@
-use crate::loom::types::{
-    LoomConfig, LoomLayer, LoomNote, LoomScope, LoomSource, NoteStatus, PackageRisk, SyncDirection,
+use crate::trace::types::{
+    TraceConfig, TraceLayer, TraceNote, TraceScope, TraceSource, NoteStatus, PackageRisk, SyncDirection,
     SyncRun, SyncState,
 };
-use crate::{engine, loom::types::SourceKind};
+use crate::{engine, trace::types::SourceKind};
 use chrono::Utc;
 use std::fs;
 use std::io;
@@ -13,18 +13,18 @@ fn normalize_user(s: &str) -> Option<String> {
     if t.is_empty() { None } else { Some(t.to_string()) }
 }
 
-pub fn loom_dir() -> PathBuf {
-    PathBuf::from(".infynon").join("loom")
+pub fn trace_dir() -> PathBuf {
+    PathBuf::from(".infynon").join("trace")
 }
 
 pub fn ensure_layout() -> Result<(), String> {
     for dir in [
-        loom_dir(),
-        loom_dir().join("notes"),
-        loom_dir().join("notes").join("canonical"),
-        loom_dir().join("notes").join("team"),
-        loom_dir().join("notes").join("user"),
-        loom_dir().join("state"),
+        trace_dir(),
+        trace_dir().join("notes"),
+        trace_dir().join("notes").join("canonical"),
+        trace_dir().join("notes").join("team"),
+        trace_dir().join("notes").join("user"),
+        trace_dir().join("state"),
     ] {
         fs::create_dir_all(&dir).map_err(|e| format!("failed to create {}: {}", dir.display(), e))?;
     }
@@ -32,16 +32,16 @@ pub fn ensure_layout() -> Result<(), String> {
 }
 
 pub fn config_path() -> PathBuf {
-    loom_dir().join("config.toml")
+    trace_dir().join("config.toml")
 }
 
 pub fn sync_state_path() -> PathBuf {
-    loom_dir().join("state").join("sync.json")
+    trace_dir().join("state").join("sync.json")
 }
 
 pub fn init_config(repo_name: &str, owner: &str, default_user: Option<&str>) -> Result<(), String> {
     ensure_layout()?;
-    let cfg = LoomConfig {
+    let cfg = TraceConfig {
         repo_name: repo_name.to_string(),
         owner: owner.to_string(),
         default_user: default_user.and_then(normalize_user),
@@ -51,21 +51,21 @@ pub fn init_config(repo_name: &str, owner: &str, default_user: Option<&str>) -> 
     save_config(&cfg)
 }
 
-pub fn load_config() -> Result<LoomConfig, String> {
+pub fn load_config() -> Result<TraceConfig, String> {
     match fs::read_to_string(config_path()) {
-        Ok(content) => toml::from_str(&content).map_err(|e| format!("invalid loom config: {}", e)),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(LoomConfig::default()),
+        Ok(content) => toml::from_str(&content).map_err(|e| format!("invalid trace config: {}", e)),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(TraceConfig::default()),
         Err(e) => Err(e.to_string()),
     }
 }
 
-pub fn save_config(cfg: &LoomConfig) -> Result<(), String> {
+pub fn save_config(cfg: &TraceConfig) -> Result<(), String> {
     ensure_layout()?;
     let content = toml::to_string_pretty(cfg).map_err(|e| e.to_string())?;
     fs::write(config_path(), content).map_err(|e| e.to_string())
 }
 
-pub fn add_source(source: LoomSource, make_default: bool) -> Result<(), String> {
+pub fn add_source(source: TraceSource, make_default: bool) -> Result<(), String> {
     let mut cfg = load_config()?;
     if cfg.sources.iter().any(|s| s.id == source.id) {
         return Err(format!("source '{}' already exists", source.id));
@@ -81,14 +81,14 @@ pub fn configured_user() -> Option<String> {
     load_config().ok().and_then(|cfg| cfg.default_user.and_then(|v| normalize_user(&v)))
 }
 
-pub fn get_source(id: Option<&str>) -> Result<LoomSource, String> {
+pub fn get_source(id: Option<&str>) -> Result<TraceSource, String> {
     let cfg = load_config()?;
     let wanted = match id {
         Some(id) => id.to_string(),
         None => cfg
             .default_source
             .clone()
-            .ok_or_else(|| "No default Loom source configured.".to_string())?,
+            .ok_or_else(|| "No default Trace source configured.".to_string())?,
     };
     cfg.sources
         .into_iter()
@@ -118,8 +118,8 @@ pub fn set_default_source(id: &str) -> Result<(), String> {
     save_config(&cfg)
 }
 
-fn note_path(layer: LoomLayer, id: &str) -> PathBuf {
-    loom_dir()
+fn note_path(layer: TraceLayer, id: &str) -> PathBuf {
+    trace_dir()
         .join("notes")
         .join(layer.as_str())
         .join(format!("{}.json", sanitize(id)))
@@ -131,7 +131,7 @@ fn sanitize(input: &str) -> String {
         .collect()
 }
 
-pub fn create_note(mut note: LoomNote) -> Result<(), String> {
+pub fn create_note(mut note: TraceNote) -> Result<(), String> {
     ensure_layout()?;
     let now = Utc::now().to_rfc3339();
     if note.created_at.is_empty() {
@@ -164,7 +164,7 @@ pub fn update_note(
 }
 
 pub fn delete_note(id: &str) -> Result<(), String> {
-    for layer in [LoomLayer::Canonical, LoomLayer::Team, LoomLayer::User] {
+    for layer in [TraceLayer::Canonical, TraceLayer::Team, TraceLayer::User] {
         match fs::remove_file(note_path(layer, id)) {
             Ok(()) => return Ok(()),
             Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
@@ -174,8 +174,8 @@ pub fn delete_note(id: &str) -> Result<(), String> {
     Err(format!("note '{}' not found", id))
 }
 
-pub fn load_note(id: &str) -> Result<Option<LoomNote>, String> {
-    for layer in [LoomLayer::Canonical, LoomLayer::Team, LoomLayer::User] {
+pub fn load_note(id: &str) -> Result<Option<TraceNote>, String> {
+    for layer in [TraceLayer::Canonical, TraceLayer::Team, TraceLayer::User] {
         match fs::read_to_string(note_path(layer, id)) {
             Ok(content) => {
                 let note = serde_json::from_str(&content).map_err(|e| e.to_string())?;
@@ -188,11 +188,11 @@ pub fn load_note(id: &str) -> Result<Option<LoomNote>, String> {
     Ok(None)
 }
 
-pub fn list_notes() -> Result<Vec<LoomNote>, String> {
+pub fn list_notes() -> Result<Vec<TraceNote>, String> {
     ensure_layout()?;
     let mut notes = Vec::new();
-    for layer in [LoomLayer::Canonical, LoomLayer::Team, LoomLayer::User] {
-        let dir = loom_dir().join("notes").join(layer.as_str());
+    for layer in [TraceLayer::Canonical, TraceLayer::Team, TraceLayer::User] {
+        let dir = trace_dir().join("notes").join(layer.as_str());
         let entries = match fs::read_dir(&dir) {
             Ok(e) => e,
             Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
@@ -205,7 +205,7 @@ pub fn list_notes() -> Result<Vec<LoomNote>, String> {
                 continue;
             }
             let content = fs::read_to_string(path).map_err(|e| e.to_string())?;
-            if let Ok(note) = serde_json::from_str::<LoomNote>(&content) {
+            if let Ok(note) = serde_json::from_str::<TraceNote>(&content) {
                 notes.push(note);
             }
         }
@@ -215,13 +215,13 @@ pub fn list_notes() -> Result<Vec<LoomNote>, String> {
 }
 
 pub fn retrieve_notes(
-    layer: Option<LoomLayer>,
-    scope: Option<LoomScope>,
+    layer: Option<TraceLayer>,
+    scope: Option<TraceScope>,
     target: Option<&str>,
     author: Option<&str>,
     file: Option<&str>,
     tag: Option<&str>,
-) -> Result<Vec<LoomNote>, String> {
+) -> Result<Vec<TraceNote>, String> {
     let mut notes = list_notes()?;
     notes.retain(|n| {
         layer.map(|v| n.layer == v).unwrap_or(true)
@@ -260,7 +260,7 @@ pub fn compact_notes() -> Result<(usize, usize), String> {
     let mut kept = 0usize;
     for note in notes {
         let should_archive = note.status == NoteStatus::Stale
-            || (note.scope == LoomScope::Session && note.layer != LoomLayer::Canonical);
+            || (note.scope == TraceScope::Session && note.layer != TraceLayer::Canonical);
         if should_archive {
             let _ = update_note(&note.id, None, None, Some(NoteStatus::Archived));
             archived += 1;
@@ -295,7 +295,7 @@ pub fn sql_schema_for(kind: SourceKind) -> String {
     };
     let mut sql = format!(
         "
-CREATE TABLE IF NOT EXISTS loom_sources (
+CREATE TABLE IF NOT EXISTS trace_sources (
   id TEXT PRIMARY KEY,
   kind TEXT NOT NULL,
   url TEXT NOT NULL,
@@ -309,7 +309,7 @@ CREATE TABLE IF NOT EXISTS loom_sources (
   created_at {ts_default}
 );
 
-CREATE TABLE IF NOT EXISTS loom_notes (
+CREATE TABLE IF NOT EXISTS trace_notes (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
   body TEXT NOT NULL,
@@ -326,7 +326,7 @@ CREATE TABLE IF NOT EXISTS loom_notes (
   updated_at TIMESTAMP NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS loom_sync_runs (
+CREATE TABLE IF NOT EXISTS trace_sync_runs (
   id {id_auto},
   timestamp TEXT NOT NULL,
   direction TEXT NOT NULL,
@@ -334,7 +334,7 @@ CREATE TABLE IF NOT EXISTS loom_sync_runs (
   summary TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS loom_package_findings (
+CREATE TABLE IF NOT EXISTS trace_package_findings (
   id {id_auto},
   package_name TEXT NOT NULL,
   version TEXT NOT NULL,
@@ -349,17 +349,17 @@ CREATE TABLE IF NOT EXISTS loom_package_findings (
     );
     if kind == SourceKind::Mysql {
         sql.push_str(
-            "CREATE INDEX idx_loom_notes_layer_scope ON loom_notes(layer, scope);\n\
-CREATE INDEX idx_loom_notes_target ON loom_notes(target);\n\
-CREATE INDEX idx_loom_notes_author ON loom_notes(author);\n\
-CREATE INDEX idx_loom_notes_status ON loom_notes(status);\n",
+            "CREATE INDEX idx_trace_notes_layer_scope ON trace_notes(layer, scope);\n\
+CREATE INDEX idx_trace_notes_target ON trace_notes(target);\n\
+CREATE INDEX idx_trace_notes_author ON trace_notes(author);\n\
+CREATE INDEX idx_trace_notes_status ON trace_notes(status);\n",
         );
     } else {
         sql.push_str(&format!(
-            "{idx} idx_loom_notes_layer_scope ON loom_notes(layer, scope);\n\
-{idx} idx_loom_notes_target ON loom_notes(target);\n\
-{idx} idx_loom_notes_author ON loom_notes(author);\n\
-{idx} idx_loom_notes_status ON loom_notes(status);\n",
+            "{idx} idx_trace_notes_layer_scope ON trace_notes(layer, scope);\n\
+{idx} idx_trace_notes_target ON trace_notes(target);\n\
+{idx} idx_trace_notes_author ON trace_notes(author);\n\
+{idx} idx_trace_notes_status ON trace_notes(status);\n",
             idx = index_prefix
         ));
     }
@@ -368,7 +368,7 @@ CREATE INDEX idx_loom_notes_status ON loom_notes(status);\n",
 
 pub fn supported_schema_redis() -> String {
     let schema = r#"
-loom:source:{id} -> hash
+trace:source:{id} -> hash
   kind
   url
   enabled
@@ -379,7 +379,7 @@ loom:source:{id} -> hash
   password_env
   notes
 
-loom:note:{id} -> hash
+trace:note:{id} -> hash
   title
   body
   layer
@@ -394,15 +394,15 @@ loom:note:{id} -> hash
   created_at
   updated_at
 
-loom:index:layer:{layer} -> set(note_id)
-loom:index:scope:{scope} -> set(note_id)
-loom:index:target:{target} -> set(note_id)
-loom:index:author:{author} -> set(note_id)
-loom:index:status:{status} -> set(note_id)
+trace:index:layer:{layer} -> set(note_id)
+trace:index:scope:{scope} -> set(note_id)
+trace:index:target:{target} -> set(note_id)
+trace:index:author:{author} -> set(note_id)
+trace:index:status:{status} -> set(note_id)
 
-loom:sync:runs -> list(json)
-loom:package:finding:{package}:{vuln_id} -> hash
-loom:package:index:severity:{severity} -> set(package:vuln_id)
+trace:sync:runs -> list(json)
+trace:package:finding:{package}:{vuln_id} -> hash
+trace:package:index:severity:{severity} -> set(package:vuln_id)
 "#;
     schema.trim().to_string()
 }
@@ -424,7 +424,7 @@ pub fn package_risks() -> Result<Vec<PackageRisk>, String> {
         .collect();
 
     let results = engine::osv::batch_query(&queries)?;
-    let notes = retrieve_notes(None, Some(LoomScope::Package), None, None, None, None).unwrap_or_default();
+    let notes = retrieve_notes(None, Some(TraceScope::Package), None, None, None, None).unwrap_or_default();
 
     let mut out = Vec::new();
     for (pkg, refs) in packages.iter().zip(results.iter()) {
@@ -486,7 +486,7 @@ pub fn detect_user_name() -> Option<String> {
     None
 }
 
-pub fn merge_remote_notes(remote: Vec<LoomNote>) -> Result<usize, String> {
+pub fn merge_remote_notes(remote: Vec<TraceNote>) -> Result<usize, String> {
     let mut merged = 0usize;
     for note in remote {
         let existing = load_note(&note.id)?;

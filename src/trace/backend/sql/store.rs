@@ -1,13 +1,13 @@
-use crate::loom::types::{
-    LoomLayer, LoomNote, LoomScope, LoomSource, NoteStatus, PackageRisk, SyncRun,
+use crate::trace::types::{
+    TraceLayer, TraceNote, TraceScope, TraceSource, NoteStatus, PackageRisk, SyncRun,
 };
 use mysql::{params, prelude::FromValue, prelude::Queryable, Row};
 use postgres::Client;
 use rusqlite::Connection;
 
-pub fn upsert_source_sqlite(conn: &Connection, source: &LoomSource) -> Result<(), String> {
+pub fn upsert_source_sqlite(conn: &Connection, source: &TraceSource) -> Result<(), String> {
     conn.execute(
-        "INSERT INTO loom_sources (id,kind,url,enabled,owner_user,database_name,namespace,username,password_env,notes)
+        "INSERT INTO trace_sources (id,kind,url,enabled,owner_user,database_name,namespace,username,password_env,notes)
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)
          ON CONFLICT(id) DO UPDATE SET kind=excluded.kind, url=excluded.url, enabled=excluded.enabled,
          owner_user=excluded.owner_user, database_name=excluded.database_name, namespace=excluded.namespace, username=excluded.username,
@@ -29,10 +29,10 @@ pub fn upsert_source_sqlite(conn: &Connection, source: &LoomSource) -> Result<()
     Ok(())
 }
 
-pub fn upsert_source_postgres(client: &mut Client, source: &LoomSource) -> Result<(), String> {
+pub fn upsert_source_postgres(client: &mut Client, source: &TraceSource) -> Result<(), String> {
     client
         .execute(
-            "INSERT INTO loom_sources (id,kind,url,enabled,owner_user,database_name,namespace,username,password_env,notes)
+            "INSERT INTO trace_sources (id,kind,url,enabled,owner_user,database_name,namespace,username,password_env,notes)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
              ON CONFLICT (id) DO UPDATE SET kind=EXCLUDED.kind, url=EXCLUDED.url, enabled=EXCLUDED.enabled,
              owner_user=EXCLUDED.owner_user, database_name=EXCLUDED.database_name, namespace=EXCLUDED.namespace, username=EXCLUDED.username,
@@ -56,10 +56,10 @@ pub fn upsert_source_postgres(client: &mut Client, source: &LoomSource) -> Resul
 
 pub fn upsert_source_mysql(
     conn: &mut mysql::PooledConn,
-    source: &LoomSource,
+    source: &TraceSource,
 ) -> Result<(), String> {
     conn.exec_drop(
-        "INSERT INTO loom_sources (id,kind,url,enabled,owner_user,database_name,namespace,username,password_env,notes)
+        "INSERT INTO trace_sources (id,kind,url,enabled,owner_user,database_name,namespace,username,password_env,notes)
          VALUES (:id,:kind,:url,:enabled,:owner_user,:database_name,:namespace,:username,:password_env,:notes)
          ON DUPLICATE KEY UPDATE kind=VALUES(kind), url=VALUES(url), enabled=VALUES(enabled),
          owner_user=VALUES(owner_user), database_name=VALUES(database_name), namespace=VALUES(namespace), username=VALUES(username),
@@ -80,9 +80,9 @@ pub fn upsert_source_mysql(
     .map_err(|e| e.to_string())
 }
 
-pub fn upsert_note_sqlite(conn: &Connection, note: &LoomNote) -> Result<(), String> {
+pub fn upsert_note_sqlite(conn: &Connection, note: &TraceNote) -> Result<(), String> {
     conn.execute(
-        "INSERT INTO loom_notes (id,title,body,layer,scope,target,files_json,tags_json,related_pr,author,actor,status,created_at,updated_at)
+        "INSERT INTO trace_notes (id,title,body,layer,scope,target,files_json,tags_json,related_pr,author,actor,status,created_at,updated_at)
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)
          ON CONFLICT(id) DO UPDATE SET title=excluded.title, body=excluded.body, layer=excluded.layer, scope=excluded.scope,
          target=excluded.target, files_json=excluded.files_json, tags_json=excluded.tags_json, related_pr=excluded.related_pr,
@@ -108,10 +108,10 @@ pub fn upsert_note_sqlite(conn: &Connection, note: &LoomNote) -> Result<(), Stri
     Ok(())
 }
 
-pub fn upsert_note_postgres(client: &mut Client, note: &LoomNote) -> Result<(), String> {
+pub fn upsert_note_postgres(client: &mut Client, note: &TraceNote) -> Result<(), String> {
     client
         .execute(
-            "INSERT INTO loom_notes (id,title,body,layer,scope,target,files_json,tags_json,related_pr,author,actor,status,created_at,updated_at)
+            "INSERT INTO trace_notes (id,title,body,layer,scope,target,files_json,tags_json,related_pr,author,actor,status,created_at,updated_at)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
              ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, body=EXCLUDED.body, layer=EXCLUDED.layer, scope=EXCLUDED.scope,
              target=EXCLUDED.target, files_json=EXCLUDED.files_json, tags_json=EXCLUDED.tags_json, related_pr=EXCLUDED.related_pr,
@@ -137,9 +137,9 @@ pub fn upsert_note_postgres(client: &mut Client, note: &LoomNote) -> Result<(), 
     Ok(())
 }
 
-pub fn upsert_note_mysql(conn: &mut mysql::PooledConn, note: &LoomNote) -> Result<(), String> {
+pub fn upsert_note_mysql(conn: &mut mysql::PooledConn, note: &TraceNote) -> Result<(), String> {
     conn.exec_drop(
-        "INSERT INTO loom_notes (id,title,body,layer,scope,target,files_json,tags_json,related_pr,author,actor,status,created_at,updated_at)
+        "INSERT INTO trace_notes (id,title,body,layer,scope,target,files_json,tags_json,related_pr,author,actor,status,created_at,updated_at)
          VALUES (:id,:title,:body,:layer,:scope,:target,:files_json,:tags_json,:related_pr,:author,:actor,:status,:created_at,:updated_at)
          ON DUPLICATE KEY UPDATE title=VALUES(title), body=VALUES(body), layer=VALUES(layer), scope=VALUES(scope),
          target=VALUES(target), files_json=VALUES(files_json), tags_json=VALUES(tags_json), related_pr=VALUES(related_pr),
@@ -168,11 +168,11 @@ pub fn refresh_package_findings_sqlite(
     conn: &Connection,
     findings: &[PackageRisk],
 ) -> Result<(), String> {
-    conn.execute("DELETE FROM loom_package_findings", [])
+    conn.execute("DELETE FROM trace_package_findings", [])
         .map_err(|e| e.to_string())?;
     for finding in findings {
         conn.execute(
-            "INSERT INTO loom_package_findings (package_name,version,ecosystem,severity,vulnerability_id,source_file,installed_by)
+            "INSERT INTO trace_package_findings (package_name,version,ecosystem,severity,vulnerability_id,source_file,installed_by)
              VALUES (?1,?2,?3,?4,?5,?6,?7)",
             rusqlite::params![
                 finding.package,
@@ -194,12 +194,12 @@ pub fn refresh_package_findings_postgres(
     findings: &[PackageRisk],
 ) -> Result<(), String> {
     client
-        .execute("DELETE FROM loom_package_findings", &[])
+        .execute("DELETE FROM trace_package_findings", &[])
         .map_err(|e| e.to_string())?;
     for finding in findings {
         client
             .execute(
-                "INSERT INTO loom_package_findings (package_name,version,ecosystem,severity,vulnerability_id,source_file,installed_by)
+                "INSERT INTO trace_package_findings (package_name,version,ecosystem,severity,vulnerability_id,source_file,installed_by)
                  VALUES ($1,$2,$3,$4,$5,$6,$7)",
                 &[
                     &finding.package,
@@ -220,11 +220,11 @@ pub fn refresh_package_findings_mysql(
     conn: &mut mysql::PooledConn,
     findings: &[PackageRisk],
 ) -> Result<(), String> {
-    conn.query_drop("DELETE FROM loom_package_findings")
+    conn.query_drop("DELETE FROM trace_package_findings")
         .map_err(|e| e.to_string())?;
     for finding in findings {
         conn.exec_drop(
-            "INSERT INTO loom_package_findings (package_name,version,ecosystem,severity,vulnerability_id,source_file,installed_by)
+            "INSERT INTO trace_package_findings (package_name,version,ecosystem,severity,vulnerability_id,source_file,installed_by)
              VALUES (?,?,?,?,?,?,?)",
             (
                 &finding.package,
@@ -243,7 +243,7 @@ pub fn refresh_package_findings_mysql(
 
 pub fn insert_sync_sqlite(conn: &Connection, run: &SyncRun) -> Result<(), String> {
     conn.execute(
-        "INSERT INTO loom_sync_runs (timestamp,direction,source_id,summary) VALUES (?1,?2,?3,?4)",
+        "INSERT INTO trace_sync_runs (timestamp,direction,source_id,summary) VALUES (?1,?2,?3,?4)",
         rusqlite::params![run.timestamp, run.direction.as_str(), run.source_id, run.summary],
     )
     .map_err(|e| e.to_string())?;
@@ -253,7 +253,7 @@ pub fn insert_sync_sqlite(conn: &Connection, run: &SyncRun) -> Result<(), String
 pub fn insert_sync_postgres(client: &mut Client, run: &SyncRun) -> Result<(), String> {
     client
         .execute(
-            "INSERT INTO loom_sync_runs (timestamp,direction,source_id,summary) VALUES ($1,$2,$3,$4)",
+            "INSERT INTO trace_sync_runs (timestamp,direction,source_id,summary) VALUES ($1,$2,$3,$4)",
             &[&run.timestamp, &run.direction.as_str(), &run.source_id, &run.summary],
         )
         .map_err(|e| e.to_string())?;
@@ -262,7 +262,7 @@ pub fn insert_sync_postgres(client: &mut Client, run: &SyncRun) -> Result<(), St
 
 pub fn insert_sync_mysql(conn: &mut mysql::PooledConn, run: &SyncRun) -> Result<(), String> {
     conn.exec_drop(
-        "INSERT INTO loom_sync_runs (timestamp,direction,source_id,summary) VALUES (?,?,?,?)",
+        "INSERT INTO trace_sync_runs (timestamp,direction,source_id,summary) VALUES (?,?,?,?)",
         (
             &run.timestamp,
             run.direction.as_str(),
@@ -273,13 +273,13 @@ pub fn insert_sync_mysql(conn: &mut mysql::PooledConn, run: &SyncRun) -> Result<
     .map_err(|e| e.to_string())
 }
 
-pub fn pull_notes_sqlite(conn: &Connection) -> Result<Vec<LoomNote>, String> {
+pub fn pull_notes_sqlite(conn: &Connection) -> Result<Vec<TraceNote>, String> {
     let mut stmt = conn
-        .prepare("SELECT id,title,body,layer,scope,target,files_json,tags_json,related_pr,author,actor,status,created_at,updated_at FROM loom_notes ORDER BY updated_at DESC")
+        .prepare("SELECT id,title,body,layer,scope,target,files_json,tags_json,related_pr,author,actor,status,created_at,updated_at FROM trace_notes ORDER BY updated_at DESC")
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map([], |row| {
-            Ok(LoomNote {
+            Ok(TraceNote {
                 id: row.get(0)?,
                 title: row.get(1)?,
                 body: row.get(2)?,
@@ -302,13 +302,13 @@ pub fn pull_notes_sqlite(conn: &Connection) -> Result<Vec<LoomNote>, String> {
     rows.map(|r| r.map_err(|e| e.to_string())).collect()
 }
 
-pub fn pull_notes_postgres(client: &mut Client) -> Result<Vec<LoomNote>, String> {
+pub fn pull_notes_postgres(client: &mut Client) -> Result<Vec<TraceNote>, String> {
     let rows = client
-        .query("SELECT id,title,body,layer,scope,target,files_json,tags_json,related_pr,author,actor,status,created_at,updated_at FROM loom_notes ORDER BY updated_at DESC", &[])
+        .query("SELECT id,title,body,layer,scope,target,files_json,tags_json,related_pr,author,actor,status,created_at,updated_at FROM trace_notes ORDER BY updated_at DESC", &[])
         .map_err(|e| e.to_string())?;
     rows.into_iter()
         .map(|row| {
-            Ok(LoomNote {
+            Ok(TraceNote {
                 id: row.get(0),
                 title: row.get(1),
                 body: row.get(2),
@@ -328,14 +328,14 @@ pub fn pull_notes_postgres(client: &mut Client) -> Result<Vec<LoomNote>, String>
         .collect()
 }
 
-pub fn pull_notes_mysql(conn: &mut mysql::PooledConn) -> Result<Vec<LoomNote>, String> {
+pub fn pull_notes_mysql(conn: &mut mysql::PooledConn) -> Result<Vec<TraceNote>, String> {
     let rows: Vec<Row> = conn
-        .query("SELECT id,title,body,layer,scope,target,files_json,tags_json,related_pr,author,actor,status,created_at,updated_at FROM loom_notes ORDER BY updated_at DESC")
+        .query("SELECT id,title,body,layer,scope,target,files_json,tags_json,related_pr,author,actor,status,created_at,updated_at FROM trace_notes ORDER BY updated_at DESC")
         .map_err(|e| e.to_string())?;
     rows.into_iter().map(note_from_mysql_row).collect()
 }
 
-fn note_from_mysql_row(row: Row) -> Result<LoomNote, String> {
+fn note_from_mysql_row(row: Row) -> Result<TraceNote, String> {
     let id = row_value::<String>(&row, 0, "id")?;
     let title = row_value::<String>(&row, 1, "title")?;
     let body = row_value::<String>(&row, 2, "body")?;
@@ -351,7 +351,7 @@ fn note_from_mysql_row(row: Row) -> Result<LoomNote, String> {
     let created_at = row_value::<String>(&row, 12, "created_at")?;
     let updated_at = row_value::<String>(&row, 13, "updated_at")?;
 
-    Ok(LoomNote {
+    Ok(TraceNote {
         id,
         title,
         body,
@@ -374,8 +374,8 @@ fn row_value<T: FromValue>(row: &Row, index: usize, field: &str) -> Result<T, St
         .ok_or_else(|| format!("missing mysql field '{}'", field))
 }
 
-fn parse_layer(v: &str) -> Result<LoomLayer, String> { v.parse() }
-fn parse_scope(v: &str) -> Result<LoomScope, String> { v.parse() }
+fn parse_layer(v: &str) -> Result<TraceLayer, String> { v.parse() }
+fn parse_scope(v: &str) -> Result<TraceScope, String> { v.parse() }
 fn parse_status(v: &str) -> Result<NoteStatus, String> { v.parse() }
 
 fn to_sql_err<E: std::fmt::Display>(e: E) -> rusqlite::Error {

@@ -1,6 +1,6 @@
 use clap::builder::styling::{AnsiColor, Effects, Styles};
 use clap::{Parser, Subcommand};
-use crate::loom::cli::LoomAction;
+use crate::trace::cli::TraceAction;
 
 fn get_styles() -> Styles {
     Styles::styled()
@@ -219,11 +219,11 @@ pub enum RootCommands {
         action: ApiCommands,
     },
 
-    /// Loom - shared coding memory with Redis or SQL backends.
-    #[command(name = "loom")]
-    Loom {
+    /// Trace - repo memory & provenance with Redis or SQL backends.
+    #[command(name = "trace")]
+    Trace {
         #[command(subcommand)]
-        action: LoomAction,
+        action: TraceAction,
     },
 }
 

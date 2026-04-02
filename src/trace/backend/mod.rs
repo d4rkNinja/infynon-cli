@@ -1,9 +1,9 @@
-use crate::loom::types::{LoomNote, LoomSource, PackageRisk, SourceKind, SyncDirection, SyncRun};
+use crate::trace::types::{TraceNote, TraceSource, PackageRisk, SourceKind, SyncDirection, SyncRun};
 
 mod redis;
 mod sql;
 
-pub fn validate_and_prepare(source: &LoomSource) -> Result<(), String> {
+pub fn validate_and_prepare(source: &TraceSource) -> Result<(), String> {
     match source.kind {
         SourceKind::Redis => redis::validate_and_prepare(source),
         SourceKind::Postgres | SourceKind::Mysql | SourceKind::Sqlite => {
@@ -13,8 +13,8 @@ pub fn validate_and_prepare(source: &LoomSource) -> Result<(), String> {
 }
 
 pub fn push_all(
-    source: &LoomSource,
-    notes: &[LoomNote],
+    source: &TraceSource,
+    notes: &[TraceNote],
     package_findings: &[PackageRisk],
     sync_run: &SyncRun,
 ) -> Result<(), String> {
@@ -26,7 +26,7 @@ pub fn push_all(
     }
 }
 
-pub fn pull_notes(source: &LoomSource) -> Result<Vec<LoomNote>, String> {
+pub fn pull_notes(source: &TraceSource) -> Result<Vec<TraceNote>, String> {
     match source.kind {
         SourceKind::Redis => redis::pull_notes(source),
         SourceKind::Postgres | SourceKind::Mysql | SourceKind::Sqlite => sql::pull_notes(source),
@@ -34,7 +34,7 @@ pub fn pull_notes(source: &LoomSource) -> Result<Vec<LoomNote>, String> {
 }
 
 pub fn record_sync(
-    source: &LoomSource,
+    source: &TraceSource,
     direction: SyncDirection,
     summary: &str,
 ) -> Result<(), String> {

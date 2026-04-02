@@ -1,38 +1,38 @@
 use clap::Subcommand;
 
 #[derive(Subcommand, Debug)]
-pub enum LoomAction {
-    /// Show the Loom command surface and backend guidance.
+pub enum TraceAction {
+    /// Show the Trace command surface and backend guidance.
     Overview,
 
-    /// Initialize local Loom state for this repository.
+    /// Initialize local Trace state for this repository.
     Init {
-        /// Repo name stored in `.infynon/loom/config.toml`
+        /// Repo name stored in `.infynon/trace/config.toml`
         #[arg(long)]
         repo: Option<String>,
         /// Owner or team name for this memory space
         #[arg(long)]
         owner: Option<String>,
-        /// Default Loom user for notes and sync ownership
+        /// Default Trace user for notes and sync ownership
         #[arg(long)]
         user: Option<String>,
     },
 
-    /// Manage Loom database backends.
+    /// Manage Trace database backends.
     #[command(name = "source")]
     Source {
         #[command(subcommand)]
         action: SourceAction,
     },
 
-    /// Create, update, list, and delete Loom notes.
+    /// Create, update, list, and delete Trace notes.
     #[command(name = "note")]
     Note {
         #[command(subcommand)]
         action: NoteAction,
     },
 
-    /// Retrieve Loom notes by layer, scope, user, file, or tag.
+    /// Retrieve Trace notes by layer, scope, user, file, or tag.
     Retrieve {
         /// Filter by layer: canonical | team | user
         #[arg(long)]
@@ -56,7 +56,7 @@ pub enum LoomAction {
 
     /// Record a pull, push, or bidirectional sync against a configured backend.
     Sync {
-        /// Source ID from `loom source add ...`
+        /// Source ID from `trace source add ...`
         #[arg(long)]
         source: Option<String>,
         /// Direction: pull | push | both
@@ -67,13 +67,13 @@ pub enum LoomAction {
     /// Compact stale and session-scoped notes.
     Compact,
 
-    /// Print the uniform Loom schema for SQL or Redis backends.
+    /// Print the uniform Trace schema for SQL or Redis backends.
     Schema {
         /// Backend family: sql | redis
         backend: String,
     },
 
-    /// Open the Loom terminal UI.
+    /// Open the Trace terminal UI.
     Tui,
 }
 
@@ -87,8 +87,8 @@ pub enum SourceAction {
         /// Redis connection URL, e.g. `redis://localhost:6379/0`
         #[arg(long)]
         url: String,
-        /// Logical namespace prefix for all Loom keys
-        #[arg(long, default_value = "loom")]
+        /// Logical namespace prefix for all Trace keys
+        #[arg(long, default_value = "trace")]
         namespace: String,
         /// Optional notes for operators and teammates
         #[arg(long)]
@@ -132,10 +132,10 @@ pub enum SourceAction {
         default: bool,
     },
 
-    /// List configured Loom backends.
+    /// List configured Trace backends.
     List,
 
-    /// Remove a configured Loom backend by ID.
+    /// Remove a configured Trace backend by ID.
     Remove {
         id: String,
     },
@@ -148,7 +148,7 @@ pub enum SourceAction {
 
 #[derive(Subcommand, Debug)]
 pub enum NoteAction {
-    /// Create a Loom note.
+    /// Create a Trace note.
     Add {
         id: String,
         #[arg(long)]
@@ -173,7 +173,7 @@ pub enum NoteAction {
         related_pr: Option<u64>,
     },
 
-    /// Update a Loom note.
+    /// Update a Trace note.
     Update {
         id: String,
         #[arg(long)]
@@ -184,11 +184,11 @@ pub enum NoteAction {
         status: Option<String>,
     },
 
-    /// Delete a Loom note.
+    /// Delete a Trace note.
     Remove {
         id: String,
     },
 
-    /// List Loom notes.
+    /// List Trace notes.
     List,
 }

@@ -622,7 +622,7 @@ pub fn execute_root_mode() -> Result<(), InfynonError> {
         None => Logger::splash_root(),
         Some(RootCommands::Pkg { .. }) => return execute_pkg_mode(),
         Some(RootCommands::Weave { action }) => execute_api_command(action),
-        Some(RootCommands::Loom { action }) => crate::loom::commands::execute(action),
+        Some(RootCommands::Trace { action }) => crate::trace::commands::execute(action),
     }
 
     Ok(())

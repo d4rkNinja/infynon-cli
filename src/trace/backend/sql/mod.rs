@@ -1,11 +1,11 @@
-use crate::loom::types::{LoomNote, LoomSource, PackageRisk, SourceKind, SyncRun};
+use crate::trace::types::{TraceNote, TraceSource, PackageRisk, SourceKind, SyncRun};
 use mysql::{prelude::Queryable, Opts, Pool};
 use postgres::{Client, NoTls};
 use rusqlite::Connection;
 
 mod store;
 
-pub fn validate_and_prepare(source: &LoomSource) -> Result<(), String> {
+pub fn validate_and_prepare(source: &TraceSource) -> Result<(), String> {
     match source.kind {
         SourceKind::Sqlite => {
             let conn = sqlite_connection(source)?;
@@ -31,8 +31,8 @@ pub fn validate_and_prepare(source: &LoomSource) -> Result<(), String> {
 }
 
 pub fn push_all(
-    source: &LoomSource,
-    notes: &[LoomNote],
+    source: &TraceSource,
+    notes: &[TraceNote],
     package_findings: &[PackageRisk],
     sync_run: &SyncRun,
 ) -> Result<(), String> {
@@ -44,7 +44,7 @@ pub fn push_all(
     }
 }
 
-pub fn pull_notes(source: &LoomSource) -> Result<Vec<LoomNote>, String> {
+pub fn pull_notes(source: &TraceSource) -> Result<Vec<TraceNote>, String> {
     match source.kind {
         SourceKind::Sqlite => store::pull_notes_sqlite(&sqlite_connection(source)?),
         SourceKind::Postgres => {
@@ -60,7 +60,7 @@ pub fn pull_notes(source: &LoomSource) -> Result<Vec<LoomNote>, String> {
     }
 }
 
-pub fn record_sync(source: &LoomSource, run: &SyncRun) -> Result<(), String> {
+pub fn record_sync(source: &TraceSource, run: &SyncRun) -> Result<(), String> {
     match source.kind {
         SourceKind::Sqlite => store::insert_sync_sqlite(&sqlite_connection(source)?, run),
         SourceKind::Postgres => store::insert_sync_postgres(&mut postgres_connection(source)?, run),
@@ -74,8 +74,8 @@ pub fn record_sync(source: &LoomSource, run: &SyncRun) -> Result<(), String> {
 }
 
 fn push_all_sqlite(
-    source: &LoomSource,
-    notes: &[LoomNote],
+    source: &TraceSource,
+    notes: &[TraceNote],
     package_findings: &[PackageRisk],
     sync_run: &SyncRun,
 ) -> Result<(), String> {
@@ -90,8 +90,8 @@ fn push_all_sqlite(
 }
 
 fn push_all_postgres(
-    source: &LoomSource,
-    notes: &[LoomNote],
+    source: &TraceSource,
+    notes: &[TraceNote],
     package_findings: &[PackageRisk],
     sync_run: &SyncRun,
 ) -> Result<(), String> {
@@ -106,8 +106,8 @@ fn push_all_postgres(
 }
 
 fn push_all_mysql(
-    source: &LoomSource,
-    notes: &[LoomNote],
+    source: &TraceSource,
+    notes: &[TraceNote],
     package_findings: &[PackageRisk],
     sync_run: &SyncRun,
 ) -> Result<(), String> {
@@ -122,7 +122,7 @@ fn push_all_mysql(
     store::insert_sync_mysql(&mut conn, sync_run)
 }
 
-fn sqlite_connection(source: &LoomSource) -> Result<Connection, String> {
+fn sqlite_connection(source: &TraceSource) -> Result<Connection, String> {
     let path = source
         .url
         .strip_prefix("sqlite://")
@@ -130,28 +130,28 @@ fn sqlite_connection(source: &LoomSource) -> Result<Connection, String> {
     Connection::open(path).map_err(|e| e.to_string())
 }
 
-fn postgres_connection(source: &LoomSource) -> Result<Client, String> {
+fn postgres_connection(source: &TraceSource) -> Result<Client, String> {
     Client::connect(&source.url, NoTls).map_err(|e| e.to_string())
 }
 
-fn mysql_pool(source: &LoomSource) -> Result<Pool, String> {
+fn mysql_pool(source: &TraceSource) -> Result<Pool, String> {
     let opts = Opts::from_url(&source.url).map_err(|e| e.to_string())?;
     Pool::new(opts).map_err(|e| e.to_string())
 }
 
 fn init_sqlite(conn: &Connection) -> Result<(), String> {
-    conn.execute_batch(&crate::loom::storage::sql_schema_for(SourceKind::Sqlite))
+    conn.execute_batch(&crate::trace::storage::sql_schema_for(SourceKind::Sqlite))
         .map_err(|e| e.to_string())
 }
 
 fn init_postgres(client: &mut Client) -> Result<(), String> {
     client
-        .batch_execute(&crate::loom::storage::sql_schema_for(SourceKind::Postgres))
+        .batch_execute(&crate::trace::storage::sql_schema_for(SourceKind::Postgres))
         .map_err(|e| e.to_string())
 }
 
 fn init_mysql(conn: &mut mysql::PooledConn) -> Result<(), String> {
-    for stmt in crate::loom::storage::sql_schema_for(SourceKind::Mysql).split(";\n") {
+    for stmt in crate::trace::storage::sql_schema_for(SourceKind::Mysql).split(";\n") {
         let trimmed = stmt.trim();
         if !trimmed.is_empty() {
             conn.query_drop(trimmed).map_err(|e| e.to_string())?;
@@ -163,7 +163,7 @@ fn init_mysql(conn: &mut mysql::PooledConn) -> Result<(), String> {
 fn migrate_sqlite(conn: &Connection) -> Result<(), String> {
     let columns = sqlite_columns(conn)?;
     if !columns.iter().any(|column| column == "owner_user") {
-        conn.execute("ALTER TABLE loom_sources ADD COLUMN owner_user TEXT NULL", [])
+        conn.execute("ALTER TABLE trace_sources ADD COLUMN owner_user TEXT NULL", [])
             .map_err(|e| e.to_string())?;
     }
     Ok(())
@@ -171,12 +171,12 @@ fn migrate_sqlite(conn: &Connection) -> Result<(), String> {
 
 fn migrate_postgres(client: &mut Client) -> Result<(), String> {
     client
-        .batch_execute("ALTER TABLE loom_sources ADD COLUMN IF NOT EXISTS owner_user TEXT NULL;")
+        .batch_execute("ALTER TABLE trace_sources ADD COLUMN IF NOT EXISTS owner_user TEXT NULL;")
         .map_err(|e| e.to_string())
 }
 
 fn migrate_mysql(conn: &mut mysql::PooledConn) -> Result<(), String> {
-    match conn.query_drop("ALTER TABLE loom_sources ADD COLUMN owner_user TEXT NULL") {
+    match conn.query_drop("ALTER TABLE trace_sources ADD COLUMN owner_user TEXT NULL") {
         Ok(()) => Ok(()),
         Err(error) => {
             let message = error.to_string();
@@ -191,7 +191,7 @@ fn migrate_mysql(conn: &mut mysql::PooledConn) -> Result<(), String> {
 
 fn sqlite_columns(conn: &Connection) -> Result<Vec<String>, String> {
     let mut stmt = conn
-        .prepare("PRAGMA table_info(loom_sources)")
+        .prepare("PRAGMA table_info(trace_sources)")
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map([], |row| row.get::<_, String>(1))

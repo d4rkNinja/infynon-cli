@@ -1,20 +1,20 @@
-use crate::loom::cli::{LoomAction, NoteAction, SourceAction};
-use crate::loom::storage;
-use crate::loom::types::{
-    LoomLayer, LoomNote, LoomScope, LoomSource, NoteStatus, SourceKind, SyncDirection,
+use crate::trace::cli::{TraceAction, NoteAction, SourceAction};
+use crate::trace::storage;
+use crate::trace::types::{
+    TraceLayer, TraceNote, TraceScope, TraceSource, NoteStatus, SourceKind, SyncDirection,
 };
 use crate::tui::logger::Logger;
 use chrono::Utc;
 
-pub fn execute(action: LoomAction) {
+pub fn execute(action: TraceAction) {
     match action {
-        LoomAction::Overview => Logger::loom_overview(),
-        LoomAction::Init { repo, owner, user } => {
+        TraceAction::Overview => Logger::trace_overview(),
+        TraceAction::Init { repo, owner, user } => {
             cmd_init(repo.as_deref(), owner.as_deref(), user.as_deref())
         }
-        LoomAction::Source { action } => execute_source(action),
-        LoomAction::Note { action } => execute_note(action),
-        LoomAction::Retrieve {
+        TraceAction::Source { action } => execute_source(action),
+        TraceAction::Note { action } => execute_note(action),
+        TraceAction::Retrieve {
             layer,
             scope,
             target,
@@ -29,10 +29,10 @@ pub fn execute(action: LoomAction) {
             file.as_deref(),
             tag.as_deref(),
         ),
-        LoomAction::Sync { source, direction } => cmd_sync(source.as_deref(), &direction),
-        LoomAction::Compact => cmd_compact(),
-        LoomAction::Schema { backend } => cmd_schema(&backend),
-        LoomAction::Tui => crate::loom::tui::run(),
+        TraceAction::Sync { source, direction } => cmd_sync(source.as_deref(), &direction),
+        TraceAction::Compact => cmd_compact(),
+        TraceAction::Schema { backend } => cmd_schema(&backend),
+        TraceAction::Tui => crate::trace::tui::run(),
     }
 }
 
@@ -125,12 +125,12 @@ fn cmd_init(repo: Option<&str>, owner: Option<&str>, user: Option<&str>) {
     let default_user = user.or(detected_user.as_deref());
     match storage::init_config(&repo_name, owner_name, default_user) {
         Ok(()) => {
-            Logger::success(&format!("Initialized Loom for '{}'", repo_name));
+            Logger::success(&format!("Initialized Trace for '{}'", repo_name));
             Logger::detail("Owner:", owner_name);
             if let Some(user) = default_user {
                 Logger::detail("Default user:", user);
             }
-            Logger::detail("Path:", &storage::loom_dir().display().to_string());
+            Logger::detail("Path:", &storage::trace_dir().display().to_string());
         }
         Err(e) => Logger::error(&e),
     }
@@ -144,13 +144,13 @@ fn cmd_source_add_redis(
     user: Option<&str>,
     make_default: bool,
 ) {
-    let source = LoomSource {
+    let source = TraceSource {
         id: id.to_string(), kind: SourceKind::Redis, url: url.to_string(), enabled: true,
         owner_user: user.map(|value| value.to_string()).or_else(storage::configured_user),
         database: None, namespace: Some(namespace.to_string()), username: None,
         password_env: None, notes: notes.map(|s| s.to_string()),
     };
-    if let Err(e) = crate::loom::backend::validate_and_prepare(&source) {
+    if let Err(e) = crate::trace::backend::validate_and_prepare(&source) {
         return Logger::error(&format!("Redis validation failed: {}", e));
     }
     match storage::add_source(source, make_default) {
@@ -179,14 +179,14 @@ fn cmd_source_add_sql(
         "sqlite" => SourceKind::Sqlite,
         other => { Logger::error(&format!("Unsupported SQL engine '{}'. Use postgres | mysql | sqlite.", other)); return; }
     };
-    let source = LoomSource {
+    let source = TraceSource {
         id: id.to_string(), kind, url: url.to_string(), enabled: true,
         owner_user: user.map(|value| value.to_string()).or_else(storage::configured_user),
         database: database.map(|s| s.to_string()), namespace: None,
         username: username.map(|s| s.to_string()), password_env: password_env.map(|s| s.to_string()),
         notes: notes.map(|s| s.to_string()),
     };
-    if let Err(e) = crate::loom::backend::validate_and_prepare(&source) {
+    if let Err(e) = crate::trace::backend::validate_and_prepare(&source) {
         return Logger::error(&format!("SQL validation failed: {}", e));
     }
     match storage::add_source(source, make_default) {
@@ -199,7 +199,7 @@ fn cmd_source_list() {
     match storage::load_config() {
         Ok(cfg) => {
             if cfg.sources.is_empty() {
-                Logger::info("No Loom backends configured.");
+                Logger::info("No Trace backends configured.");
                 return;
             }
             println!("  {:<18} {:<10} {:<8} {:<16} {}", "ID", "KIND", "DEFAULT", "USER", "URL");
@@ -257,7 +257,7 @@ fn cmd_note_add(
         Err(e) => return Logger::error(&e),
     };
     let now = Utc::now().to_rfc3339();
-    let note = LoomNote {
+    let note = TraceNote {
         id: id.to_string(),
         title: title.to_string(),
         body: body.to_string(),
@@ -362,13 +362,13 @@ fn cmd_sync(source: Option<&str>, direction: &str) {
 
     match direction {
         SyncDirection::Push => {
-            let run = crate::loom::types::SyncRun {
+            let run = crate::trace::types::SyncRun {
                 timestamp: Utc::now().to_rfc3339(),
                 direction,
                 source_id: Some(source.id.clone()),
                 summary: format!("push {} notes", local_notes.len()),
             };
-            match crate::loom::backend::push_all(&source, &local_notes, &package_findings, &run) {
+            match crate::trace::backend::push_all(&source, &local_notes, &package_findings, &run) {
                 Ok(()) => {
                     let _ = storage::record_sync(direction, Some(&source.id), &run.summary);
                     Logger::success("Push sync completed");
@@ -376,11 +376,11 @@ fn cmd_sync(source: Option<&str>, direction: &str) {
                 Err(e) => Logger::error(&e),
             }
         }
-        SyncDirection::Pull => match crate::loom::backend::pull_notes(&source) {
+        SyncDirection::Pull => match crate::trace::backend::pull_notes(&source) {
             Ok(notes) => match storage::merge_remote_notes(notes) {
                 Ok(merged) => {
                     let summary = format!("pull merged {} notes", merged);
-                    let _ = crate::loom::backend::record_sync(&source, direction, &summary);
+                    let _ = crate::trace::backend::record_sync(&source, direction, &summary);
                     let _ = storage::record_sync(direction, Some(&source.id), &summary);
                     Logger::success(&format!("Pull sync completed, merged {}", merged));
                 }
@@ -389,20 +389,20 @@ fn cmd_sync(source: Option<&str>, direction: &str) {
             Err(e) => Logger::error(&e),
         },
         SyncDirection::Both => {
-            let run = crate::loom::types::SyncRun {
+            let run = crate::trace::types::SyncRun {
                 timestamp: Utc::now().to_rfc3339(),
                 direction,
                 source_id: Some(source.id.clone()),
                 summary: format!("push {} notes", local_notes.len()),
             };
-            if let Err(e) = crate::loom::backend::push_all(&source, &local_notes, &package_findings, &run) {
+            if let Err(e) = crate::trace::backend::push_all(&source, &local_notes, &package_findings, &run) {
                 return Logger::error(&e);
             }
-            match crate::loom::backend::pull_notes(&source) {
+            match crate::trace::backend::pull_notes(&source) {
                 Ok(notes) => match storage::merge_remote_notes(notes) {
                     Ok(merged) => {
                         let summary = format!("push/pull merged {} notes", merged);
-                        let _ = crate::loom::backend::record_sync(&source, direction, &summary);
+                        let _ = crate::trace::backend::record_sync(&source, direction, &summary);
                         let _ = storage::record_sync(direction, Some(&source.id), &summary);
                         Logger::success(&format!("Bidirectional sync completed, merged {}", merged));
                     }
@@ -417,7 +417,7 @@ fn cmd_sync(source: Option<&str>, direction: &str) {
 fn cmd_compact() {
     match storage::compact_notes() {
         Ok((kept, archived)) => {
-            Logger::success("Loom compaction finished");
+            Logger::success("Trace compaction finished");
             Logger::detail("Kept:", &kept.to_string());
             Logger::detail("Archived:", &archived.to_string());
         }
@@ -433,7 +433,7 @@ fn cmd_schema(backend: &str) {
     }
 }
 
-fn print_notes(notes: &[LoomNote]) {
+fn print_notes(notes: &[TraceNote]) {
     if notes.is_empty() {
         Logger::info("No notes matched.");
         return;
@@ -456,11 +456,11 @@ fn print_notes(notes: &[LoomNote]) {
     }
 }
 
-fn parse_layer(value: &str) -> Result<LoomLayer, String> {
+fn parse_layer(value: &str) -> Result<TraceLayer, String> {
     value.parse().map_err(|_| format!("Invalid layer '{}'. Use canonical | team | user.", value))
 }
 
-fn parse_scope(value: &str) -> Result<LoomScope, String> {
+fn parse_scope(value: &str) -> Result<TraceScope, String> {
     value.parse().map_err(|_| format!("Invalid scope '{}'. Use repo | branch | pr | file | user | session | package.", value))
 }
 

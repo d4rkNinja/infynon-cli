@@ -9,7 +9,7 @@ mod daemon;
 mod ecosystems;
 mod engine;
 mod error;
-mod loom;
+mod trace;
 mod models;
 mod tui;
 mod utils;

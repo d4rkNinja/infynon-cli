@@ -1,6 +1,6 @@
-use crate::loom::{
+use crate::trace::{
     storage,
-    types::{LoomLayer, LoomNote, LoomScope, NoteStatus, PackageRisk},
+    types::{TraceLayer, TraceNote, TraceScope, NoteStatus, PackageRisk},
 };
 use chrono::Utc;
 use crossterm::{
@@ -22,7 +22,7 @@ use std::{fs, io};
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 
 #[derive(Clone, Copy, PartialEq)]
-enum LoomTab {
+enum TraceTab {
     Overview,
     Sources,
     Notes,
@@ -30,27 +30,27 @@ enum LoomTab {
     EditLog,
 }
 
-impl LoomTab {
-    fn all() -> [LoomTab; 5] {
+impl TraceTab {
+    fn all() -> [TraceTab; 5] {
         [
-            LoomTab::Overview,
-            LoomTab::Sources,
-            LoomTab::Notes,
-            LoomTab::Packages,
-            LoomTab::EditLog,
+            TraceTab::Overview,
+            TraceTab::Sources,
+            TraceTab::Notes,
+            TraceTab::Packages,
+            TraceTab::EditLog,
         ]
     }
     fn title(&self) -> &'static str {
         match self {
-            LoomTab::Overview => "Overview",
-            LoomTab::Sources => "Sources",
-            LoomTab::Notes => "Notes",
-            LoomTab::Packages => "Packages",
-            LoomTab::EditLog => "Edit Log",
+            TraceTab::Overview => "Overview",
+            TraceTab::Sources => "Sources",
+            TraceTab::Notes => "Notes",
+            TraceTab::Packages => "Packages",
+            TraceTab::EditLog => "Edit Log",
         }
     }
     fn index(&self) -> usize {
-        LoomTab::all().iter().position(|t| t == self).unwrap_or(0)
+        TraceTab::all().iter().position(|t| t == self).unwrap_or(0)
     }
 }
 
@@ -139,7 +139,7 @@ impl NoteForm {
         }
     }
 
-    fn from_note(note: &LoomNote) -> Self {
+    fn from_note(note: &TraceNote) -> Self {
         Self {
             id: note.id.clone(),
             title: note.title.clone(),
@@ -204,7 +204,7 @@ struct AuditEntry {
 }
 
 fn audit_log_path() -> std::path::PathBuf {
-    storage::loom_dir().join("state").join("tui_edits.jsonl")
+    storage::trace_dir().join("state").join("tui_edits.jsonl")
 }
 
 fn append_audit(entry: AuditEntry) {
@@ -243,8 +243,8 @@ fn load_audit_log() -> Vec<AuditEntry> {
 // ─── App state ────────────────────────────────────────────────────────────────
 
 struct App {
-    tab: LoomTab,
-    notes: Vec<LoomNote>,
+    tab: TraceTab,
+    notes: Vec<TraceNote>,
     packages: Vec<PackageRisk>,
     list_state: ListState,
     sources_state: ListState,
@@ -286,7 +286,7 @@ impl App {
         self.list_state.selected()
     }
 
-    fn selected_note(&self) -> Option<&LoomNote> {
+    fn selected_note(&self) -> Option<&TraceNote> {
         self.list_state.selected().and_then(|i| self.notes.get(i))
     }
 
@@ -357,7 +357,7 @@ pub fn run() {
     }
 
     let mut app = App {
-        tab: LoomTab::Notes,
+        tab: TraceTab::Notes,
         notes,
         packages,
         list_state,
@@ -425,12 +425,12 @@ fn handle_browse(app: &mut App, code: KeyCode) -> bool {
         KeyCode::Char('q') => return true,
 
         // ── Tab switching ────────────────────────────────────────────────────
-        KeyCode::Char('1') => { app.tab = LoomTab::Overview; app.mode = AppMode::Browse; }
-        KeyCode::Char('2') => { app.tab = LoomTab::Sources; app.mode = AppMode::Browse; }
-        KeyCode::Char('3') => { app.tab = LoomTab::Notes; app.mode = AppMode::Browse; }
-        KeyCode::Char('4') => { app.tab = LoomTab::Packages; app.mode = AppMode::Browse; }
+        KeyCode::Char('1') => { app.tab = TraceTab::Overview; app.mode = AppMode::Browse; }
+        KeyCode::Char('2') => { app.tab = TraceTab::Sources; app.mode = AppMode::Browse; }
+        KeyCode::Char('3') => { app.tab = TraceTab::Notes; app.mode = AppMode::Browse; }
+        KeyCode::Char('4') => { app.tab = TraceTab::Packages; app.mode = AppMode::Browse; }
         KeyCode::Char('5') => {
-            app.tab = LoomTab::EditLog;
+            app.tab = TraceTab::EditLog;
             app.mode = AppMode::Browse;
             app.reload_audit();
         }
@@ -438,9 +438,9 @@ fn handle_browse(app: &mut App, code: KeyCode) -> bool {
             if !matches!(app.mode, AppMode::ViewDetail | AppMode::PackageDetail) =>
         {
             let next = (app.tab.index() + 1) % 5;
-            app.tab = LoomTab::all()[next];
+            app.tab = TraceTab::all()[next];
             app.mode = AppMode::Browse;
-            if app.tab == LoomTab::EditLog {
+            if app.tab == TraceTab::EditLog {
                 app.reload_audit();
             }
         }
@@ -448,19 +448,19 @@ fn handle_browse(app: &mut App, code: KeyCode) -> bool {
             if !matches!(app.mode, AppMode::ViewDetail | AppMode::PackageDetail) =>
         {
             let prev = (app.tab.index() + 5 - 1) % 5;
-            app.tab = LoomTab::all()[prev];
+            app.tab = TraceTab::all()[prev];
             app.mode = AppMode::Browse;
         }
 
         // ── Notes tab ────────────────────────────────────────────────────────
-        KeyCode::Down | KeyCode::Char('j') if app.tab == LoomTab::Notes => {
+        KeyCode::Down | KeyCode::Char('j') if app.tab == TraceTab::Notes => {
             let len = app.notes.len();
             if len > 0 {
                 let next = app.selected_idx().map(|i| (i + 1) % len).unwrap_or(0);
                 app.list_state.select(Some(next));
             }
         }
-        KeyCode::Up | KeyCode::Char('k') if app.tab == LoomTab::Notes => {
+        KeyCode::Up | KeyCode::Char('k') if app.tab == TraceTab::Notes => {
             let len = app.notes.len();
             if len > 0 {
                 let prev = app
@@ -470,37 +470,37 @@ fn handle_browse(app: &mut App, code: KeyCode) -> bool {
                 app.list_state.select(Some(prev));
             }
         }
-        KeyCode::Enter if app.tab == LoomTab::Notes => {
+        KeyCode::Enter if app.tab == TraceTab::Notes => {
             if app.selected_note().is_some() {
                 app.mode = AppMode::ViewDetail;
             }
         }
-        KeyCode::Char('n') if app.tab == LoomTab::Notes => {
+        KeyCode::Char('n') if app.tab == TraceTab::Notes => {
             let author = storage::configured_user()
                 .or_else(storage::detect_user_name)
                 .unwrap_or_else(|| "unknown".to_string());
             app.mode = AppMode::EditForm(NoteForm::new_create(author));
         }
-        KeyCode::Char('e') if app.tab == LoomTab::Notes => {
+        KeyCode::Char('e') if app.tab == TraceTab::Notes => {
             if let Some(note) = app.selected_note() {
                 let form = NoteForm::from_note(note);
                 app.mode = AppMode::EditForm(form);
             }
         }
-        KeyCode::Char('d') if app.tab == LoomTab::Notes => {
+        KeyCode::Char('d') if app.tab == TraceTab::Notes => {
             if let Some(note) = app.selected_note() {
                 let id = note.id.clone();
                 app.mode = AppMode::DeleteConfirm(id);
             }
         }
-        KeyCode::Char('r') if app.tab == LoomTab::Notes => {
+        KeyCode::Char('r') if app.tab == TraceTab::Notes => {
             app.reload_notes();
             app.clamp_selection();
             app.ok("Notes reloaded");
         }
 
         // ── Sources tab ──────────────────────────────────────────────────────
-        KeyCode::Down | KeyCode::Char('j') if app.tab == LoomTab::Sources => {
+        KeyCode::Down | KeyCode::Char('j') if app.tab == TraceTab::Sources => {
             let cfg = storage::load_config().unwrap_or_default();
             let len = cfg.sources.len();
             if len > 0 {
@@ -508,7 +508,7 @@ fn handle_browse(app: &mut App, code: KeyCode) -> bool {
                 app.sources_state.select(Some(next));
             }
         }
-        KeyCode::Up | KeyCode::Char('k') if app.tab == LoomTab::Sources => {
+        KeyCode::Up | KeyCode::Char('k') if app.tab == TraceTab::Sources => {
             let cfg = storage::load_config().unwrap_or_default();
             let len = cfg.sources.len();
             if len > 0 {
@@ -520,7 +520,7 @@ fn handle_browse(app: &mut App, code: KeyCode) -> bool {
                 app.sources_state.select(Some(prev));
             }
         }
-        KeyCode::Char('d') if app.tab == LoomTab::Sources => {
+        KeyCode::Char('d') if app.tab == TraceTab::Sources => {
             let cfg = storage::load_config().unwrap_or_default();
             if let Some(idx) = app.sources_state.selected() {
                 if let Some(src) = cfg.sources.get(idx) {
@@ -528,7 +528,7 @@ fn handle_browse(app: &mut App, code: KeyCode) -> bool {
                 }
             }
         }
-        KeyCode::Char('s') if app.tab == LoomTab::Sources => {
+        KeyCode::Char('s') if app.tab == TraceTab::Sources => {
             let cfg = storage::load_config().unwrap_or_default();
             if let Some(idx) = app.sources_state.selected() {
                 if let Some(src) = cfg.sources.get(idx) {
@@ -540,20 +540,20 @@ fn handle_browse(app: &mut App, code: KeyCode) -> bool {
                 }
             }
         }
-        KeyCode::Char('r') if app.tab == LoomTab::Sources => {
+        KeyCode::Char('r') if app.tab == TraceTab::Sources => {
             app.reload_sources();
             app.ok("Sources reloaded");
         }
 
         // ── Packages tab ─────────────────────────────────────────────────────
-        KeyCode::Down | KeyCode::Char('j') if app.tab == LoomTab::Packages => {
+        KeyCode::Down | KeyCode::Char('j') if app.tab == TraceTab::Packages => {
             let len = app.packages.len();
             if len > 0 {
                 let next = app.packages_state.selected().map(|i| (i + 1) % len).unwrap_or(0);
                 app.packages_state.select(Some(next));
             }
         }
-        KeyCode::Up | KeyCode::Char('k') if app.tab == LoomTab::Packages => {
+        KeyCode::Up | KeyCode::Char('k') if app.tab == TraceTab::Packages => {
             let len = app.packages.len();
             if len > 0 {
                 let prev = app
@@ -564,32 +564,32 @@ fn handle_browse(app: &mut App, code: KeyCode) -> bool {
                 app.packages_state.select(Some(prev));
             }
         }
-        KeyCode::Enter if app.tab == LoomTab::Packages => {
+        KeyCode::Enter if app.tab == TraceTab::Packages => {
             if app.selected_package().is_some() {
                 app.mode = AppMode::PackageDetail;
             }
         }
-        KeyCode::Char('r') if app.tab == LoomTab::Packages => {
+        KeyCode::Char('r') if app.tab == TraceTab::Packages => {
             app.reload_packages();
             app.ok("Package risks reloaded");
         }
 
         // ── EditLog tab ──────────────────────────────────────────────────────
-        KeyCode::Down | KeyCode::Char('j') if app.tab == LoomTab::EditLog => {
+        KeyCode::Down | KeyCode::Char('j') if app.tab == TraceTab::EditLog => {
             if app.audit_scroll + 1 < app.audit.len() {
                 app.audit_scroll += 1;
             }
         }
-        KeyCode::Up | KeyCode::Char('k') if app.tab == LoomTab::EditLog => {
+        KeyCode::Up | KeyCode::Char('k') if app.tab == TraceTab::EditLog => {
             app.audit_scroll = app.audit_scroll.saturating_sub(1);
         }
-        KeyCode::Char('g') if app.tab == LoomTab::EditLog => {
+        KeyCode::Char('g') if app.tab == TraceTab::EditLog => {
             app.audit_scroll = 0;
         }
-        KeyCode::Char('G') if app.tab == LoomTab::EditLog => {
+        KeyCode::Char('G') if app.tab == TraceTab::EditLog => {
             app.audit_scroll = app.audit.len().saturating_sub(1);
         }
-        KeyCode::Char('r') if app.tab == LoomTab::EditLog => {
+        KeyCode::Char('r') if app.tab == TraceTab::EditLog => {
             app.reload_audit();
             app.ok("Edit log reloaded");
         }
@@ -695,7 +695,7 @@ fn handle_form(app: &mut App, code: KeyCode) {
                     }
                 }
             } else {
-                let note = LoomNote {
+                let note = TraceNote {
                     id: id.clone(),
                     title: title.clone(),
                     body: body.clone(),
@@ -805,7 +805,7 @@ fn handle_source_delete_confirm(app: &mut App, code: KeyCode) {
 fn draw_ui(
     f: &mut ratatui::Frame,
     app: &mut App,
-    cfg: &crate::loom::types::LoomConfig,
+    cfg: &crate::trace::types::TraceConfig,
 ) {
     let area = f.size();
     let chunks = Layout::default()
@@ -818,10 +818,10 @@ fn draw_ui(
         .split(area);
 
     // Tab bar
-    let titles: Vec<Line> = LoomTab::all().iter().map(|t| Line::from(t.title())).collect();
+    let titles: Vec<Line> = TraceTab::all().iter().map(|t| Line::from(t.title())).collect();
     let tabs = Tabs::new(titles)
         .select(app.tab.index())
-        .block(Block::default().borders(Borders::ALL).title(" Loom Memory "))
+        .block(Block::default().borders(Borders::ALL).title(" Trace Memory "))
         .style(Style::default().fg(Color::Gray))
         .highlight_style(
             Style::default()
@@ -833,19 +833,19 @@ fn draw_ui(
     // Main content area
     match &app.mode {
         AppMode::Browse => match app.tab {
-            LoomTab::Overview => draw_overview(f, chunks[1], cfg, app),
-            LoomTab::Sources => draw_sources(f, chunks[1], &mut app.sources_state),
-            LoomTab::Notes => draw_notes_panel(f, chunks[1], app),
-            LoomTab::Packages => draw_packages(f, chunks[1], app),
-            LoomTab::EditLog => draw_edit_log(f, chunks[1], &app.audit, app.audit_scroll),
+            TraceTab::Overview => draw_overview(f, chunks[1], cfg, app),
+            TraceTab::Sources => draw_sources(f, chunks[1], &mut app.sources_state),
+            TraceTab::Notes => draw_notes_panel(f, chunks[1], app),
+            TraceTab::Packages => draw_packages(f, chunks[1], app),
+            TraceTab::EditLog => draw_edit_log(f, chunks[1], &app.audit, app.audit_scroll),
         },
         AppMode::ViewDetail => draw_note_detail(f, chunks[1], app),
         AppMode::PackageDetail => draw_package_detail(f, chunks[1], app),
         AppMode::EditForm(_) | AppMode::DeleteConfirm(_) | AppMode::SourceDeleteConfirm(_) => {
             // Draw the current tab as background, then overlay the modal
             match app.tab {
-                LoomTab::Notes => draw_notes_panel(f, chunks[1], app),
-                LoomTab::Sources => draw_sources(f, chunks[1], &mut app.sources_state),
+                TraceTab::Notes => draw_notes_panel(f, chunks[1], app),
+                TraceTab::Sources => draw_sources(f, chunks[1], &mut app.sources_state),
                 _ => {}
             }
             match &app.mode {
@@ -881,16 +881,16 @@ fn draw_ui(
             " y: confirm delete   n/Esc: cancel"
         }
         AppMode::Browse => match app.tab {
-            LoomTab::Notes => {
+            TraceTab::Notes => {
                 " ↑↓/jk: nav   Enter: view   n: new   e: edit   d: delete   r: reload   h/l: tabs   q: quit"
             }
-            LoomTab::Sources => {
+            TraceTab::Sources => {
                 " ↑↓/jk: nav   s: set default   d: remove   r: reload   h/l: tabs   q: quit"
             }
-            LoomTab::Packages => {
+            TraceTab::Packages => {
                 " ↑↓/jk: nav   Enter: detail   r: reload   h/l: tabs   q: quit"
             }
-            LoomTab::EditLog => {
+            TraceTab::EditLog => {
                 " ↑↓/jk: scroll   g: top   G: bottom   r: reload   h/l: tabs   q: quit"
             }
             _ => " 1-5: tabs   h/l: switch tab   q: quit",
@@ -917,7 +917,7 @@ fn draw_ui(
 fn draw_overview(
     f: &mut ratatui::Frame,
     area: Rect,
-    cfg: &crate::loom::types::LoomConfig,
+    cfg: &crate::trace::types::TraceConfig,
     app: &App,
 ) {
     let src_count = cfg.sources.len().to_string();
@@ -949,7 +949,7 @@ fn draw_sources(f: &mut ratatui::Frame, area: Rect, state: &mut ListState) {
     let cfg = storage::load_config().unwrap_or_default();
     let items: Vec<ListItem> = if cfg.sources.is_empty() {
         vec![ListItem::new(
-            "  No sources configured. Run: infynon loom source add-redis / add-sql",
+            "  No sources configured. Run: infynon trace source add-redis / add-sql",
         )]
     } else {
         cfg.sources
@@ -1445,10 +1445,10 @@ fn centered_rect(pct_x: u16, pct_y: u16, r: Rect) -> Rect {
         .split(vert[1])[1]
 }
 
-fn parse_layer(v: &str) -> Result<LoomLayer, String> {
+fn parse_layer(v: &str) -> Result<TraceLayer, String> {
     v.parse().map_err(|_| format!("Invalid layer '{}'. Use canonical | team | user", v))
 }
 
-fn parse_scope(v: &str) -> Result<LoomScope, String> {
+fn parse_scope(v: &str) -> Result<TraceScope, String> {
     v.parse().map_err(|_| format!("Invalid scope '{}'. Use repo | branch | pr | file | user | session | package", v))
 }
