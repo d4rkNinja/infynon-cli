@@ -94,22 +94,43 @@ fn render_graph_canvas(f: &mut Frame, app: &ApiApp, area: Rect) {
     let total_graph_w = num_cols * node_w + num_cols.saturating_sub(1) * H_GAP;
     let total_graph_h = num_layers * NODE_H + num_layers.saturating_sub(1) * V_GAP;
     let x_offset = inner.width.saturating_sub(total_graph_w) / 2;
-    let y_offset = inner.height.saturating_sub(total_graph_h) / 2;
 
-    // Helper closure to get node rect
-    let get_node_rect = |col: usize, layer: usize| -> Rect {
+    // Auto-scroll: center the graph when it fits; scroll to keep the selected
+    // node fully visible when the graph is taller than the viewport.
+    let y_offset: i32 = if total_graph_h <= inner.height {
+        (inner.height.saturating_sub(total_graph_h) / 2) as i32
+    } else if let Some(sel) = app.graph_selected_id.as_ref()
+        .and_then(|id| app.graph_layout.iter().find(|g| &g.node_id == id))
+    {
+        let node_stride = (NODE_H + V_GAP) as i32;
+        let sel_top = sel.layer as i32 * node_stride;
+        // Ideal offset: center the selected node in the viewport
+        let ideal = -(sel_top - (inner.height as i32 / 2 - NODE_H as i32 / 2));
+        let min_offset = -(total_graph_h as i32 - inner.height as i32);
+        ideal.clamp(min_offset, 0)
+    } else {
+        0
+    };
+
+    // Helper closure to get node rect.
+    // Returns None for nodes fully outside the visible viewport.
+    let get_node_rect = |col: usize, layer: usize| -> Option<Rect> {
         let x = inner.x + x_offset + col as u16 * (node_w + H_GAP);
-        let y = inner.y + y_offset + layer as u16 * (NODE_H + V_GAP);
-        Rect { x, y, width: node_w, height: NODE_H }
+        let raw_y = inner.y as i32 + y_offset + layer as i32 * (NODE_H + V_GAP) as i32;
+        // Skip nodes whose top is above or at/below the inner area
+        if raw_y < inner.y as i32 || raw_y >= inner.bottom() as i32 {
+            return None;
+        }
+        Some(Rect { x, y: raw_y as u16, width: node_w, height: NODE_H })
     };
 
     // ── Pass 1: draw connections (behind nodes) ──────────────────────────
     if let Some(flow) = flow {
         for gnode in &app.graph_layout {
-            let src_rect = get_node_rect(gnode.col, gnode.layer);
+            let Some(src_rect) = get_node_rect(gnode.col, gnode.layer) else { continue };
             for edge in flow.successors(&gnode.node_id) {
                 if let Some(target) = app.graph_layout.iter().find(|g| g.node_id == edge.to) {
-                    let tgt_rect = get_node_rect(target.col, target.layer);
+                    let Some(tgt_rect) = get_node_rect(target.col, target.layer) else { continue };
                     draw_connection(f, inner, src_rect, tgt_rect, node_w, &edge.carry);
                 }
             }
@@ -118,7 +139,7 @@ fn render_graph_canvas(f: &mut Frame, app: &ApiApp, area: Rect) {
 
     // ── Pass 2: draw node cards (on top of connections) ──────────────────
     for gnode in &app.graph_layout {
-        let rect = get_node_rect(gnode.col, gnode.layer);
+        let Some(rect) = get_node_rect(gnode.col, gnode.layer) else { continue };
         if rect.x + rect.width > inner.right() || rect.y + rect.height > inner.bottom() {
             continue;
         }
