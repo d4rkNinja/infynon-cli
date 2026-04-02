@@ -2,6 +2,9 @@
 
 Package intelligence wrapper for secure installation. Checks packages against OSV before passing through to the native package manager.
 
+If you want package ownership and team memory around these installs, pair Loom with the `code-guardian` Claude Code skill:
+`https://github.com/d4rkNinja/code-guardian`
+
 ## Usage
 
 ```

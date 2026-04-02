@@ -1,10 +1,85 @@
 # INFYNON
 
-CLI for package intelligence, API flow testing, and database-backed coding memory.
+[![npm version](https://img.shields.io/npm/v/infynon?style=flat-square&logo=npm)](https://www.npmjs.com/package/infynon)
+[![Crates.io](https://img.shields.io/crates/v/infynon?style=flat-square&logo=rust)](https://crates.io/crates/infynon)
+[![MIT License](https://img.shields.io/badge/license-MIT-0f172a?style=flat-square)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-cli.infynon.com-14b8a6?style=flat-square)](https://cli.infynon.com/docs)
+[![Claude Code Skill](https://img.shields.io/badge/Claude%20Code-code--guardian-7c3aed?style=flat-square)](https://github.com/d4rkNinja/code-guardian)
 
-## Current Areas
+INFYNON is a Rust CLI for three modern development problems:
+
+- package risk
+- API flow verification
+- shared coding memory
+
+If your team installs dependencies fast, tests APIs through real workflows, and keeps losing context across branches, PRs, and machines, INFYNON is built for that exact shape of work.
+
+Website: `https://cli.infynon.com`
+
+Recommended Claude Code skill for Loom workflows:
+`https://github.com/d4rkNinja/code-guardian`
+
+## Why I Built INFYNON
+
+Most tooling only covers one slice of the workflow.
+
+- dependency scanners tell you what is risky
+- API tools let you hit endpoints
+- notes and handoffs live in chat, PR comments, or someone's head
+
+That leaves a gap.
+
+Modern teams need one place to:
+
+- inspect dependency risk before it spreads
+- test behavior across real request chains
+- keep shared repo memory visible and queryable
+
+That is why INFYNON is organized into three product areas instead of one overloaded command set.
+
+## What INFYNON Includes
+
+| Area | Command | Best For | What It Solves |
+|---|---|---|---|
+| Package intelligence | `infynon pkg` | scanning, safe installs, remediation, monitoring | risky dependencies, invisible installs, package ownership |
+| API flow testing | `infynon weave` | multi-step API execution and validation | brittle request scripts, missing flow context, runtime probes |
+| Shared coding memory | `infynon loom` | handoffs, package notes, repo context, TUI inspection | lost context across people, PRs, branches, and machines |
+
+## Recommended With Loom
+
+If you want Loom to feel native inside Claude Code, use the `code-guardian` skill:
+
+- skill repo: `https://github.com/d4rkNinja/code-guardian`
+- use it to retrieve the latest Loom context before work starts
+- use it to write back team or package memory after work ends
+- connect it with Claude Code hooks so the memory flow becomes automatic
+
+Practical setup:
+
+```text
+Claude Code + code-guardian skill + INFYNON Loom
+```
+
+That gives you:
+
+- `infynon loom` for storage, retrieval, sync, and TUI inspection
+- `code-guardian` for agent-side memory retrieval and update behavior
+
+## Quick Comparison
+
+| Problem | Without INFYNON | With INFYNON |
+|---|---|---|
+| Package installs | you install first, inspect later | `pkg` lets you scan, audit, and control install-time workflows |
+| API verification | isolated requests miss full behavior | `weave` models full flows with context threading |
+| Repo memory | knowledge gets lost in chat and PR comments | `loom` keeps memory structured, searchable, and inspectable |
+
+## Product Areas
 
 ### `infynon pkg`
+
+Use `pkg` when the question is about dependencies.
+
+What it gives you:
 
 - CVE scanning across 14 ecosystems
 - secure install wrapper
@@ -19,6 +94,10 @@ infynon pkg fix --auto
 ```
 
 ### `infynon weave`
+
+Use `weave` when the question is about real API behavior.
+
+What it gives you:
 
 - node-based API flow testing
 - context threading between requests
@@ -36,15 +115,17 @@ infynon weave ai probe checkout
 
 ### `infynon loom`
 
-Shared coding memory with Redis or SQL backends.
+Use `loom` when the question is about shared team context.
+
+What it gives you:
 
 - Redis for fast live retrieval and session-style coordination
 - SQL for durable notes, structured queries, and long-term canonical memory
-- repo-level default user for note attribution
 - canonical / team / user memory layers
 - PR / branch / file / package notes
 - compaction and reconciliation
 - TUI-based inspection, note browsing, and package risk ownership
+- first-class integration path with the `code-guardian` Claude Code skill
 
 ```bash
 infynon loom init --owner team --user alien
@@ -53,7 +134,12 @@ infynon loom note add repo-handoff --title "Auth changed" --body "Refresh moved 
 infynon loom sync --direction both
 ```
 
-## Root Command Style
+Claude Code companion skill:
+`https://github.com/d4rkNinja/code-guardian`
+
+## Command Style
+
+INFYNON keeps the root command simple:
 
 ```bash
 infynon pkg <subcommand>
@@ -61,7 +147,7 @@ infynon weave <subcommand>
 infynon loom <subcommand>
 ```
 
-## Installation
+## Install
 
 ### npm
 
@@ -87,8 +173,42 @@ irm https://raw.githubusercontent.com/d4rkNinja/infynon-cli/main/scripts/install
 cargo install --git https://github.com/d4rkNinja/infynon-cli
 ```
 
-## Notes
+## Docs
 
-- The repo is currently centered on `pkg`, `weave`, and `loom`.
-- Loom docs: [docs/loom.md](docs/loom.md)
-- Command reference: [docs/commands.md](docs/commands.md)
+- docs home: `https://cli.infynon.com/docs`
+- command reference: [docs/commands.md](docs/commands.md)
+- Loom guide: [docs/loom.md](docs/loom.md)
+- Weave guide: [docs/weave.md](docs/weave.md)
+- scan guide: [docs/scan.md](docs/scan.md)
+- install guide: [docs/install.md](docs/install.md)
+
+Loom companion skill:
+- `code-guardian`: `https://github.com/d4rkNinja/code-guardian`
+
+## Comparison Blogs
+
+These help explain the product quickly to people comparing tools or workflows:
+
+- one CLI vs fragmented tooling:
+  `https://cli.infynon.com/blog/why-infynon-over-fragmented-tooling`
+- `pkg` vs `npm audit`:
+  `https://cli.infynon.com/blog/infynon-vs-npm-audit`
+- `pkg` vs `Snyk CLI`:
+  `https://cli.infynon.com/blog/infynon-vs-snyk-cli`
+- `pkg` vs `Socket.dev`:
+  `https://cli.infynon.com/blog/infynon-vs-socket-dev`
+- why Loom exists:
+  `https://cli.infynon.com/blog/why-i-built-loom`
+- why coding memory matters:
+  `https://cli.infynon.com/blog/agentic-coding-context-problem`
+
+Recommended pairing:
+- `code-guardian` gives Claude Code a practical Loom bridge:
+  `https://github.com/d4rkNinja/code-guardian`
+
+## Good Fit For
+
+- teams doing AI-assisted or high-speed coding
+- backend teams testing stateful API workflows
+- repos where package ownership and handoff memory matter
+- developers who want one CLI instead of three disconnected tools

@@ -2,6 +2,9 @@
 
 Scan your project's dependency tree for known CVEs using the OSV.dev database.
 
+If you also use Loom with Claude Code, pair it with the `code-guardian` skill so package findings can connect back to shared memory:
+`https://github.com/d4rkNinja/code-guardian`
+
 ## Usage
 
 ```
