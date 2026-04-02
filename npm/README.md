@@ -12,8 +12,8 @@ INFYNON is a CLI for:
 [![Docs](https://img.shields.io/badge/docs-cli.infynon.com-14b8a6?style=flat-square)](https://cli.infynon.com/docs)
 [![Claude Code Skill](https://img.shields.io/badge/Claude%20Code-code--guardian-7c3aed?style=flat-square)](https://github.com/d4rkNinja/code-guardian)
 
-Website: `https://cli.infynon.com`
-Recommended Loom skill: `https://github.com/d4rkNinja/code-guardian`
+Website: [cli.infynon.com](https://cli.infynon.com)
+Recommended Loom skill: [d4rkNinja/code-guardian](https://github.com/d4rkNinja/code-guardian)
 
 ## Install
 
@@ -45,7 +45,7 @@ Instead of solving only one of those, INFYNON groups them under one CLI.
 
 Loom works best with the `code-guardian` skill when you want Claude Code to pull the latest shared memory before work and update it again after the task.
 
-- skill repo: `https://github.com/d4rkNinja/code-guardian`
+- skill repo: [d4rkNinja/code-guardian](https://github.com/d4rkNinja/code-guardian)
 - good fit for Claude Code hook-based Loom workflows
 - gives Loom a practical agent-side bridge instead of leaving memory updates fully manual
 
@@ -111,7 +111,53 @@ infynon loom sync --direction both
 ```
 
 Claude Code companion:
-`https://github.com/d4rkNinja/code-guardian`
+[d4rkNinja/code-guardian](https://github.com/d4rkNinja/code-guardian)
+
+## Head-to-Head Comparison
+
+### `infynon pkg` vs Alternatives
+
+| Feature | infynon pkg | npm audit | Snyk CLI | Socket CLI | OSV-scanner |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Secure install wrapper | ✓ | — | — | ~ npm only | — |
+| 14 ecosystems in one scan | ✓ | — | ~ | ~ | ~ |
+| Block installs via strict mode | ✓ | — | — | ~ npm only | — |
+| Scheduled CLI monitoring | ✓ | — | ~ server-side | — | — |
+| PDF + Markdown report export | ✓ | — | — | — | — |
+| Package version diff | ✓ | — | — | — | — |
+| Per-package install decisions | ✓ | — | — | — | — |
+| Auto-fix / remediation | ✓ | ~ basic | ✓ | ✓ | — |
+| No SaaS account required | ✓ | ✓ | — | ~ | ✓ |
+
+### `infynon weave` vs Alternatives
+
+| Feature | infynon weave | Postman | Hoppscotch | Bruno | Insomnia |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Terminal TUI | ✓ | — | — | — | — |
+| Runtime prompts (OTP / 2FA) | ✓ | — | ~ | — | — |
+| Built-in AI security probes | ✓ | — | — | — | — |
+| AI-assisted flow creation (CLI) | ✓ | ~ GUI only | ~ GUI / alpha | — | — |
+| Visual flow graph in terminal | ✓ | — | — | — | — |
+| Run diff (side-by-side) | ✓ | — | — | ~ paid | — |
+| Context threading between nodes | ✓ | ✓ | ✓ | ✓ | ✓ |
+| OpenAPI / Swagger import | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Offline, no account required | ✓ | — | ✓ | ✓ | ~ |
+
+### `infynon loom` vs Alternatives
+
+| Feature | infynon loom | GitHub Wiki | Notion | Confluence | Obsidian |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Native CLI | ✓ | — | ~ 3rd party | ~ ACLI | ✓ |
+| Branch / file / package scoping | ✓ | — | — | — | — |
+| Package ownership tracking | ✓ | — | — | — | — |
+| Redis + SQL backend choice | ✓ | — | — | — | — |
+| Multi-layer memory (team / user / canonical) | ✓ | — | — | — | — |
+| Terminal TUI inspection | ✓ | — | — | — | — |
+| Claude Code native integration | ✓ | — | ~ MCP | — | ~ |
+| Structured retrieval by scope | ✓ | — | — | — | — |
+| Bidirectional sync via CLI | ✓ | — | ~ | ~ | ✓ |
+
+`✓` = supported · `~` = partial or limited · `—` = not supported
 
 ## Backend Choice For Loom
 
@@ -122,29 +168,23 @@ Claude Code companion:
 
 ## Documentation
 
-- docs home: `https://cli.infynon.com/docs`
+- docs home: [cli.infynon.com/docs](https://cli.infynon.com/docs)
 - root README: `README.md`
 - command reference: `docs/commands.md`
 - Loom guide: `docs/loom.md`
 - Weave guide: `docs/weave.md`
-- Claude Code Loom skill: `https://github.com/d4rkNinja/code-guardian`
+- Claude Code Loom skill: [d4rkNinja/code-guardian](https://github.com/d4rkNinja/code-guardian)
 
 ## Comparison Blogs
 
 Useful reading if you are comparing INFYNON to existing tools or workflows:
 
-- one CLI vs fragmented tooling:
-  `https://cli.infynon.com/blog/why-infynon-over-fragmented-tooling`
-- `pkg` vs `npm audit`:
-  `https://cli.infynon.com/blog/infynon-vs-npm-audit`
-- `pkg` vs `Snyk CLI`:
-  `https://cli.infynon.com/blog/infynon-vs-snyk-cli`
-- `pkg` vs `Socket.dev`:
-  `https://cli.infynon.com/blog/infynon-vs-socket-dev`
-- Loom product story:
-  `https://cli.infynon.com/blog/why-i-built-loom`
-- coding memory problem story:
-  `https://cli.infynon.com/blog/agentic-coding-context-problem`
+- [One CLI vs fragmented tooling](https://cli.infynon.com/blog/why-infynon-over-fragmented-tooling)
+- [`pkg` vs `npm audit`](https://cli.infynon.com/blog/infynon-vs-npm-audit)
+- [`pkg` vs Snyk CLI](https://cli.infynon.com/blog/infynon-vs-snyk-cli)
+- [`pkg` vs Socket.dev](https://cli.infynon.com/blog/infynon-vs-socket-dev)
+- [Loom product story](https://cli.infynon.com/blog/why-i-built-loom)
+- [Coding memory problem story](https://cli.infynon.com/blog/agentic-coding-context-problem)
 
 ## Recommended Stack
 

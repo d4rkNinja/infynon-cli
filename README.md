@@ -14,10 +14,10 @@ INFYNON is a Rust CLI for three modern development problems:
 
 If your team installs dependencies fast, tests APIs through real workflows, and keeps losing context across branches, PRs, and machines, INFYNON is built for that exact shape of work.
 
-Website: `https://cli.infynon.com`
+Website: [cli.infynon.com](https://cli.infynon.com)
 
 Recommended Claude Code skill for Loom workflows:
-`https://github.com/d4rkNinja/code-guardian`
+[d4rkNinja/code-guardian](https://github.com/d4rkNinja/code-guardian)
 
 ## Why I Built INFYNON
 
@@ -49,7 +49,7 @@ That is why INFYNON is organized into three product areas instead of one overloa
 
 If you want Loom to feel native inside Claude Code, use the `code-guardian` skill:
 
-- skill repo: `https://github.com/d4rkNinja/code-guardian`
+- skill repo: [d4rkNinja/code-guardian](https://github.com/d4rkNinja/code-guardian)
 - use it to retrieve the latest Loom context before work starts
 - use it to write back team or package memory after work ends
 - connect it with Claude Code hooks so the memory flow becomes automatic
@@ -135,7 +135,53 @@ infynon loom sync --direction both
 ```
 
 Claude Code companion skill:
-`https://github.com/d4rkNinja/code-guardian`
+[d4rkNinja/code-guardian](https://github.com/d4rkNinja/code-guardian)
+
+## Head-to-Head Comparison
+
+### `infynon pkg` vs Alternatives
+
+| Feature | infynon pkg | npm audit | Snyk CLI | Socket CLI | OSV-scanner |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Secure install wrapper | ✓ | — | — | ~ npm only | — |
+| 14 ecosystems in one scan | ✓ | — | ~ | ~ | ~ |
+| Block installs via strict mode | ✓ | — | — | ~ npm only | — |
+| Scheduled CLI monitoring | ✓ | — | ~ server-side | — | — |
+| PDF + Markdown report export | ✓ | — | — | — | — |
+| Package version diff | ✓ | — | — | — | — |
+| Per-package install decisions | ✓ | — | — | — | — |
+| Auto-fix / remediation | ✓ | ~ basic | ✓ | ✓ | — |
+| No SaaS account required | ✓ | ✓ | — | ~ | ✓ |
+
+### `infynon weave` vs Alternatives
+
+| Feature | infynon weave | Postman | Hoppscotch | Bruno | Insomnia |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Terminal TUI | ✓ | — | — | — | — |
+| Runtime prompts (OTP / 2FA) | ✓ | — | ~ | — | — |
+| Built-in AI security probes | ✓ | — | — | — | — |
+| AI-assisted flow creation (CLI) | ✓ | ~ GUI only | ~ GUI / alpha | — | — |
+| Visual flow graph in terminal | ✓ | — | — | — | — |
+| Run diff (side-by-side) | ✓ | — | — | ~ paid | — |
+| Context threading between nodes | ✓ | ✓ | ✓ | ✓ | ✓ |
+| OpenAPI / Swagger import | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Offline, no account required | ✓ | — | ✓ | ✓ | ~ |
+
+### `infynon loom` vs Alternatives
+
+| Feature | infynon loom | GitHub Wiki | Notion | Confluence | Obsidian |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Native CLI | ✓ | — | ~ 3rd party | ~ ACLI | ✓ |
+| Branch / file / package scoping | ✓ | — | — | — | — |
+| Package ownership tracking | ✓ | — | — | — | — |
+| Redis + SQL backend choice | ✓ | — | — | — | — |
+| Multi-layer memory (team / user / canonical) | ✓ | — | — | — | — |
+| Terminal TUI inspection | ✓ | — | — | — | — |
+| Claude Code native integration | ✓ | — | ~ MCP | — | ~ |
+| Structured retrieval by scope | ✓ | — | — | — | — |
+| Bidirectional sync via CLI | ✓ | — | ~ | ~ | ✓ |
+
+`✓` = supported · `~` = partial or limited · `—` = not supported
 
 ## Command Style
 
@@ -175,7 +221,7 @@ cargo install --git https://github.com/d4rkNinja/infynon-cli
 
 ## Docs
 
-- docs home: `https://cli.infynon.com/docs`
+- docs home: [cli.infynon.com/docs](https://cli.infynon.com/docs)
 - command reference: [docs/commands.md](docs/commands.md)
 - Loom guide: [docs/loom.md](docs/loom.md)
 - Weave guide: [docs/weave.md](docs/weave.md)
@@ -183,28 +229,21 @@ cargo install --git https://github.com/d4rkNinja/infynon-cli
 - install guide: [docs/install.md](docs/install.md)
 
 Loom companion skill:
-- `code-guardian`: `https://github.com/d4rkNinja/code-guardian`
+- [code-guardian](https://github.com/d4rkNinja/code-guardian)
 
 ## Comparison Blogs
 
 These help explain the product quickly to people comparing tools or workflows:
 
-- one CLI vs fragmented tooling:
-  `https://cli.infynon.com/blog/why-infynon-over-fragmented-tooling`
-- `pkg` vs `npm audit`:
-  `https://cli.infynon.com/blog/infynon-vs-npm-audit`
-- `pkg` vs `Snyk CLI`:
-  `https://cli.infynon.com/blog/infynon-vs-snyk-cli`
-- `pkg` vs `Socket.dev`:
-  `https://cli.infynon.com/blog/infynon-vs-socket-dev`
-- why Loom exists:
-  `https://cli.infynon.com/blog/why-i-built-loom`
-- why coding memory matters:
-  `https://cli.infynon.com/blog/agentic-coding-context-problem`
+- [One CLI vs fragmented tooling](https://cli.infynon.com/blog/why-infynon-over-fragmented-tooling)
+- [`pkg` vs `npm audit`](https://cli.infynon.com/blog/infynon-vs-npm-audit)
+- [`pkg` vs Snyk CLI](https://cli.infynon.com/blog/infynon-vs-snyk-cli)
+- [`pkg` vs Socket.dev](https://cli.infynon.com/blog/infynon-vs-socket-dev)
+- [Why Loom exists](https://cli.infynon.com/blog/why-i-built-loom)
+- [Why coding memory matters](https://cli.infynon.com/blog/agentic-coding-context-problem)
 
 Recommended pairing:
-- `code-guardian` gives Claude Code a practical Loom bridge:
-  `https://github.com/d4rkNinja/code-guardian`
+- [code-guardian](https://github.com/d4rkNinja/code-guardian) — gives Claude Code a practical Loom bridge
 
 ## Good Fit For
 
