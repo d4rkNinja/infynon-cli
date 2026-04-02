@@ -24,7 +24,7 @@ Desktop.ini
 infynon-scan-report.md
 infynon-scan-report.pdf
 .infynon/
-
+.claude
 # Logs
 *.log
 concept.md
