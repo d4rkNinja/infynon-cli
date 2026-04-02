@@ -250,7 +250,7 @@ Claude Code companion:
 - [`pkg` vs `npm audit`](https://cli.infynon.com/blog/infynon-vs-npm-audit)
 - [`pkg` vs Snyk CLI](https://cli.infynon.com/blog/infynon-vs-snyk-cli)
 - [`pkg` vs Socket.dev](https://cli.infynon.com/blog/infynon-vs-socket-dev)
-- [Why Trace exists](https://cli.infynon.com/blog/why-i-built-loom)
+- [Why Trace exists](https://cli.infynon.com/blog/why-i-built-trace)
 - [Why repo memory matters](https://cli.infynon.com/blog/agentic-coding-context-problem)
 
 Claude Code companion:
