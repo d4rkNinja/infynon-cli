@@ -95,9 +95,12 @@ impl super::app_state::ApiApp {
             use crate::api::executor::{execute_flow, FlowExecuteOptions};
             let tx2 = tx.clone();
             let tx_prompt = tx.clone();
+            // Pre-seed context with env vars so {VAR} placeholders already in env
+            // don't trigger prompts unnecessarily.
+            let initial_context = crate::api::variables::load_env_context();
             let result = execute_flow(&flow, &nodes, FlowExecuteOptions {
                 base_url,
-                initial_context: std::collections::HashMap::new(),
+                initial_context,
                 on_step: Some(Box::new(move |step| {
                     tx.send(LiveEvent::Step(step.clone())).ok();
                 })),
@@ -110,7 +113,12 @@ impl super::app_state::ApiApp {
                     reply_rx.recv().unwrap_or_default()
                 })),
             });
-            tx2.send(LiveEvent::Done { passed: result.passed }).ok();
+            let passed = result.passed;
+            // Persist run result to disk so future sessions can load it
+            crate::api::storage::save_run_result(&result).ok();
+            // Send full result to TUI so last_run is updated immediately
+            tx2.send(LiveEvent::FlowResult(result)).ok();
+            tx2.send(LiveEvent::Done { passed }).ok();
         });
 
         self.current_view = ApiView::Runner;
@@ -152,8 +160,9 @@ impl super::app_state::ApiApp {
 
         std::thread::spawn(move || {
             use crate::api::executor::execute_node;
-            use std::collections::HashMap;
-            let context: HashMap<String, serde_json::Value> = HashMap::new();
+            // Pre-seed context with env vars so {VAR} placeholders in the node
+            // that are already in the env file don't trigger prompts.
+            let context = crate::api::variables::load_env_context();
             let tx_prompt = tx.clone();
             let on_prompt = move |node_id: &str, inputs: &[crate::api::types::PromptInput]| {
                 tx_prompt.send(LiveEvent::NeedInput {
@@ -164,6 +173,20 @@ impl super::app_state::ApiApp {
             };
             let step = execute_node(&node, &context, &base_url, Some(&on_prompt));
             let passed = step.passed;
+            // Wrap single-node result in a FlowRunResult so it persists and shows in last_run
+            let result = crate::api::types::FlowRunResult {
+                run_id: format!("{}", chrono::Utc::now().timestamp_millis()),
+                flow_id: format!("node_{}", node.id),
+                flow_name: node.name.clone(),
+                started_at: chrono::Utc::now(),
+                finished_at: chrono::Utc::now(),
+                steps: vec![step.clone()],
+                passed,
+                base_url,
+                final_context: HashMap::new(),
+            };
+            crate::api::storage::save_run_result(&result).ok();
+            tx.send(LiveEvent::FlowResult(result)).ok();
             tx.send(LiveEvent::Step(step)).ok();
             tx.send(LiveEvent::Done { passed }).ok();
         });
@@ -196,6 +219,10 @@ impl super::app_state::ApiApp {
                         self.live_steps.remove(0);
                     }
                     self.live_steps.push(step);
+                }
+                LiveEvent::FlowResult(result) => {
+                    // Update last_run immediately with the just-completed run
+                    self.last_run = Some(result);
                 }
                 LiveEvent::Done { passed } => {
                     self.live_running = false;

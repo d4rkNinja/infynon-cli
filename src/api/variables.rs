@@ -1,10 +1,7 @@
 use std::collections::HashMap;
-use std::sync::OnceLock;
 use serde_json::Value;
 
 // ── .env file loader ──────────────────────────────────────────────────────────
-
-static DOTENV: OnceLock<HashMap<String, String>> = OnceLock::new();
 
 pub fn get_placeholder_regex() -> &'static regex::Regex {
     static PLACEHOLDER_RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
@@ -13,35 +10,35 @@ pub fn get_placeholder_regex() -> &'static regex::Regex {
     })
 }
 
-fn get_dotenv() -> &'static HashMap<String, String> {
-    DOTENV.get_or_init(|| {
-        let mut map = HashMap::new();
-        // Try .infynon/.env first (managed by `infynon weave env`), then fall back to root .env
-        let content = std::fs::read_to_string(".infynon/.env")
-            .or_else(|_| std::fs::read_to_string(".env"))
-            .unwrap_or_default();
-        for line in content.lines() {
-                let line = line.trim();
-                // Skip comments and empty lines
-                if line.is_empty() || line.starts_with('#') {
-                    continue;
-                }
-                if let Some(eq_pos) = line.find('=') {
-                    let key = line[..eq_pos].trim().to_string();
-                    let mut val = line[eq_pos + 1..].trim().to_string();
-                    // Strip surrounding quotes (single or double)
-                    if (val.starts_with('"') && val.ends_with('"'))
-                        || (val.starts_with('\'') && val.ends_with('\''))
-                    {
-                        val = val[1..val.len() - 1].to_string();
-                    }
-                    if !key.is_empty() {
-                        map.insert(key, val);
-                    }
-                }
+/// Read .infynon/.env (or .env) fresh every call so that env vars added via
+/// the TUI's Env tab are immediately visible to the executor without restart.
+fn get_dotenv() -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    // Try .infynon/.env first (managed by `infynon weave env`), then fall back to root .env
+    let content = std::fs::read_to_string(".infynon/.env")
+        .or_else(|_| std::fs::read_to_string(".env"))
+        .unwrap_or_default();
+    for line in content.lines() {
+        let line = line.trim();
+        // Skip comments and empty lines
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Some(eq_pos) = line.find('=') {
+            let key = line[..eq_pos].trim().to_string();
+            let mut val = line[eq_pos + 1..].trim().to_string();
+            // Strip surrounding quotes (single or double)
+            if (val.starts_with('"') && val.ends_with('"'))
+                || (val.starts_with('\'') && val.ends_with('\''))
+            {
+                val = val[1..val.len() - 1].to_string();
             }
-        map
-    })
+            if !key.is_empty() {
+                map.insert(key, val);
+            }
+        }
+    }
+    map
 }
 
 /// Look up an environment variable: first from .infynon/.env, then process env.
@@ -58,6 +55,18 @@ fn lookup_env_var(name: &str) -> Option<String> {
 /// Used by the prompt system to skip asking for vars that are already set.
 pub fn env_has_var(name: &str) -> bool {
     get_dotenv().contains_key(name) || std::env::var(name).is_ok()
+}
+
+/// Return all key-value pairs from the .env file (used for context pre-seeding).
+pub fn load_env_context() -> HashMap<String, serde_json::Value> {
+    get_dotenv()
+        .into_iter()
+        .map(|(k, v)| {
+            let val = serde_json::from_str::<serde_json::Value>(&v)
+                .unwrap_or_else(|_| serde_json::Value::String(v));
+            (k, val)
+        })
+        .collect()
 }
 
 fn substitute_env_pass(s: &str) -> String {
