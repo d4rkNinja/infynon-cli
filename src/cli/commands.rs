@@ -432,11 +432,14 @@ fn ask_vuln_decisions(
     use std::io::{self, Write};
 
     // Build: package_name → best fixed_version (highest from all CVEs)
+    // Also track whether the fix was verified clean by OSV.
     let mut fix_map: HashMap<String, Option<String>> = HashMap::new();
+    let mut fix_clean_map: HashMap<String, bool> = HashMap::new();
     for h in hits {
         let entry = fix_map.entry(h.package.clone()).or_insert(None);
         if h.fixed_version.is_some() {
             *entry = h.fixed_version.clone();
+            fix_clean_map.entry(h.package.clone()).or_insert(h.fix_is_clean);
         }
     }
 
@@ -458,9 +461,12 @@ fn ask_vuln_decisions(
         let cves: Vec<_> = hits.iter().filter(|h| &h.package == name).collect();
         let worst_sev = cves.iter().map(|h| h.severity).fold("INFORMATIONAL", scan::escalate_severity);
         let sev_colored = scan::severity_colored(worst_sev);
-        let fix_hint = fixed.as_deref()
-            .map(|f| format!(" → safe: {}", f.bright_green()))
-            .unwrap_or_else(|| " (no fix available)".truecolor(160,100,50).to_string());
+        let is_clean = fix_clean_map.get(name).copied().unwrap_or(true);
+        let fix_hint = match fixed.as_deref() {
+            Some(f) if is_clean => format!(" → safe: {}", f.bright_green()),
+            Some(f)             => format!(" → reduced risk: {} {}", f.bright_yellow(), "(still has CVEs)".truecolor(160,120,50)),
+            None                => " (no fix available)".truecolor(160,100,50).to_string(),
+        };
         println!(
             "  {}  {}  [{}]  {} CVE(s){}",
             format!("{:>2}.", idx+1).truecolor(80,80,100),
@@ -528,13 +534,23 @@ fn ask_vuln_decisions(
                 "\n  Package: {}",
                 name.bold().bright_white()
             );
+            let is_clean = fix_clean_map.get(name).copied().unwrap_or(true);
             match &fixed {
-                Some(f) => println!(
-                    "  {}  Install anyway   {}  Skip   {}  Install {}",
+                Some(f) if is_clean => println!(
+                    "  {}  Install anyway   {}  Skip   {}  Install {} {}",
                     "[1]".bold().bright_yellow(),
                     "[2]".bold().bright_red(),
                     "[3]".bold().bright_green(),
-                    f.bright_green().bold()
+                    f.bright_green().bold(),
+                    "(verified clean)".bright_green()
+                ),
+                Some(f) => println!(
+                    "  {}  Install anyway   {}  Skip   {}  Install {} {}",
+                    "[1]".bold().bright_yellow(),
+                    "[2]".bold().bright_red(),
+                    "[3]".bold().bright_yellow(),
+                    f.bright_yellow().bold(),
+                    "(reduces risk, still has CVEs)".truecolor(180,140,50)
                 ),
                 None => println!(
                     "  {}  Install anyway (no fix available)   {}  Skip",
