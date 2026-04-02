@@ -698,6 +698,17 @@ pub fn severity_colored(sev: &str) -> String {
     }
 }
 
+/// Badge-style severity label with background color (used in install-time warnings).
+fn severity_badge(sev: &str) -> String {
+    match sev {
+        "CRITICAL" => format!(" {} ", sev).bold().on_bright_red().white().to_string(),
+        "HIGH"     => format!(" {} ", sev).bold().on_red().white().to_string(),
+        "MEDIUM"   => format!(" {} ", sev).bold().on_yellow().black().to_string(),
+        "LOW"      => format!(" {} ", sev).bold().on_bright_green().black().to_string(),
+        _          => format!(" {} ", sev).truecolor(120,120,140).to_string(),
+    }
+}
+
 pub fn upgrade_cmd(pkg: &scanner::LockedPackage, fixed: &str) -> String {
     // Determine the actual CLI tool from the source lock file, not just the ecosystem
     let source = pkg.source.as_str();
@@ -964,13 +975,7 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str, agent: b
         // same validated safe version so the user receives one consistent recommendation.
         for info in &cve_infos {
             if !agent {
-                let sev_label = match info.sev {
-                    "CRITICAL" => format!(" {} ", info.sev).bold().on_bright_red().white().to_string(),
-                    "HIGH"     => format!(" {} ", info.sev).bold().on_red().white().to_string(),
-                    "MEDIUM"   => format!(" {} ", info.sev).bold().on_yellow().black().to_string(),
-                    "LOW"      => format!(" {} ", info.sev).bold().on_bright_green().black().to_string(),
-                    _          => format!(" {} ", info.sev).truecolor(120,120,140).to_string(),
-                };
+                let sev_label = severity_badge(info.sev);
                 println!(
                     "    {}  {}  {}",
                     sev_label,

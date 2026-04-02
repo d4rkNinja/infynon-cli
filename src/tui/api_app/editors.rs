@@ -174,11 +174,9 @@ impl super::app_state::ApiApp {
             } else {
                 raw
             };
-            // Try to parse as a typed JSON value (number, bool, null) so that body
-        // substitution preserves the right type. Fall back to String if not parseable.
-        let json_val = serde_json::from_str::<serde_json::Value>(&val)
-            .unwrap_or_else(|_| serde_json::Value::String(val));
-        map.insert(pi.var.clone(), json_val);
+            let json_val = serde_json::from_str::<serde_json::Value>(&val)
+                .unwrap_or_else(|_| serde_json::Value::String(val));
+            map.insert(pi.var.clone(), json_val);
         }
         if let Some(tx) = &self.prompt_reply_tx {
             tx.send(map).ok();

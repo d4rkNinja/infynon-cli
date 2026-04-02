@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Mutex;
 use serde_json::Value;
 
 // ── .env file loader ──────────────────────────────────────────────────────────
@@ -10,24 +11,51 @@ pub fn get_placeholder_regex() -> &'static regex::Regex {
     })
 }
 
-/// Read .infynon/.env (or .env) fresh every call so that env vars added via
-/// the TUI's Env tab are immediately visible to the executor without restart.
+/// Cached .env contents, invalidated when the file's modification time changes.
+/// Avoids re-reading the file on every `{$VAR}` substitution (~25-35 times per
+/// node execution) while still picking up changes made via the TUI Env tab.
+struct DotenvCache {
+    data: HashMap<String, String>,
+    mtime: Option<std::time::SystemTime>,
+}
+
+static DOTENV_CACHE: Mutex<Option<DotenvCache>> = Mutex::new(None);
+
 fn get_dotenv() -> HashMap<String, String> {
+    let env_path = std::path::Path::new(".infynon/.env");
+    let fallback = std::path::Path::new(".env");
+    let path = if env_path.exists() { env_path } else { fallback };
+
+    let current_mtime = std::fs::metadata(path).and_then(|m| m.modified()).ok();
+
+    // Fast path: return cached data if the file hasn't changed
+    if let Ok(guard) = DOTENV_CACHE.lock() {
+        if let Some(ref cache) = *guard {
+            if cache.mtime == current_mtime {
+                return cache.data.clone();
+            }
+        }
+    }
+
+    // File changed (or first load) — re-read and cache
+    let data = parse_dotenv_file(path);
+    if let Ok(mut guard) = DOTENV_CACHE.lock() {
+        *guard = Some(DotenvCache { data: data.clone(), mtime: current_mtime });
+    }
+    data
+}
+
+fn parse_dotenv_file(path: &std::path::Path) -> HashMap<String, String> {
     let mut map = HashMap::new();
-    // Try .infynon/.env first (managed by `infynon weave env`), then fall back to root .env
-    let content = std::fs::read_to_string(".infynon/.env")
-        .or_else(|_| std::fs::read_to_string(".env"))
-        .unwrap_or_default();
+    let content = std::fs::read_to_string(path).unwrap_or_default();
     for line in content.lines() {
         let line = line.trim();
-        // Skip comments and empty lines
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
         if let Some(eq_pos) = line.find('=') {
             let key = line[..eq_pos].trim().to_string();
             let mut val = line[eq_pos + 1..].trim().to_string();
-            // Strip surrounding quotes (single or double)
             if (val.starts_with('"') && val.ends_with('"'))
                 || (val.starts_with('\'') && val.ends_with('\''))
             {

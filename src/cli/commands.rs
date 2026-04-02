@@ -431,15 +431,13 @@ fn ask_vuln_decisions(
     use std::collections::HashMap;
     use std::io::{self, Write};
 
-    // Build: package_name → best fixed_version (highest from all CVEs)
-    // Also track whether the fix was verified clean by OSV.
-    let mut fix_map: HashMap<String, Option<String>> = HashMap::new();
-    let mut fix_clean_map: HashMap<String, bool> = HashMap::new();
+    // Build: package_name → (best fixed_version, is_clean)
+    let mut fix_map: HashMap<String, (Option<String>, bool)> = HashMap::new();
     for h in hits {
-        let entry = fix_map.entry(h.package.clone()).or_insert(None);
+        let entry = fix_map.entry(h.package.clone()).or_insert((None, false));
         if h.fixed_version.is_some() {
-            *entry = h.fixed_version.clone();
-            fix_clean_map.entry(h.package.clone()).or_insert(h.fix_is_clean);
+            entry.0 = h.fixed_version.clone();
+            entry.1 = h.fix_is_clean;
         }
     }
 
@@ -457,11 +455,12 @@ fn ask_vuln_decisions(
     );
 
     for (idx, name) in vuln_names.iter().enumerate() {
-        let fixed = fix_map.get(name).and_then(|v| v.clone());
+        let (fixed, is_clean) = fix_map.get(name)
+            .map(|(v, c)| (v.clone(), *c))
+            .unwrap_or((None, true));
         let cves: Vec<_> = hits.iter().filter(|h| &h.package == name).collect();
         let worst_sev = cves.iter().map(|h| h.severity).fold("INFORMATIONAL", scan::escalate_severity);
         let sev_colored = scan::severity_colored(worst_sev);
-        let is_clean = fix_clean_map.get(name).copied().unwrap_or(true);
         let fix_hint = match fixed.as_deref() {
             Some(f) if is_clean => format!(" → safe: {}", f.bright_green()),
             Some(f)             => format!(" → reduced risk: {} {}", f.bright_yellow(), "(still has CVEs)".truecolor(160,120,50)),
@@ -509,7 +508,7 @@ fn ask_vuln_decisions(
         for name in &vuln_names {
             let action = match ga {
                 PkgAction::InstallFixed(_) => {
-                    let fixed = fix_map.get(name).and_then(|v| v.clone());
+                    let fixed = fix_map.get(name).and_then(|(v, _)| v.clone());
                     match fixed {
                         Some(f) => PkgAction::InstallFixed(f),
                         None    => {
@@ -529,12 +528,13 @@ fn ask_vuln_decisions(
         // Per-package prompts
         println!();
         for name in &vuln_names {
-            let fixed = fix_map.get(name).and_then(|v| v.clone());
+            let (fixed, is_clean) = fix_map.get(name)
+                .map(|(v, c)| (v.clone(), *c))
+                .unwrap_or((None, true));
             println!(
                 "\n  Package: {}",
                 name.bold().bright_white()
             );
-            let is_clean = fix_clean_map.get(name).copied().unwrap_or(true);
             match &fixed {
                 Some(f) if is_clean => println!(
                     "  {}  Install anyway   {}  Skip   {}  Install {} {}",
