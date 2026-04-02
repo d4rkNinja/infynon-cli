@@ -163,12 +163,22 @@ fn render_live_execution(f: &mut Frame, app: &ApiApp, area: Rect) {
             }
         }
 
-        // Error
+        // Error + request body preview for failed requests
         if let Some(err) = &step.error {
             item_lines.push(Line::from(vec![
                 Span::styled("        ", Style::default()),
                 Span::styled(format!("\u{26A1} {}", truncate(err, 60)), Style::default().fg(RED)),
             ]));
+            // Show compact request body so user can see what was sent without opening modal
+            if let Some(body) = &step.request_body {
+                if !body.is_empty() {
+                    item_lines.push(Line::from(vec![
+                        Span::styled("        ", Style::default()),
+                        Span::styled("body: ", Style::default().fg(DIMMER)),
+                        Span::styled(truncate(body, area.width.saturating_sub(18) as usize), Style::default().fg(YELLOW)),
+                    ]));
+                }
+            }
         }
 
         ListItem::new(item_lines)

@@ -174,7 +174,11 @@ impl super::app_state::ApiApp {
             } else {
                 raw
             };
-            map.insert(pi.var.clone(), serde_json::Value::String(val));
+            // Try to parse as a typed JSON value (number, bool, null) so that body
+        // substitution preserves the right type. Fall back to String if not parseable.
+        let json_val = serde_json::from_str::<serde_json::Value>(&val)
+            .unwrap_or_else(|_| serde_json::Value::String(val));
+        map.insert(pi.var.clone(), json_val);
         }
         if let Some(tx) = &self.prompt_reply_tx {
             tx.send(map).ok();
@@ -320,14 +324,16 @@ impl super::app_state::ApiApp {
             _ => {}
         }
 
-        // Adjust scroll_top so cursor stays visible (assume ~20 visible lines)
-        let visible_lines = 20usize;
-        let editor = self.body_editor.as_mut().unwrap();
-        if editor.cursor_row >= editor.scroll_top + visible_lines {
-            editor.scroll_top = editor.cursor_row.saturating_sub(visible_lines - 1);
-        }
-        if editor.cursor_row < editor.scroll_top {
-            editor.scroll_top = editor.cursor_row;
+        // Adjust scroll_top so cursor stays visible (assume ~20 visible lines).
+        // Guard: editor may have been closed (Esc / Ctrl+S) in the match above.
+        if let Some(editor) = self.body_editor.as_mut() {
+            let visible_lines = 20usize;
+            if editor.cursor_row >= editor.scroll_top + visible_lines {
+                editor.scroll_top = editor.cursor_row.saturating_sub(visible_lines - 1);
+            }
+            if editor.cursor_row < editor.scroll_top {
+                editor.scroll_top = editor.cursor_row;
+            }
         }
     }
 

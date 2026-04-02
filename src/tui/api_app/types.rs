@@ -1,4 +1,4 @@
-use crate::api::types::{PromptInput, StepResult};
+use crate::api::types::{FlowRunResult, PromptInput, StepResult};
 
 // ── Views ─────────────────────────────────────────────────────────────────────
 
@@ -126,6 +126,9 @@ impl RunnerSubview {
 
 pub enum LiveEvent {
     Step(StepResult),
+    /// Sent once the entire flow run completes, carrying the full result so the
+    /// TUI can update `last_run` before `refresh_data()` touches storage.
+    FlowResult(FlowRunResult),
     Done { passed: bool },
     Error(String),
     NeedInput { node_id: String, inputs: Vec<PromptInput> },
