@@ -1,6 +1,6 @@
 {
   "name": "infynon",
-  "version": "0.2.0-beta.8.3",
+  "version": "0.2.0-beta.8.4",
   "description": "Security CLI for developers: scan npm/pip/cargo installs for CVEs before execution, self-hosted reverse proxy WAF with TUI, and API flow security testing across 14 ecosystems.",
   "bin": {
     "infynon": "./run.js",

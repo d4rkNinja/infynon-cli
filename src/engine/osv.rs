@@ -249,6 +249,122 @@ pub fn first_fixed_version(detail: &OsvVulnDetail) -> Option<String> {
     best_fixed_version(detail, "", "")
 }
 
+// ── Safe remediation helpers ─────────────────────────────────────────────────
+
+/// Check how many known vulnerabilities affect a specific package version.
+/// Returns 0 if the version is clean or the API call fails (fail-open).
+pub fn version_vuln_count(name: &str, ecosystem: &str, version: &str) -> usize {
+    let queries = vec![(name.to_string(), ecosystem.to_string(), version.to_string())];
+    match batch_query(&queries) {
+        Ok(results) => results.into_iter().next().map(|r| r.len()).unwrap_or(0),
+        Err(_) => 0,
+    }
+}
+
+/// Given candidate "fixed" versions (typically from multiple CVE records for the
+/// same package), find the safest one to actually suggest as remediation.
+///
+/// The problem this solves: `best_fixed_version()` tells you which version fixes
+/// *one specific CVE*, but that version may itself be affected by *other* CVEs.
+/// Blindly suggesting it can guide users from a LOW-risk package into a
+/// CRITICAL-risk version.
+///
+/// Algorithm:
+/// 1. Split candidates into **upgrades** (≥ current) and **downgrades** (< current)
+/// 2. Batch-query OSV for ALL candidates in a single API call
+/// 3. Among **upgrades only**: return the newest with zero CVEs (verified clean)
+/// 4. If no clean upgrade, return the upgrade with the fewest remaining CVEs
+/// 5. Only if **all upgrades are vulnerable**, fall back to downgrades (same logic)
+///
+/// This ensures we never suggest a downgrade when a safer upgrade exists, and
+/// only propose a downgrade as a last resort.
+///
+/// `current_version` is the version the user currently has installed.  Pass `""`
+/// to disable the upgrade-first heuristic (all candidates treated equally).
+///
+/// Returns `None` if `candidates` is empty.
+/// Returns `Some((version, is_fully_clean))`.
+pub fn find_safest_candidate(
+    candidates: &[String],
+    name: &str,
+    ecosystem: &str,
+) -> Option<(String, bool)> {
+    find_safest_candidate_vs(candidates, name, ecosystem, "")
+}
+
+/// Like `find_safest_candidate` but accepts the user's current version so
+/// downgrades are only considered when every upgrade is still vulnerable.
+pub fn find_safest_candidate_vs(
+    candidates: &[String],
+    name: &str,
+    ecosystem: &str,
+    current_version: &str,
+) -> Option<(String, bool)> {
+    if candidates.is_empty() {
+        return None;
+    }
+
+    // Deduplicate and sort descending (prefer newer versions)
+    let mut sorted: Vec<String> = candidates.to_vec();
+    sorted.sort_by(|a, b| compare_versions(b, a));
+    sorted.dedup();
+
+    // Batch-check all candidates in a single OSV API call
+    let queries: Vec<(String, String, String)> = sorted
+        .iter()
+        .map(|ver| (name.to_string(), ecosystem.to_string(), ver.clone()))
+        .collect();
+
+    let counts: Vec<usize> = match batch_query(&queries) {
+        Ok(results) => results.into_iter().map(|r| r.len()).collect(),
+        Err(_) => {
+            // API failed — fall back to highest candidate without validation
+            return Some((sorted.swap_remove(0), false));
+        }
+    };
+
+    // Pair each candidate with its vuln count
+    let checked: Vec<(&String, usize)> = sorted.iter().zip(counts.iter().copied()).collect();
+
+    // Split into upgrades (>= current) and downgrades (< current).
+    // If current_version is empty, everything counts as an upgrade.
+    let (upgrades, downgrades): (Vec<_>, Vec<_>) = if current_version.is_empty() {
+        (checked.clone(), vec![])
+    } else {
+        checked.iter().partition(|(ver, _)| {
+            compare_versions(ver, current_version) != std::cmp::Ordering::Less
+        })
+    };
+
+    // Helper: pick the best from a tier (clean first, then least-vulns)
+    let pick_best = |tier: &[(&String, usize)]| -> Option<(String, bool)> {
+        if tier.is_empty() { return None; }
+        // Clean version (0 CVEs)? Return the first (= highest, since sorted desc)
+        if let Some((ver, _)) = tier.iter().find(|(_, c)| *c == 0) {
+            return Some((ver.to_string(), true));
+        }
+        // No clean version — return the one with fewest remaining CVEs
+        let min_count = tier.iter().map(|(_, c)| *c).min().unwrap();
+        let (ver, _) = tier.iter().find(|(_, c)| *c == min_count).unwrap();
+        Some((ver.to_string(), false))
+    };
+
+    // Prefer upgrades; only fall back to downgrades if all upgrades are vulnerable
+    if let Some((ver, true)) = pick_best(&upgrades) {
+        return Some((ver, true)); // clean upgrade — best case
+    }
+    // If there's an upgrade that at least reduces risk, prefer it over any downgrade
+    if let Some(upgrade_result) = pick_best(&upgrades) {
+        // But check: is there a *clean* downgrade? If so, prefer it over a dirty upgrade
+        if let Some((dv, true)) = pick_best(&downgrades) {
+            return Some((dv, true));
+        }
+        return Some(upgrade_result);
+    }
+    // No upgrades at all — try downgrades as last resort
+    pick_best(&downgrades)
+}
+
 // ── Shared HTTP client (reused across all calls) ─────────────────────────────
 
 static CLIENT: OnceLock<Client> = OnceLock::new();

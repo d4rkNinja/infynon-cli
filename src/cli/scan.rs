@@ -215,7 +215,17 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
                     "LOW"      => counts[3] += 1,
                     _          => counts[4] += 1,
                 }
-                let fixed = osv::best_fixed_version(detail, &packages[*pkg_idx].name, &packages[*pkg_idx].ecosystem);
+                let raw_fixed = osv::best_fixed_version(detail, &packages[*pkg_idx].name, &packages[*pkg_idx].ecosystem);
+                // Cross-validate: ensure the suggested fix is itself clean
+                let (fixed, fix_verified) = match raw_fixed {
+                    Some(ref fv) => {
+                        match osv::find_safest_candidate_vs(&[fv.clone()], &packages[*pkg_idx].name, &packages[*pkg_idx].ecosystem, &packages[*pkg_idx].version) {
+                            Some((v, clean)) => (Some(v), clean),
+                            None             => (raw_fixed.clone(), false),
+                        }
+                    }
+                    None => (None, false),
+                };
                 let fix_cmd = fixed.as_deref().map(|fv| upgrade_cmd(&packages[*pkg_idx], fv));
                 vulns.push(serde_json::json!({
                     "package":         packages[*pkg_idx].name,
@@ -225,6 +235,7 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
                     "severity":        sev,
                     "summary":         detail.summary.as_deref().unwrap_or(""),
                     "safe_version":    fixed,
+                    "fix_verified":    fix_verified,
                     "fix_cmd":         fix_cmd
                 }));
             }
@@ -355,7 +366,37 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
         }
     }
 
-    // 4. For findings with no fixed version, look up latest stable from registry
+    // 5b. Cross-validate all suggested fix versions — ensure they don't
+    // themselves have known CVEs. Picks the safest version per package.
+    {
+        use std::collections::HashMap;
+        let mut pkg_candidates: HashMap<(String, String), Vec<String>> = HashMap::new();
+        let mut pkg_current: HashMap<(String, String), String> = HashMap::new();
+        for f in findings.iter() {
+            let key = (f.package.name.clone(), f.package.ecosystem.clone());
+            pkg_current.entry(key.clone()).or_insert_with(|| f.package.version.clone());
+            if let Some(ref fv) = f.fixed_version {
+                pkg_candidates.entry(key).or_default().push(fv.clone());
+            }
+        }
+
+        let mut pkg_safe: HashMap<(String, String), Option<(String, bool)>> = HashMap::new();
+        for ((name, eco), candidates) in &pkg_candidates {
+            let cur = pkg_current.get(&(name.clone(), eco.clone())).map(|s| s.as_str()).unwrap_or("");
+            let result = osv::find_safest_candidate_vs(candidates, name, eco, cur);
+            pkg_safe.insert((name.clone(), eco.clone()), result);
+        }
+
+        for f in findings.iter_mut() {
+            let key = (f.package.name.clone(), f.package.ecosystem.clone());
+            if let Some(safe) = pkg_safe.get(&key) {
+                f.fixed_version = safe.as_ref().map(|(v, _)| v.clone());
+            }
+        }
+    }
+
+    // 5c. For findings with no fixed version, look up latest stable from
+    // registry — but only suggest it if the latest version is itself clean.
     {
         use std::collections::HashMap;
         let mut cache: HashMap<(String, String), Option<String>> = HashMap::new();
@@ -363,7 +404,14 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
             if f.fixed_version.is_none() {
                 let key = (f.package.name.clone(), f.package.ecosystem.clone());
                 let latest = cache.entry(key).or_insert_with(|| {
-                    crate::engine::registry::fetch_latest_version(&f.package.name, &f.package.ecosystem)
+                    let lv = crate::engine::registry::fetch_latest_version(
+                        &f.package.name, &f.package.ecosystem,
+                    )?;
+                    // Verify the latest version is actually clean before suggesting it
+                    let vuln_count = osv::version_vuln_count(
+                        &f.package.name, &f.package.ecosystem, &lv,
+                    );
+                    if vuln_count > 0 { None } else { Some(lv) }
                 });
                 // Only suggest if the latest version differs from the current one
                 if let Some(ref lv) = latest {
@@ -742,6 +790,10 @@ pub struct VulnHit {
     pub summary:       String,
     pub fixed_version: Option<String>,
     pub upgrade_cmd:   Option<String>,
+    /// `true` when `fixed_version` was verified to have zero known CVEs.
+    /// `false` when the fix still has remaining vulnerabilities (reduces risk
+    /// but does not eliminate it).
+    pub fix_is_clean:  bool,
 }
 
 /// Check packages before install. Returns (all_clear, hits).
@@ -830,7 +882,8 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str, agent: b
         return (true, vec![]);
     }
 
-    // Fetch full detail for each hit
+    // Fetch full detail for each hit, then validate that suggested fix versions
+    // are themselves clean (not affected by other CVEs).
     let mut hits: Vec<VulnHit> = Vec::new();
     let mut highest_sev = "INFORMATIONAL";
 
@@ -849,54 +902,30 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str, agent: b
             );
         }
 
+        // Phase 1: Fetch all CVE details for this package and collect per-CVE
+        // fixed versions + metadata.
+        struct CveInfo {
+            id:       String,
+            sev:      &'static str,
+            summary:  String,
+            fixed:    Option<String>, // per-CVE fix (before cross-validation)
+        }
+        let mut cve_infos: Vec<CveInfo> = Vec::new();
+        let mut all_candidates: Vec<String> = Vec::new(); // all fixed versions across CVEs
+
         for vref in vuln_refs.iter().take(5) {
             match osv::fetch_vuln_detail(&vref.id) {
                 Ok(detail) => {
-                    let sev      = osv::severity_label(&detail);
-                    let fixed    = osv::best_fixed_version(&detail, pkg_name, &eco_osv);
-                    let summary  = detail.summary.clone().unwrap_or_else(|| "No description available".to_string());
-                    let up_cmd   = fixed.as_deref().map(|fv| install_cmd_for_ecosystem(pkg_name, fv, ecosystem));
+                    let sev     = osv::severity_label(&detail);
+                    let fixed   = osv::best_fixed_version(&detail, pkg_name, &eco_osv);
+                    let summary = detail.summary.clone()
+                        .unwrap_or_else(|| "No description available".to_string());
 
-                    highest_sev = escalate_severity(highest_sev, sev);
-
-                    if !agent {
-                        let sev_label = match sev {
-                            "CRITICAL" => format!(" {} ", sev).bold().on_bright_red().white().to_string(),
-                            "HIGH"     => format!(" {} ", sev).bold().on_red().white().to_string(),
-                            "MEDIUM"   => format!(" {} ", sev).bold().on_yellow().black().to_string(),
-                            "LOW"      => format!(" {} ", sev).bold().on_bright_green().black().to_string(),
-                            _          => format!(" {} ", sev).truecolor(120,120,140).to_string(),
-                        };
-                        println!(
-                            "    {}  {}  {}",
-                            sev_label,
-                            vref.id.truecolor(100, 160, 255),
-                            summary.chars().take(80).collect::<String>().truecolor(160, 160, 180)
-                        );
-                        if let Some(ref fv) = fixed {
-                            println!(
-                                "       {} safe version: {}   {}",
-                                "→".truecolor(80,80,100),
-                                fv.bright_green().bold(),
-                                up_cmd.as_deref().unwrap_or("").truecolor(100,140,100)
-                            );
-                        } else {
-                            println!(
-                                "       {} {}",
-                                "→".truecolor(80,80,100),
-                                "No fixed version published yet".truecolor(180,120,50)
-                            );
-                        }
+                    if let Some(ref fv) = fixed {
+                        all_candidates.push(fv.clone());
                     }
-
-                    hits.push(VulnHit {
-                        package:       pkg_name.clone(),
-                        cve_id:        vref.id.clone(),
-                        severity:      sev,
-                        summary:       summary.chars().take(100).collect(),
-                        fixed_version: fixed,
-                        upgrade_cmd:   up_cmd,
-                    });
+                    highest_sev = escalate_severity(highest_sev, sev);
+                    cve_infos.push(CveInfo { id: vref.id.clone(), sev, summary, fixed });
                 }
                 Err(_) => {
                     if !agent {
@@ -914,10 +943,85 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str, agent: b
                         summary:       "Could not fetch CVE details".to_string(),
                         fixed_version: None,
                         upgrade_cmd:   None,
+                        fix_is_clean:  false,
                     });
                 }
             }
         }
+
+        // Phase 2: Cross-validate — find the single best version that is itself
+        // free of known CVEs, or the one with the fewest remaining CVEs.
+        // Prefer upgrades over downgrades — only suggest a downgrade as a last resort.
+        let validated = osv::find_safest_candidate_vs(&all_candidates, pkg_name, &eco_osv, pkg_ver);
+        let (validated_ver, fix_is_clean) = match &validated {
+            Some((v, clean)) => (Some(v.clone()), *clean),
+            None             => (None, false),
+        };
+        let up_cmd = validated_ver.as_deref()
+            .map(|fv| install_cmd_for_ecosystem(pkg_name, fv, ecosystem));
+
+        // Phase 3: Display and build hits — every CVE for this package gets the
+        // same validated safe version so the user receives one consistent recommendation.
+        for info in &cve_infos {
+            if !agent {
+                let sev_label = match info.sev {
+                    "CRITICAL" => format!(" {} ", info.sev).bold().on_bright_red().white().to_string(),
+                    "HIGH"     => format!(" {} ", info.sev).bold().on_red().white().to_string(),
+                    "MEDIUM"   => format!(" {} ", info.sev).bold().on_yellow().black().to_string(),
+                    "LOW"      => format!(" {} ", info.sev).bold().on_bright_green().black().to_string(),
+                    _          => format!(" {} ", info.sev).truecolor(120,120,140).to_string(),
+                };
+                println!(
+                    "    {}  {}  {}",
+                    sev_label,
+                    info.id.truecolor(100, 160, 255),
+                    info.summary.chars().take(80).collect::<String>().truecolor(160, 160, 180)
+                );
+            }
+
+            hits.push(VulnHit {
+                package:       pkg_name.clone(),
+                cve_id:        info.id.clone(),
+                severity:      info.sev,
+                summary:       info.summary.chars().take(100).collect(),
+                fixed_version: validated_ver.clone(),
+                upgrade_cmd:   up_cmd.clone(),
+                fix_is_clean,
+            });
+        }
+
+        // Display the single validated recommendation for this package
+        if !agent {
+            match (&validated_ver, fix_is_clean) {
+                (Some(fv), true) => {
+                    println!(
+                        "       {} {} {}   {}",
+                        "→".truecolor(80,80,100),
+                        "safe version:".bright_green(),
+                        fv.bright_green().bold(),
+                        up_cmd.as_deref().unwrap_or("").truecolor(100,140,100)
+                    );
+                }
+                (Some(fv), false) => {
+                    println!(
+                        "       {} {} {} {}   {}",
+                        "→".truecolor(80,80,100),
+                        "best available:".bright_yellow(),
+                        fv.bright_yellow().bold(),
+                        "(still has CVEs, but reduces risk)".truecolor(180,140,50),
+                        up_cmd.as_deref().unwrap_or("").truecolor(100,140,100)
+                    );
+                }
+                (None, _) => {
+                    println!(
+                        "       {} {}",
+                        "→".truecolor(80,80,100),
+                        "No fixed version published yet".truecolor(180,120,50)
+                    );
+                }
+            }
+        }
+
         if !agent && vuln_refs.len() > 5 {
             println!(
                 "       {} {} more CVEs — run 'infynon pkg scan' for full report",
