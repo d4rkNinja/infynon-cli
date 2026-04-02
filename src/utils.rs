@@ -29,7 +29,7 @@ pub fn format_number(n: u64) -> String {
     else { n.to_string() }
 }
 
-/// Send an HTML email via SMTP. Used by both firewall mailer and Eagle Eye.
+/// Send an HTML email via SMTP. Used by Eagle Eye email notifications.
 pub fn send_smtp_email(
     host: &str,
     port: u16,

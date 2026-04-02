@@ -1,373 +1,145 @@
 # INFYNON Command Reference
 
-> **Multi-file detection**: When multiple lock files exist and `--pkg-file` is not specified,
-> commands that scan lock files (`scan`, `audit`, `why`, `outdated`, `doctor`, `fix`, `clean`)
-> automatically show an interactive selector so you can choose one specific file or scan all.
+## Root
 
-## Package Security Mode
-
+```bash
+infynon <command>
 ```
+
+Top-level commands:
+
+- `infynon pkg`
+- `infynon weave`
+- `infynon loom`
+
+## Package Intelligence
+
+```bash
 infynon pkg <subcommand>
 ```
 
 ### Scan
 
 ```bash
-infynon pkg scan                              # scan all detected lock files
-infynon pkg scan --pkg-file <PATH>            # scan specific file
-infynon pkg scan --output markdown            # export Markdown report
-infynon pkg scan --output pdf                 # export PDF report
-infynon pkg scan --output both                # export both formats
-infynon pkg scan --fix                        # auto-fix all vulnerabilities
-infynon pkg scan --fix critical               # auto-fix critical only
-infynon pkg scan --fix high                   # auto-fix critical + high
-infynon pkg scan --fix medium                 # auto-fix critical + high + medium
-infynon pkg scan --fix low                    # auto-fix all except informational
-infynon pkg scan --fix informational          # auto-fix all (same as --fix)
+infynon pkg scan
+infynon pkg scan --pkg-file <PATH>
+infynon pkg scan --output markdown
+infynon pkg scan --output pdf
+infynon pkg scan --output both
+infynon pkg scan --fix
+infynon pkg scan --fix high
 ```
 
 ### Secure Install
 
 ```bash
-# npm
 infynon pkg npm install <pkg>
-infynon pkg npm install <pkg>@<version>
-
-# yarn
 infynon pkg yarn add <pkg>
-infynon pkg yarn add <pkg>@<version>
-
-# pnpm
 infynon pkg pnpm add <pkg>
-infynon pkg pnpm add <pkg>@<version>
-
-# bun
 infynon pkg bun add <pkg>
-infynon pkg bun add <pkg>@<version>
-
-# pip
 infynon pkg pip install <pkg>
-infynon pkg pip install <pkg>==<version>
-
-# uv
-infynon pkg uv pip install <pkg>
 infynon pkg uv add <pkg>
-
-# poetry
 infynon pkg poetry add <pkg>
-infynon pkg poetry add <pkg>==<version>
-
-# cargo
 infynon pkg cargo add <pkg>
-infynon pkg cargo add <pkg>@<version>
-
-# go
 infynon pkg go get <module>
-infynon pkg go get <module>@<version>
-
-# gem
 infynon pkg gem install <pkg>
-infynon pkg gem install <pkg>:<version>
-
-# composer
 infynon pkg composer require <vendor/pkg>
-infynon pkg composer require <vendor/pkg>:<version>
-
-# nuget
 infynon pkg nuget add <pkg>
-infynon pkg nuget add <pkg> --version <version>
-
-# hex (Elixir)
 infynon pkg hex deps.get
-
-# pub (Dart/Flutter)
 infynon pkg pub add <pkg>
 ```
 
-### Strict Mode (CI)
+### Strict Mode
 
 ```bash
-infynon pkg --strict npm install <pkg>                # block all severities
-infynon pkg --strict critical npm install <pkg>       # block critical only
-infynon pkg --strict high npm install <pkg>           # block critical + high
-infynon pkg --strict medium npm install <pkg>         # block critical + high + medium
-infynon pkg --strict low npm install <pkg>            # block all except informational
+infynon pkg --strict npm install <pkg>
+infynon pkg --strict high npm install <pkg>
 infynon pkg --strict pip install <pkg>
 infynon pkg --strict cargo add <pkg>
 ```
 
-### Auto-Detect Ecosystem
+### Other Package Commands
 
 ```bash
-infynon pkg install <pkg>                     # detects from manifest files
-infynon pkg add <pkg>
-```
-
-### Audit
-
-Deep recursive dependency audit with visual tree, CVE annotations, and risk breakdown.
-
-```bash
-infynon pkg audit                          # audit detected lock files
-infynon pkg audit --pkg-file Cargo.lock    # audit specific file
-```
-
-Output includes:
-- Dependency tree with `├──` / `└──` structure; vulnerable packages highlighted in red with CVE IDs and severity
-- **Risk Breakdown** table: per-severity counts (CRITICAL / HIGH / MEDIUM / LOW / INFORMATIONAL / CLEAN) with bar visualization
-- **Risk Score** (0–100): weighted by severity (CRITICAL=40, HIGH=20, MEDIUM=8, LOW=2, INFO=1 per affected package)
-- Overall risk label: CRITICAL RISK / HIGH RISK / MEDIUM RISK / LOW RISK / CLEAN
-
-### Why
-
-Trace why a package is present in your dependency tree.
-
-```bash
+infynon pkg audit
 infynon pkg why <package>
-infynon pkg why serde
-infynon pkg why lodash --pkg-file package-lock.json
-```
-
-### Outdated
-
-Check for outdated dependencies across all detected ecosystems.
-
-```bash
 infynon pkg outdated
-infynon pkg outdated --pkg-file Cargo.lock
-```
-
-Shows a table with current version, latest version, and update type (MAJOR / MINOR / PATCH).
-
-### Diff
-
-Compare two versions of a package — size, dependencies, install scripts, and CVEs.
-
-```bash
 infynon pkg diff <pkg> <v1> <v2>
-infynon pkg diff express 4.17.1 4.18.2
-infynon pkg diff serde 1.0.150 1.0.196 --ecosystem cargo
-infynon pkg diff requests 2.28.0 2.31.0 --ecosystem pypi
-```
-
-### Doctor
-
-Health check for your dependency tree.
-
-```bash
 infynon pkg doctor
-infynon pkg doctor --pkg-file Cargo.lock
-```
-
-Checks:
-- Duplicate package versions
-- Unused dependencies (imported but not in lock file)
-- Phantom dependencies (used in source but not declared)
-- Missing lock files
-- Risky install/preinstall scripts
-
-### Size
-
-Show install weight, bundle size, and transitive dependency count for packages.
-
-```bash
-infynon pkg size express
-infynon pkg size serde tokio --ecosystem cargo
-infynon pkg size requests --ecosystem pypi
-```
-
-### Search
-
-Cross-ecosystem package search. Queries npm, crates.io, PyPI, RubyGems, Packagist, and pub.dev.
-
-```bash
+infynon pkg size <pkg>
 infynon pkg search <query>
-infynon pkg search http-client
-infynon pkg search json --ecosystem cargo
-```
-
-### Fix
-
-Auto-fix all vulnerable dependencies to their nearest safe version.
-
-```bash
 infynon pkg fix --auto
-infynon pkg fix --auto --pkg-file Cargo.lock
-```
-
-Delegates to `infynon pkg scan --fix all` internally.
-
-### Clean
-
-Find and remove unused dependencies interactively.
-
-```bash
 infynon pkg clean
-infynon pkg clean --pkg-file package-lock.json
-```
-
-Detects unused deps, shows a list, prompts for confirmation, then runs the appropriate uninstall command per ecosystem.
-
-### Eagle Eye — Scheduled Vulnerability Monitoring
-
-Monitor multiple projects on a timer, scan for CVEs, get email alerts.
-
-```bash
-infynon pkg eagle-eye setup           # interactive setup (SMTP, paths, risk level, interval)
-infynon pkg eagle-eye start           # start monitoring (foreground)
-infynon pkg eagle-eye status          # show current config
-infynon pkg eagle-eye enable          # enable monitoring
-infynon pkg eagle-eye disable         # disable monitoring
-```
-
-**Setup walks through:**
-1. SMTP configuration (host, port, username, password, TLS)
-2. Email addresses (from, recipients)
-3. Project paths to monitor (multiple directories)
-4. Scan interval (hours)
-5. Risk level threshold (CRITICAL only / CRITICAL+HIGH / CRITICAL+HIGH+MEDIUM / all)
-
-Config stored in `~/.infynon/eagle-eye.toml`. Sends styled HTML emails with per-project vulnerability tables, severity counts, and fix suggestions.
-
-### Migrate
-
-Migrate your project between package managers.
-
-```bash
 infynon pkg migrate npm pnpm
-infynon pkg migrate yarn bun
-infynon pkg migrate pip uv
-infynon pkg migrate pip poetry
 ```
 
-Supported JS migrations: npm ↔ yarn ↔ pnpm ↔ bun
-Supported Python migrations: pip ↔ uv ↔ poetry
-
-Runs a vulnerability scan after migration completes.
-
----
-
-## Firewall Mode
-
-### Init
-
-Create a default `infynon.toml` configuration file.
+### Eagle Eye
 
 ```bash
-infynon init                                  # default: port 8080, upstream 127.0.0.1:3000
-infynon init --port 9090                      # custom listen port
-infynon init --upstream 10.0.0.1              # custom upstream address
-infynon init --upstream-port 8000             # custom upstream port
+infynon pkg eagle-eye setup
+infynon pkg eagle-eye start
+infynon pkg eagle-eye status
+infynon pkg eagle-eye enable
+infynon pkg eagle-eye disable
 ```
 
-### Start
-
-Start the firewall reverse proxy with TUI dashboard.
+## Weave
 
 ```bash
-infynon start                                 # start with TUI dashboard
-infynon start --headless                      # start without TUI (background mode)
-infynon start --config /path/to/infynon.toml  # use specific config file
-infynon start --port 9090                     # override listen port
-infynon start --upstream 10.0.0.1:8000        # override upstream
+infynon weave <subcommand>
 ```
 
-### Monitor
-
-Open the TUI dashboard (starts its own proxy instance).
+### Common Commands
 
 ```bash
-infynon monitor                               # open TUI monitor
-infynon monitor --config /path/to/config.toml # with specific config
+infynon weave tui
+infynon weave env set BASE_URL http://localhost:8001
+infynon weave node create
+infynon weave node create --ai "POST /auth/login extracts token"
+infynon weave node run <node-id> --prompt
+infynon weave flow create "checkout" --ai "login then create order"
+infynon weave flow run <flow-id>
+infynon weave flow run-all
+infynon weave ai probe <flow-id>
+infynon weave import openapi.yaml --flow "My Flow"
+infynon weave validate
 ```
 
-### Status
-
-Show current firewall configuration and status.
+## Loom
 
 ```bash
-infynon status                                # show config summary
-infynon status --config /path/to/config.toml  # from specific config
+infynon loom overview
 ```
 
-### Block / Unblock IP
+### Setup
 
 ```bash
-infynon block 203.0.113.50                    # block an IP immediately
-infynon unblock 203.0.113.50                  # remove from blocklist
+infynon loom init --owner team --user alien
+infynon loom source add-redis team-redis --url redis://localhost:6379/0 --namespace infynon --user alien --default
+infynon loom source add-sql team-db --engine sqlite --url sqlite://.infynon/loom/loom.db --user alien --default
+infynon loom source list
+infynon loom source default team-db
 ```
 
-### Rules Management
+### Notes And Retrieval
 
 ```bash
-infynon rules list                            # list all rules with hit counts
-infynon rules enable my-rule                  # enable a disabled rule
-infynon rules disable my-rule                 # disable a rule
+infynon loom note add repo-handoff --title "Auth changed" --body "Refresh moved to middleware" --layer team --scope branch --target feature/auth-refresh --files src/auth.rs --tags auth,handoff
+infynon loom note update repo-handoff --status stale
+infynon loom note remove repo-handoff
+infynon loom note list
+infynon loom retrieve --scope branch --target auth
+infynon loom retrieve --scope package --target chrono
 ```
 
-### Logs
+### Sync And Operations
 
 ```bash
-infynon logs                                  # show last 50 log entries
-infynon logs --count 200                      # show last 200 entries
-infynon logs --verdict block                  # filter: block | allow | flag | rate_limited
-infynon logs --ip 203.0.113.50                # filter by source IP
+infynon loom sync --direction push
+infynon loom sync --direction pull
+infynon loom sync --direction both
+infynon loom compact
+infynon loom schema sql
+infynon loom schema redis
+infynon loom tui
 ```
-
-### Config
-
-```bash
-infynon config check                          # validate config file
-infynon config show                           # print effective config with defaults
-```
-
-### TUI Keyboard Shortcuts
-
-| Key | Action |
-|-----|--------|
-| `1-7` | Switch views (Dashboard/Feed/Blocked/IPs/Rules/Stats/Config) |
-| `q` | Quit TUI |
-| `/` | Search/filter |
-| `?` | Help overlay |
-| `r` | Reload config from file |
-| `m` | Toggle maintenance mode |
-| `p` | Pause/resume live feed |
-| `f` | Cycle feed filter |
-| `b` | Block selected IP (IP Inspector) |
-| `u` | Unblock selected IP (IP Inspector) |
-| `Enter` | Edit config field (Config view) |
-| `s` | Save config to file (Config view) |
-
-### Email Notifications
-
-Configure in `infynon.toml` under `[email]`:
-
-```toml
-[email]
-enabled = true
-provider = "smtp"                     # "smtp" or "ses"
-from = "firewall@example.com"
-to = ["admin@example.com"]
-alert_on_block_threshold = 100        # blocks/min to trigger alert
-alert_on_ip_ban = true                # alert on auto-ban
-daily_digest = true                   # daily summary email
-daily_digest_hour = 8                 # UTC hour for digest
-
-[email.smtp]
-host = "smtp.gmail.com"
-port = 587
-username = "user@gmail.com"
-password = "app-password"
-tls = true
-
-# Or use AWS SES:
-# provider = "ses"
-# [email.ses]
-# region = "us-east-1"
-# access_key_id = "AKIA..."
-# secret_access_key = "..."
-```
-
-Email types:
-- **Alert emails**: Sent when block rate exceeds threshold or an IP is auto-banned. Contains top blocked IPs and triggered rules.
-- **Daily digest**: Comprehensive daily report with total requests, blocks, rate limits, top IPs, top paths, top rules, and verdict breakdown.

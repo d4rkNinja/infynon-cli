@@ -1,20 +1,14 @@
 # INFYNON
 
-**One binary. Three security layers. Zero trust by default.**
+INFYNON is a CLI for:
 
-INFYNON enforces a *verify-before-execute* policy across your entire stack — intercepting vulnerable packages before install, testing API flows before trust, and filtering live traffic before exposure.
+- package intelligence with `infynon pkg`
+- API flow testing with `infynon weave`
+- shared coding memory with `infynon loom`
 
 [![npm](https://img.shields.io/npm/v/infynon?style=flat-square&logo=npm)](https://www.npmjs.com/package/infynon)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/d4rkNinja/infynon-cli/blob/main/LICENSE)
 [![GitHub](https://img.shields.io/badge/source-GitHub-black?style=flat-square&logo=github)](https://github.com/d4rkNinja/infynon-cli)
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/d4rkNinja/infynon-cli/main/assets/infynon-demo-small.gif" alt="INFYNON Demo" width="100%" />
-</p>
-
-> Use `--agent` for structured JSON output inside AI agents and CI pipelines.
-
----
 
 ## Install
 
@@ -22,240 +16,71 @@ INFYNON enforces a *verify-before-execute* policy across your entire stack — i
 npm install -g infynon
 ```
 
-Downloads the right pre-built native binary for your OS and architecture automatically. Requires Node.js 14+.
+This package downloads the matching native binary for your OS and architecture.
 
-**Supported platforms:** Windows x64 · Linux x64 · Linux ARM64 · macOS x64 · macOS ARM64
+## Command Areas
 
-```bash
-npm uninstall -g infynon    # uninstall and clean up all config files
-```
+### `infynon pkg`
 
----
-
-## Module 1 — `infynon pkg` · Dependency Firewall
-
-Intercepts install commands across **14 ecosystems** and runs a 3-layer CVE check before anything touches your disk.
+- scan lockfiles for vulnerable packages
+- secure install wrapper for multiple ecosystems
+- audit, why, outdated, diff, doctor, fix, clean, migrate
+- Eagle Eye scheduled package monitoring
 
 ```bash
-# Scan your project's lock files for CVEs
 infynon pkg scan
-
-# Secure install — drop-in wrapper around your package manager
-infynon pkg npm install express
-infynon pkg cargo add serde
-infynon pkg pip install requests
-infynon pkg yarn add lodash
-
-# Auto-fix all vulnerable dependencies
-infynon pkg fix --auto
-
-# Deep audit with full dependency tree
 infynon pkg audit
-
-# CI / non-interactive flags
-infynon pkg npm install express --strict high       # fail on critical/high (exit 3)
-infynon pkg npm install express --auto-fix          # auto-upgrade to safe versions
-infynon pkg npm install express --skip-vulnerable   # skip bad packages silently
-infynon pkg npm install express --yes               # install everything (audit-only CI)
-
-# AI agent mode — structured JSON for AI tools and CI parsers
-infynon pkg scan --agent
-infynon pkg npm install express --agent --strict high
-infynon pkg uv add fastapi --agent --auto-fix
+infynon pkg npm install express --strict high
 ```
 
-**Ecosystems:** npm · yarn · pnpm · bun · pip · uv · poetry · cargo · go · gem · composer · nuget · hex · pub
+### `infynon weave`
 
----
-
-## Module 2 — `infynon` · Network Firewall
-
-A reverse proxy WAF with a real-time TUI dashboard. Sits between the internet and your backend.
-
-```bash
-# Initialize config
-infynon init --port 8080 --upstream-port 3000
-
-# Start firewall with TUI dashboard
-infynon start
-
-# Start headless (no TUI — for servers)
-infynon start --headless
-
-# Block an IP
-infynon block 203.0.113.50
-
-# View blocked requests
-infynon logs --verdict block
-```
-
-**Protects against:** SQL injection · XSS · path traversal · command injection · header injection · rate abuse · bad IPs
-
----
-
-## Module 3 — `infynon weave` · API Flow Testing
-
-Test your entire API as a connected flow. Model endpoints as a directed graph — authentication tokens and extracted values thread automatically between nodes.
+- create API nodes and flows
+- run connected request chains
+- import OpenAPI
+- prompt for runtime values
+- run AI-assisted security probes
 
 ```bash
-# Set your API base URL once
 infynon weave env set BASE_URL http://localhost:8001
-
-# Create nodes from natural language
-infynon weave node create --ai "POST /auth/login with email and password, extracts token"
-infynon weave node create --ai "POST /orders — creates order, extracts order_id"
-
-# Wire into a flow and run
 infynon weave flow create "checkout" --ai "login then create order"
 infynon weave flow run checkout
-
-# Run security probes (auth bypass, rate limit, SQL injection)
-infynon weave ai probe checkout
-
-# Open the 10-tab TUI dashboard
-infynon weave tui
 ```
 
-**Runtime prompt inputs** — pause and ask for OTPs, passwords, and dynamic values mid-flow:
+### `infynon loom`
+
+- canonical, team, and user memory layers
+- Redis or SQL backends
+- package notes that can identify who introduced a compromised dependency
+- sync, retrieve, compact, and TUI inspection
 
 ```bash
-infynon weave node prompt verify-otp add otp_code --label "OTP Code" --secret
-infynon weave node prompt create-order add env --type select --options "staging,production,dev"
-infynon weave node prompt confirm-delete add confirm --type boolean --default false
-infynon weave node prompt create-token add scopes --type multiselect --options "read,write,admin"
+infynon loom init --owner team --user alien
+infynon loom source add-sql team-db --engine sqlite --url sqlite://.infynon/loom/loom.db --user alien --default
+infynon loom note add repo-handoff --title "Auth changed" --body "Refresh moved into middleware"
+infynon loom sync --direction both
 ```
 
-**Prompt types:** `text · boolean · select · multiselect`
+## Backend Choice
 
-**CI ready** — use `--default` values or `--set KEY=val` for fully non-interactive runs:
+Use Redis when you want:
 
-```bash
-infynon weave flow run auth-flow --set email=ci@example.com --set password=Test@1234
-```
+- fast live retrieval
+- active session state
+- lower-latency coordination
 
----
+Use SQL when you want:
 
-## INFYNON vs Other Security Tools
+- durable structured history
+- stronger filtering and reports
+- long-term canonical memory
 
-| Feature | INFYNON | Snyk CLI | Safety CLI | OSV-Scanner |
-|---|---|---|---|---|
-| **ECOSYSTEM COVERAGE** | | | | |
-| npm / yarn / pnpm / bun | ✓ | ✓ | — | ✓ |
-| pip / uv / poetry | ✓ | ✓ | ✓ | ✓ |
-| cargo | ✓ | ✓ | — | ✓ |
-| go / gem / composer / nuget / hex / pub | ✓ | Partial | — | Partial |
-| **PACKAGE SECURITY** | | | | |
-| **Pre-install interception** | ✓ | — | — | — |
-| Interactive install decisions (fix/skip/install) | ✓ | — | — | — |
-| Auto-fix to safe version | ✓ | ✓ | — | — |
-| Dependency tree audit with risk score | ✓ | ✓ | — | — |
-| `why` — trace dependency origin | ✓ | — | — | — |
-| Package version diff (size, deps, CVEs) | ✓ | — | — | — |
-| Doctor / dependency health check | ✓ | — | — | — |
-| Package size & bundle weight analysis | ✓ | — | — | — |
-| Cross-ecosystem package search | ✓ | — | — | — |
-| Remove unused dependencies (`clean`) | ✓ | — | — | — |
-| Migrate between package managers | ✓ | — | — | — |
-| Multi-lock file detection + selector | ✓ | — | — | — |
-| **MONITORING & ALERTS** | | | | |
-| **Eagle Eye — scheduled CVE monitoring** | ✓ | Paid | — | — |
-| Email alerts on new vulnerabilities | ✓ | Paid | — | — |
-| Daily digest reports | ✓ | Paid | — | — |
-| **AI & CI INTEGRATION** | | | | |
-| **Claude Code skills + plugins** | ✓ | — | — | — |
-| `--agent` structured JSON output | ✓ | — | — | — |
-| CI / `--strict [level]` flag | ✓ | ✓ | ✓ | ✓ |
-| `--auto-fix` / `--skip-vulnerable` flags | ✓ | ✓ | — | — |
-| Self-hosted, no account required | ✓ | — | ✓ | ✓ |
-| **FIREWALL & TRAFFIC** | | | | |
-| **Reverse proxy WAF** | ✓ | — | — | — |
-| Rate limiting (per-IP, per-path, global) | ✓ | — | — | — |
-| IP blocking / CIDR / auto-reputation ban | ✓ | — | — | — |
-| Custom firewall rules engine | ✓ | — | — | — |
-| SQLi / XSS / path traversal detection | ✓ | — | — | — |
-| Real-time TUI dashboard | ✓ | — | — | — |
-| **API FLOW TESTING** | | | | |
-| **Node-based API flow testing** | ✓ | — | — | — |
-| AI-generated test flows from natural language | ✓ | — | — | — |
-| Auto token threading between steps | ✓ | — | — | — |
-| Built-in security probes (auth bypass, SQLi) | ✓ | — | — | — |
-| Runtime prompt inputs (OTP, 2FA, mid-flow) | ✓ | — | — | — |
+## Documentation
 
----
-
-## Traditional API Testing vs INFYNON Weave
-
-| | Traditional (Postman / pytest) | INFYNON Weave |
-|---|---|---|
-| **Token handling** | Manual copy-paste between requests | Automatic — extracted values thread forward |
-| **Dynamic inputs** | Hardcoded env vars | Runtime prompts (OTP, 2FA, password) |
-| **Security testing** | Separate tool (Burp, manual) | Built-in probes: auth bypass, rate limit, SQLi |
-| **Flow creation** | Manual configuration | AI-generated from natural language |
-| **CI integration** | Complex credential management | `--set KEY=val` or `--default` flags |
-
----
-
-## Commands Reference
-
-### Package Security
-| Command | Description |
-|---------|-------------|
-| `infynon pkg scan` | Scan lock files for CVEs |
-| `infynon pkg fix --auto` | Auto-upgrade all vulnerable deps |
-| `infynon pkg audit` | Full dependency tree with CVE annotations |
-| `infynon pkg why <pkg>` | Trace why a package is in your tree |
-| `infynon pkg outdated` | Find outdated deps across all ecosystems |
-| `infynon pkg diff <pkg> v1 v2` | Compare versions: size, deps, CVEs |
-| `infynon pkg doctor` | Health check: dupes, unused, phantoms |
-| `infynon pkg size <pkg>` | Install weight and transitive dep count |
-| `infynon pkg search <query>` | Cross-ecosystem package search |
-| `infynon pkg clean` | Remove unused dependencies |
-| `infynon pkg migrate <from> <to>` | Migrate between package managers |
-| `infynon pkg eagle-eye setup` | Set up scheduled CVE monitoring with email alerts |
-
-### API Flow Testing (Weave)
-| Command | Description |
-|---------|-------------|
-| `infynon weave node create --ai "..."` | Create a node from natural language |
-| `infynon weave flow create "name" --ai "..."` | Build a flow from description |
-| `infynon weave flow run <id>` | Run a flow with live step output |
-| `infynon weave flow run <id> --set key=val` | Pre-seed context vars (skip prompts) |
-| `infynon weave ai probe <id>` | Run auth bypass / rate limit / SQLi probes |
-| `infynon weave ai explain <id>` | Diagnose the last failed run |
-| `infynon weave validate` | Validate all nodes and flows |
-| `infynon weave tui` | Open 10-tab TUI dashboard |
-
----
-
-## Claude Code Integration
-
-INFYNON has dedicated Claude Code plugins at [d4rkNinja/code-guardian](https://github.com/d4rkNinja/code-guardian). Install them so Claude knows how to use every INFYNON command correctly — right mode, right flags, right ecosystem.
-
-```bash
-/plugin marketplace add d4rkNinja/code-guardian
-/plugin install infynon-pkg@d4rkNinja
-/plugin install infynon-firewall@d4rkNinja
-/plugin install infynon-weave@d4rkNinja
-/reload-plugins
-```
-
-Once installed, Claude automatically routes installs through `infynon pkg`, picks the right CI flag, detects lock files, helps write firewall configs, explains CVE findings, and designs API test flows.
-
-| Plugin | Skills included |
-|--------|----------------|
-| `infynon-pkg` | package-security · cve-triage · eagle-eye-monitor |
-| `infynon-firewall` | firewall-setup · attack-response · rule-writer |
-| `infynon-weave` | api-testing |
-
----
-
-## Full Documentation
-
-**[cli.infynon.com/docs](https://cli.infynon.com/docs)**
-
-Source: [github.com/d4rkNinja/infynon-cli](https://github.com/d4rkNinja/infynon-cli)
-
----
+- Root README: `README.md`
+- Command reference: `docs/commands.md`
+- Loom guide: `docs/loom.md`
+- Weave guide: `docs/weave.md`
 
 ## License
 

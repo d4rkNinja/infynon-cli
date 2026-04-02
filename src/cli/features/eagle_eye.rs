@@ -1,9 +1,37 @@
 use crate::tui::logger::Logger;
 use crate::engine::{osv, scanner};
-use crate::firewall::config::SmtpConfig;
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SmtpConfig {
+    #[serde(default)]
+    pub host: String,
+    #[serde(default = "default_smtp_port")]
+    pub port: u16,
+    #[serde(default)]
+    pub username: String,
+    #[serde(default)]
+    pub password: String,
+    #[serde(default = "default_tls")]
+    pub tls: bool,
+}
+
+fn default_smtp_port() -> u16 { 587 }
+fn default_tls() -> bool { true }
+
+impl Default for SmtpConfig {
+    fn default() -> Self {
+        Self {
+            host: String::new(),
+            port: default_smtp_port(),
+            username: String::new(),
+            password: String::new(),
+            tls: default_tls(),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EagleEyeConfig {
@@ -45,7 +73,17 @@ impl Default for EagleEyeConfig {
 // ── Config file path ────────────────────────────────────────────────────────
 
 fn config_path() -> PathBuf {
-    crate::firewall::config::config_dir().join("eagle-eye.toml")
+    config_dir().join("eagle-eye.toml")
+}
+
+fn config_dir() -> PathBuf {
+    if let Ok(home) = std::env::var("HOME") {
+        return PathBuf::from(home).join(".infynon");
+    }
+    if let Ok(profile) = std::env::var("USERPROFILE") {
+        return PathBuf::from(profile).join(".infynon");
+    }
+    PathBuf::from(".infynon")
 }
 
 fn load_config() -> EagleEyeConfig {
