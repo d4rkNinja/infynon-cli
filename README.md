@@ -32,7 +32,7 @@ Claude Code companion:
 |---|---|---|---|
 | Package Security | `infynon pkg` | scanning, safe installs, remediation, monitoring | risky dependencies, invisible installs, version exposure |
 | API Flow Testing | `infynon weave` | multi-step API execution and validation | brittle request scripts, missing flow context, runtime probes |
-| Repo Memory & Provenance | `infynon trace` | handoffs, package ownership, branch/PR/file/package notes, TUI inspection | lost context across people, PRs, branches, and machines |
+| Repo Memory & Provenance | `infynon trace` | handoffs, package ownership, branch/PR/file/package notes, knowledge graph, TUI inspection | lost context across people, PRs, branches, and machines; invisible entity relationships |
 
 ## How the workflow fits together
 
@@ -138,6 +138,11 @@ What it gives you:
 - compaction and reconciliation
 - TUI-based inspection, note browsing, and package risk ownership
 - first-class integration with the `code-guardian` Claude Code companion
+- branch-wise knowledge graph with entities, edges, and visual TUI
+- auto-build graph from git history, notes, and lockfiles
+- graph traversal: path finding, impact analysis, orphan detection
+- graph diff across branches
+- export to JSON and Graphviz DOT, import from JSON
 
 ```bash
 infynon trace init --owner team --user alien
@@ -145,6 +150,14 @@ infynon trace source add-sql team-db --engine sqlite --url sqlite://.infynon/tra
 infynon trace note add repo-handoff --title "Auth changed" --body "Refresh moved into middleware"
 infynon trace sync --direction both
 infynon trace tui
+infynon trace graph build
+infynon trace graph show --branch main
+infynon trace graph entity add alice --kind person
+infynon trace graph edge add --from alice --to src/auth.rs --relation modified_by
+infynon trace graph diff main feature/auth
+infynon trace graph path CVE-2025-1234 alice
+infynon trace graph export --format dot -o graph.dot
+infynon trace graph tui
 ```
 
 Claude Code companion:
@@ -193,8 +206,53 @@ Claude Code companion:
 | Claude Code native integration | ✓ | — | ~ MCP | — | ~ |
 | Structured retrieval by scope | ✓ | — | — | — | — |
 | Bidirectional sync via CLI | ✓ | — | ~ | ~ | ✓ |
+| Branch-wise knowledge graph | ✓ | — | — | — | — |
+| Auto-build graph from git | ✓ | — | — | — | — |
+| Graph export (DOT / JSON) | ✓ | — | — | — | — |
 
 `✓` = supported · `~` = partial or limited · `—` = not supported
+
+## Knowledge Graph
+
+`infynon trace graph` adds a branch-wise knowledge graph to Trace.
+
+Entities represent things in your repo (files, packages, people, decisions, vulnerabilities, endpoints). Edges represent relationships between them (depends_on, modified_by, exposes, decided_by, and more).
+
+Each entity and edge is scoped to a branch. You can diff knowledge across branches the same way you diff code.
+
+### Auto-Build
+
+```bash
+infynon trace graph build
+```
+
+Scans git history and existing trace notes to automatically populate the graph with file, person, and note entities and their relationships.
+
+### Queries
+
+```bash
+infynon trace graph show --branch main
+infynon trace graph path CVE-2025-1234 alice
+infynon trace graph impact src/auth.rs
+infynon trace graph orphans
+infynon trace graph diff main feature/auth
+```
+
+### TUI
+
+```bash
+infynon trace graph tui
+```
+
+Interactive terminal UI with three views: Entities, Edges, and Visual graph. Supports creating, editing, and deleting entities and edges, switching branches, and auto-building — all from the TUI.
+
+### Export / Import
+
+```bash
+infynon trace graph export --format dot -o graph.dot
+infynon trace graph export --format json -o graph.json
+infynon trace graph import graph.json --branch imported
+```
 
 ## Command Style
 
@@ -212,6 +270,18 @@ infynon trace <subcommand>
 
 ```bash
 npm install -g infynon
+```
+
+### Rust (crates.io)
+
+```bash
+cargo install infynon
+```
+
+### Go
+
+```bash
+go install github.com/d4rkNinja/infynon-cli/go@latest
 ```
 
 ### Linux / macOS

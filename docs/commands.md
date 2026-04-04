@@ -449,4 +449,58 @@ What each one is for:
 - `tui`
   Opens the Trace terminal UI for sources, notes, and package ownership inspection.
 
+### Knowledge Graph
+
+```bash
+infynon trace graph build
+infynon trace graph build --branch feature/auth
+infynon trace graph entity add <name> --kind <kind> [--branch <branch>] [--meta key=val,key=val]
+infynon trace graph entity list [--kind <kind>] [--branch <branch>]
+infynon trace graph entity remove <id>
+infynon trace graph edge add --from <entity> --to <entity> --relation <type> [--weight 0.9] [--evidence "..."]
+infynon trace graph edge list [--relation <type>] [--branch <branch>]
+infynon trace graph edge remove <id>
+infynon trace graph show [--branch <branch>] [--kind <kind>]
+infynon trace graph path <from> <to> [--branch <branch>]
+infynon trace graph impact <entity> [--branch <branch>]
+infynon trace graph orphans [--branch <branch>]
+infynon trace graph diff <branch-a> <branch-b>
+infynon trace graph export --format json|dot [--branch <branch>] [-o file]
+infynon trace graph import <file> [--branch <branch>]
+infynon trace graph tui [--branch <branch>]
+```
+
+What each one is for:
+
+- `graph build`
+  Auto-populates the knowledge graph from git history and existing trace notes.
+- `graph entity add`
+  Creates a new entity (file, package, person, decision, vulnerability, endpoint, module, pr, branch, note).
+- `graph entity list`
+  Lists entities with optional branch and kind filters.
+- `graph entity remove`
+  Deletes an entity and all its connected edges.
+- `graph edge add`
+  Creates a relationship between two entities.
+- `graph edge list`
+  Lists edges with optional branch and relation filters.
+- `graph edge remove`
+  Deletes an edge.
+- `graph show`
+  Displays the knowledge graph for a branch.
+- `graph path`
+  Finds the shortest path between two entities.
+- `graph impact`
+  Shows all entities reachable from a starting entity.
+- `graph orphans`
+  Lists entities with no connections.
+- `graph diff`
+  Compares knowledge graphs between two branches.
+- `graph export`
+  Exports the graph to JSON or Graphviz DOT format.
+- `graph import`
+  Imports a graph from a JSON file.
+- `graph tui`
+  Opens the interactive knowledge graph terminal UI.
+
 For deeper Trace usage, see `docs/trace.md`.

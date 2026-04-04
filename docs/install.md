@@ -5,6 +5,44 @@ Package intelligence wrapper for secure installation. Checks packages against OS
 If you want package ownership and handoff context around these installs, pair Trace with the `code-guardian` Claude Code companion:
 [d4rkNinja/code-guardian](https://github.com/d4rkNinja/code-guardian)
 
+## Install INFYNON
+
+### npm
+
+```bash
+npm install -g infynon
+```
+
+### Rust (crates.io)
+
+```bash
+cargo install infynon
+```
+
+### Go
+
+```bash
+go install github.com/d4rkNinja/infynon-cli/go@latest
+```
+
+### Linux / macOS (shell script)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/d4rkNinja/infynon-cli/main/scripts/install.sh | bash
+```
+
+### Windows (PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/d4rkNinja/infynon-cli/main/scripts/install.ps1 | iex
+```
+
+### From source
+
+```bash
+cargo install --git https://github.com/d4rkNinja/infynon-cli
+```
+
 ## Usage
 
 ```

@@ -75,6 +75,13 @@ pub enum TraceAction {
 
     /// Open the Trace terminal UI.
     Tui,
+
+    /// Knowledge graph — branch-wise entity-relationship explorer.
+    #[command(name = "graph")]
+    Graph {
+        #[command(subcommand)]
+        action: GraphAction,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -191,4 +198,183 @@ pub enum NoteAction {
 
     /// List Trace notes.
     List,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum GraphAction {
+    /// Add an entity (node) to the knowledge graph.
+    #[command(name = "entity")]
+    Entity {
+        #[command(subcommand)]
+        action: GraphEntityAction,
+    },
+
+    /// Add an edge (relationship) between two entities.
+    #[command(name = "edge")]
+    Edge {
+        #[command(subcommand)]
+        action: GraphEdgeAction,
+    },
+
+    /// Show the knowledge graph for a branch.
+    Show {
+        /// Branch name (defaults to current git branch)
+        #[arg(long)]
+        branch: Option<String>,
+        /// Filter by entity kind
+        #[arg(long)]
+        kind: Option<String>,
+    },
+
+    /// Auto-build the knowledge graph from git history, notes, and lock files.
+    Build {
+        /// Branch to build for (defaults to current git branch)
+        #[arg(long)]
+        branch: Option<String>,
+        /// Build for all local branches
+        #[arg(long)]
+        all_branches: bool,
+    },
+
+    /// Diff knowledge graphs between two branches.
+    Diff {
+        /// First branch
+        branch_a: String,
+        /// Second branch
+        branch_b: String,
+    },
+
+    /// Find the shortest path between two entities.
+    Path {
+        /// Source entity name
+        from: String,
+        /// Target entity name
+        to: String,
+        /// Branch (defaults to current git branch)
+        #[arg(long)]
+        branch: Option<String>,
+    },
+
+    /// Show all entities connected to a given entity (impact analysis).
+    Impact {
+        /// Entity name
+        entity: String,
+        /// Branch (defaults to current git branch)
+        #[arg(long)]
+        branch: Option<String>,
+    },
+
+    /// List entities with no connections.
+    Orphans {
+        /// Branch (defaults to current git branch)
+        #[arg(long)]
+        branch: Option<String>,
+    },
+
+    /// Export the knowledge graph.
+    Export {
+        /// Format: json | dot
+        #[arg(long, default_value = "json")]
+        format: String,
+        /// Branch (defaults to current git branch)
+        #[arg(long)]
+        branch: Option<String>,
+        /// Output file path (prints to stdout if omitted)
+        #[arg(long, short)]
+        output: Option<String>,
+    },
+
+    /// Import a knowledge graph from a file.
+    Import {
+        /// File path to import from
+        file: String,
+        /// Format: json (auto-detected from extension if omitted)
+        #[arg(long)]
+        format: Option<String>,
+        /// Target branch (defaults to current git branch)
+        #[arg(long)]
+        branch: Option<String>,
+    },
+
+    /// Open the knowledge graph TUI.
+    Tui {
+        /// Branch (defaults to current git branch)
+        #[arg(long)]
+        branch: Option<String>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum GraphEntityAction {
+    /// Add an entity.
+    Add {
+        /// Entity name (e.g. src/auth.rs, chrono, alice)
+        name: String,
+        /// Entity kind: file | package | person | decision | endpoint | module | pr | branch | note | vulnerability
+        #[arg(long)]
+        kind: String,
+        /// Branch (defaults to current git branch)
+        #[arg(long)]
+        branch: Option<String>,
+        /// Key=value metadata pairs
+        #[arg(long, value_delimiter = ',')]
+        meta: Vec<String>,
+    },
+
+    /// Remove an entity and its edges.
+    Remove {
+        /// Entity ID or name
+        id: String,
+    },
+
+    /// List entities.
+    List {
+        /// Filter by branch
+        #[arg(long)]
+        branch: Option<String>,
+        /// Filter by kind
+        #[arg(long)]
+        kind: Option<String>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum GraphEdgeAction {
+    /// Add a relationship between two entities.
+    Add {
+        /// Source entity name or ID
+        #[arg(long)]
+        from: String,
+        /// Target entity name or ID
+        #[arg(long)]
+        to: String,
+        /// Relation type: depends_on | introduced_by | modified_by | affects | decided_by | relates_to | supersedes | conflicts_with | documents | exposes | owns
+        #[arg(long)]
+        relation: String,
+        /// Edge weight 0.0-1.0
+        #[arg(long, default_value = "1.0")]
+        weight: f64,
+        /// Branch (defaults to current git branch)
+        #[arg(long)]
+        branch: Option<String>,
+        /// Evidence (note ID, commit hash, or description)
+        #[arg(long)]
+        evidence: Option<String>,
+    },
+
+    /// Remove an edge.
+    Remove {
+        /// Edge ID
+        id: String,
+    },
+
+    /// List edges.
+    List {
+        /// Filter by branch
+        #[arg(long)]
+        branch: Option<String>,
+        /// Filter by relation type
+        #[arg(long)]
+        relation: Option<String>,
+    },
 }

@@ -17,11 +17,21 @@ Claude Code companion: [d4rkNinja/code-guardian](https://github.com/d4rkNinja/co
 
 ## Install
 
+### npm (recommended)
+
 ```bash
 npm install -g infynon
 ```
 
 This package downloads the matching native binary for your OS and architecture.
+
+### Other install methods
+
+```bash
+cargo install infynon                                          # Rust (crates.io)
+go install github.com/d4rkNinja/infynon-cli/go@latest          # Go
+curl -fsSL https://raw.githubusercontent.com/d4rkNinja/infynon-cli/main/scripts/install.sh | bash  # Linux/macOS
+```
 
 ## Good Fit For
 
@@ -112,6 +122,10 @@ Use this when the problem is repo memory, handoff context, and package provenanc
 - package notes that identify who introduced a compromised dependency
 - sync, retrieve, compact, and TUI inspection
 - designed to pair with the `code-guardian` Claude Code companion
+- branch-wise knowledge graph with auto-build from git history
+- graph queries: path finding, impact analysis, orphan detection, branch diff
+- export to JSON and Graphviz DOT
+- interactive graph TUI with entity/edge editing and branch switching
 
 ```bash
 infynon trace init --owner team --user alien
@@ -119,6 +133,9 @@ infynon trace source add-sql team-db --engine sqlite --url sqlite://.infynon/tra
 infynon trace note add repo-handoff --title "Auth changed" --body "Refresh moved into middleware"
 infynon trace sync --direction both
 infynon trace tui
+infynon trace graph build
+infynon trace graph show --branch main
+infynon trace graph tui
 ```
 
 Claude Code companion:
@@ -167,6 +184,7 @@ Claude Code companion:
 | Claude Code native integration | ✓ | — | ~ MCP | — | ~ |
 | Structured retrieval by scope | ✓ | — | — | — | — |
 | Bidirectional sync via CLI | ✓ | — | ~ | ~ | ✓ |
+| Branch-wise knowledge graph | ✓ | — | — | — | — |
 
 `✓` = supported · `~` = partial or limited · `—` = not supported
 

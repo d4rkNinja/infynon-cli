@@ -82,6 +82,64 @@ jobs:
         with:
           files: ${{ env.ASSET }}
 
+  sync-go-version:
+    name: Sync Go wrapper version
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sync version in Go wrapper
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          sed -i "s/version = \".*\"/version = \"$TAG\"/" go/main.go
+          echo "Synced Go wrapper to $TAG"
+
+      - name: Commit and push
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add go/main.go
+          git diff --cached --quiet && echo "No changes" && exit 0
+          git commit -m "ci: sync go wrapper version to ${GITHUB_REF_NAME}"
+          git push origin HEAD:main
+
+      - name: Trigger Go proxy indexing
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          curl -s "https://proxy.golang.org/github.com/d4rkNinja/infynon-cli/go/@v/${TAG}.info" || true
+          echo "Triggered Go proxy for ${TAG}"
+
+  publish-crates:
+    name: Publish to crates.io
+    needs: build-and-release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Sync version from tag
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          sed -i "s/^version = \".*\"/version = \"$TAG\"/" Cargo.toml
+          echo "Publishing version $TAG to crates.io"
+
+      - name: Publish to crates.io
+        run: cargo publish --allow-dirty
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
   publish-npm:
     name: Publish to npm
     needs: build-and-release

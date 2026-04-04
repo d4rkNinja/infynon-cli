@@ -284,6 +284,8 @@ Current tabs:
 - Sources
 - Notes
 - Packages
+- Edit Log
+- Graph
 
 Why the Packages tab matters:
 
@@ -302,6 +304,124 @@ Use that stack when you want:
 - Claude Code to read the latest shared context before editing
 - Trace to remain the structured memory backend
 - package ownership and handoff notes to stay queryable from the CLI and TUI
+
+## Knowledge Graph
+
+Use `trace graph` when you want to understand how entities in your repo relate to each other across branches.
+
+The knowledge graph stores entities (files, packages, people, decisions, vulnerabilities, endpoints, modules, PRs, branches, notes) and edges (relationships like depends_on, modified_by, exposes, decided_by, owns, and more).
+
+Every entity and edge is scoped to a branch.
+
+### Auto-Build
+
+Use `graph build` to automatically populate the graph from git history and existing trace notes.
+
+```bash
+infynon trace graph build
+infynon trace graph build --branch feature/auth
+```
+
+What it does:
+
+- scans `git log` for person-to-file relationships
+- creates Person and File entities
+- creates ModifiedBy edges between them
+- converts existing trace notes into Note entities with Documents edges
+
+### Entity Management
+
+```bash
+infynon trace graph entity add alice --kind person
+infynon trace graph entity add "POST /login" --kind endpoint --meta method=POST,auth=required
+infynon trace graph entity add CVE-2025-1234 --kind vulnerability
+infynon trace graph entity add alice --kind person --branch feature/auth
+infynon trace graph entity list --kind person
+infynon trace graph entity list --branch feature/auth
+infynon trace graph entity remove alice
+```
+
+Entity kinds: file, package, person, decision, endpoint, module, pr, branch, note, vulnerability.
+
+### Edge Management
+
+```bash
+infynon trace graph edge add --from alice --to src/auth.rs --relation modified_by --evidence "commit:abc123"
+infynon trace graph edge add --from src/auth.rs --to ratatui --relation depends_on --weight 0.9
+infynon trace graph edge add --from CVE-2025-1234 --to ratatui --relation exposes
+infynon trace graph edge list --relation modified_by
+infynon trace graph edge remove <edge-id>
+```
+
+Relation types: depends_on, introduced_by, modified_by, affects, decided_by, relates_to, supersedes, conflicts_with, documents, exposes, owns.
+
+### Queries
+
+```bash
+infynon trace graph show --branch main
+infynon trace graph show --kind person
+infynon trace graph path CVE-2025-1234 alice
+infynon trace graph impact src/auth.rs
+infynon trace graph orphans
+infynon trace graph diff main feature/auth
+```
+
+What each query does:
+
+- `show` — display all entities and edges for a branch
+- `path` — find the shortest path between two entities (BFS)
+- `impact` — show all entities reachable from a starting entity with depth
+- `orphans` — find entities with no connections
+- `diff` — compare knowledge graphs between two branches
+
+### Export and Import
+
+```bash
+infynon trace graph export --format json -o graph.json
+infynon trace graph export --format dot -o graph.dot
+infynon trace graph import graph.json --branch imported
+```
+
+DOT export can be rendered with Graphviz or any compatible tool.
+
+### TUI
+
+```bash
+infynon trace graph tui
+infynon trace graph tui --branch feature/auth
+```
+
+The graph TUI has three views:
+
+- **Entities** — list and manage entities (n=new, Enter=edit, d=delete)
+- **Edges** — list and manage edges (n=new, Enter=edit, d=delete)
+- **Visual** — graphical view showing entity connections grouped by kind
+
+TUI keyboard shortcuts:
+
+```
+Tab       Cycle views (Entities / Edges / Visual)
+e/w/v     Switch to Entities / Edges / Visual directly
+n         New entity or edge (depending on view)
+Enter     Edit selected entity or edge
+d         Delete selected entity or edge
+b         Open branch picker
+a         Toggle all-branches view
+B         Auto-build graph for current branch
+r         Reload
+↑↓/jk     Navigate
+q         Quit
+```
+
+### Backend Support
+
+The knowledge graph uses the same backends as Trace notes:
+
+- **Local filesystem** — `.infynon/trace/kg/entities/` and `.infynon/trace/kg/edges/`
+- **Redis** — keys under `trace:kg:entity:*` and `trace:kg:edge:*`
+- **SQL** — `trace_kg_entities` and `trace_kg_edges` tables (SQLite, Postgres, MySQL)
+
+Graph data is included in `trace sync` operations when using push/pull.
 
 ## Short Reference
 
@@ -325,4 +445,17 @@ infynon trace compact
 infynon trace schema sql
 infynon trace schema redis
 infynon trace tui
+infynon trace graph build
+infynon trace graph entity add <name> --kind <kind>
+infynon trace graph entity list
+infynon trace graph edge add --from <a> --to <b> --relation <r>
+infynon trace graph edge list
+infynon trace graph show
+infynon trace graph path <from> <to>
+infynon trace graph impact <entity>
+infynon trace graph orphans
+infynon trace graph diff <branch-a> <branch-b>
+infynon trace graph export --format json|dot
+infynon trace graph import <file>
+infynon trace graph tui
 ```

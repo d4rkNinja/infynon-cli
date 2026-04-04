@@ -1,6 +1,7 @@
-use crate::trace::types::{TraceLayer, TraceNote, TraceScope, TraceSource, NoteStatus, PackageRisk, SyncRun};
+use crate::trace::types::{TraceLayer, TraceNote, TraceScope, TraceSource, NoteStatus, PackageRisk, SyncRun, KgEntity, KgEdge, EntityKind, RelationType};
 use redis::{Commands, Connection};
 use std::collections::HashMap;
+use std::str::FromStr;
 
 pub fn validate_and_prepare(source: &TraceSource) -> Result<(), String> {
     let mut conn = connection(source)?;
@@ -55,6 +56,143 @@ pub fn record_sync(source: &TraceSource, run: &SyncRun) -> Result<(), String> {
         .lpush(key(source, "sync:runs"), payload)
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+pub fn push_kg(source: &TraceSource, entities: &[KgEntity], edges: &[KgEdge]) -> Result<(), String> {
+    let mut conn = connection(source)?;
+    for entity in entities {
+        upsert_kg_entity(&mut conn, source, entity)?;
+    }
+    for edge in edges {
+        upsert_kg_edge(&mut conn, source, edge)?;
+    }
+    Ok(())
+}
+
+pub fn pull_kg(source: &TraceSource) -> Result<(Vec<KgEntity>, Vec<KgEdge>), String> {
+    let mut conn = connection(source)?;
+
+    let entity_ids: Vec<String> = conn
+        .smembers(key(source, "kg:entities:all"))
+        .map_err(|e| e.to_string())?;
+    let mut entities = Vec::new();
+    for id in entity_ids {
+        let hash: HashMap<String, String> = conn
+            .hgetall(key(source, &format!("kg:entity:{}", id)))
+            .map_err(|e| e.to_string())?;
+        if hash.is_empty() {
+            continue;
+        }
+        entities.push(entity_from_hash(&hash)?);
+    }
+
+    let edge_ids: Vec<String> = conn
+        .smembers(key(source, "kg:edges:all"))
+        .map_err(|e| e.to_string())?;
+    let mut edges = Vec::new();
+    for id in edge_ids {
+        let hash: HashMap<String, String> = conn
+            .hgetall(key(source, &format!("kg:edge:{}", id)))
+            .map_err(|e| e.to_string())?;
+        if hash.is_empty() {
+            continue;
+        }
+        edges.push(edge_from_hash(&hash)?);
+    }
+
+    Ok((entities, edges))
+}
+
+fn upsert_kg_entity(conn: &mut Connection, source: &TraceSource, entity: &KgEntity) -> Result<(), String> {
+    let entity_key = key(source, &format!("kg:entity:{}", entity.id));
+    let metadata_json = serde_json::to_string(&entity.metadata).map_err(|e| e.to_string())?;
+    let _: () = redis::cmd("HSET")
+        .arg(&entity_key)
+        .arg("id")
+        .arg(&entity.id)
+        .arg("kind")
+        .arg(entity.kind.as_str())
+        .arg("name")
+        .arg(&entity.name)
+        .arg("metadata_json")
+        .arg(metadata_json)
+        .arg("branch")
+        .arg(&entity.branch)
+        .arg("created_at")
+        .arg(&entity.created_at)
+        .arg("updated_at")
+        .arg(&entity.updated_at)
+        .query(conn)
+        .map_err(|e| e.to_string())?;
+    let _: () = conn
+        .sadd(key(source, "kg:entities:all"), &entity.id)
+        .map_err(|e| e.to_string())?;
+    let _: () = conn
+        .sadd(key(source, &format!("kg:index:branch:{}:entities", entity.branch)), &entity.id)
+        .map_err(|e| e.to_string())?;
+    let _: () = conn
+        .sadd(key(source, &format!("kg:index:kind:{}", entity.kind.as_str())), &entity.id)
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn upsert_kg_edge(conn: &mut Connection, source: &TraceSource, edge: &KgEdge) -> Result<(), String> {
+    let edge_key = key(source, &format!("kg:edge:{}", edge.id));
+    let _: () = redis::cmd("HSET")
+        .arg(&edge_key)
+        .arg("id")
+        .arg(&edge.id)
+        .arg("source_entity")
+        .arg(&edge.source)
+        .arg("target_entity")
+        .arg(&edge.target)
+        .arg("relation")
+        .arg(edge.relation.as_str())
+        .arg("weight")
+        .arg(edge.weight.to_string())
+        .arg("branch")
+        .arg(&edge.branch)
+        .arg("evidence")
+        .arg(&edge.evidence)
+        .arg("created_at")
+        .arg(&edge.created_at)
+        .query(conn)
+        .map_err(|e| e.to_string())?;
+    let _: () = conn
+        .sadd(key(source, "kg:edges:all"), &edge.id)
+        .map_err(|e| e.to_string())?;
+    let _: () = conn
+        .sadd(key(source, &format!("kg:index:branch:{}:edges", edge.branch)), &edge.id)
+        .map_err(|e| e.to_string())?;
+    let _: () = conn
+        .sadd(key(source, &format!("kg:index:relation:{}", edge.relation.as_str())), &edge.id)
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn entity_from_hash(hash: &HashMap<String, String>) -> Result<KgEntity, String> {
+    Ok(KgEntity {
+        id: value(hash, "id")?,
+        kind: EntityKind::from_str(&value(hash, "kind")?).map_err(|e| e.to_string())?,
+        name: value(hash, "name")?,
+        metadata: serde_json::from_str(&value(hash, "metadata_json")?).map_err(|e| e.to_string())?,
+        branch: value(hash, "branch")?,
+        created_at: value(hash, "created_at")?,
+        updated_at: value(hash, "updated_at")?,
+    })
+}
+
+fn edge_from_hash(hash: &HashMap<String, String>) -> Result<KgEdge, String> {
+    Ok(KgEdge {
+        id: value(hash, "id")?,
+        source: value(hash, "source_entity")?,
+        target: value(hash, "target_entity")?,
+        relation: RelationType::from_str(&value(hash, "relation")?).map_err(|e| e.to_string())?,
+        weight: value(hash, "weight")?.parse::<f64>().map_err(|e| e.to_string())?,
+        branch: value(hash, "branch")?,
+        evidence: value(hash, "evidence")?,
+        created_at: value(hash, "created_at")?,
+    })
 }
 
 fn upsert_note(conn: &mut Connection, source: &TraceSource, note: &TraceNote) -> Result<(), String> {

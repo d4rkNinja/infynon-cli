@@ -1,7 +1,8 @@
 use crate::trace::{
     storage,
-    types::{TraceLayer, TraceNote, TraceScope, NoteStatus, PackageRisk},
+    types::{TraceLayer, TraceNote, TraceScope, NoteStatus, PackageRisk, KgEntity, KgEdge, KgGraph, EntityKind, RelationType},
 };
+use std::str::FromStr;
 use chrono::Utc;
 use crossterm::{
     event::{self, Event, KeyCode},
@@ -28,16 +29,18 @@ enum TraceTab {
     Notes,
     Packages,
     EditLog,
+    Graph,
 }
 
 impl TraceTab {
-    fn all() -> [TraceTab; 5] {
+    fn all() -> [TraceTab; 6] {
         [
             TraceTab::Overview,
             TraceTab::Sources,
             TraceTab::Notes,
             TraceTab::Packages,
             TraceTab::EditLog,
+            TraceTab::Graph,
         ]
     }
     fn title(&self) -> &'static str {
@@ -47,6 +50,7 @@ impl TraceTab {
             TraceTab::Notes => "Notes",
             TraceTab::Packages => "Packages",
             TraceTab::EditLog => "Edit Log",
+            TraceTab::Graph => "Graph",
         }
     }
     fn index(&self) -> usize {
@@ -181,6 +185,215 @@ impl NoteForm {
     }
 }
 
+// ─── KG Entity form ──────────────────────────────────────────────────────────
+
+#[derive(Clone, Copy, PartialEq)]
+enum KgEntityField {
+    Name,
+    Kind,
+    Branch,
+    Meta,
+}
+
+impl KgEntityField {
+    fn all() -> [Self; 4] {
+        [Self::Name, Self::Kind, Self::Branch, Self::Meta]
+    }
+    fn label(&self) -> &'static str {
+        match self {
+            Self::Name => "Name",
+            Self::Kind => "Kind (file|package|person|decision|endpoint|module|pr|branch|note|vulnerability)",
+            Self::Branch => "Branch",
+            Self::Meta => "Metadata (key=value, comma-separated)",
+        }
+    }
+    fn next(self) -> Self {
+        let a = Self::all();
+        let i = a.iter().position(|f| *f == self).unwrap_or(0);
+        a[(i + 1) % a.len()]
+    }
+    fn prev(self) -> Self {
+        let a = Self::all();
+        let i = a.iter().position(|f| *f == self).unwrap_or(0);
+        a[(i + a.len() - 1) % a.len()]
+    }
+}
+
+impl Default for KgEntityField {
+    fn default() -> Self {
+        Self::Name
+    }
+}
+
+struct KgEntityForm {
+    name: String,
+    kind: String,
+    branch: String,
+    meta: String,
+    active_field: KgEntityField,
+    is_edit: bool,
+    original_id: String,
+}
+
+impl KgEntityForm {
+    fn new_create(branch: &str) -> Self {
+        Self {
+            name: String::new(),
+            kind: "file".to_string(),
+            branch: branch.to_string(),
+            meta: String::new(),
+            active_field: KgEntityField::Name,
+            is_edit: false,
+            original_id: String::new(),
+        }
+    }
+    fn from_entity(e: &KgEntity) -> Self {
+        let meta = e
+            .metadata
+            .iter()
+            .map(|(k, v)| format!("{}={}", k, v))
+            .collect::<Vec<_>>()
+            .join(", ");
+        Self {
+            name: e.name.clone(),
+            kind: e.kind.as_str().to_string(),
+            branch: e.branch.clone(),
+            meta,
+            active_field: KgEntityField::Name,
+            is_edit: true,
+            original_id: e.id.clone(),
+        }
+    }
+    fn get_field(&self, f: KgEntityField) -> &str {
+        match f {
+            KgEntityField::Name => &self.name,
+            KgEntityField::Kind => &self.kind,
+            KgEntityField::Branch => &self.branch,
+            KgEntityField::Meta => &self.meta,
+        }
+    }
+    fn get_field_mut(&mut self, f: KgEntityField) -> &mut String {
+        match f {
+            KgEntityField::Name => &mut self.name,
+            KgEntityField::Kind => &mut self.kind,
+            KgEntityField::Branch => &mut self.branch,
+            KgEntityField::Meta => &mut self.meta,
+        }
+    }
+}
+
+// ─── KG Edge form ────────────────────────────────────────────────────────────
+
+#[derive(Clone, Copy, PartialEq)]
+enum KgEdgeField {
+    From,
+    To,
+    Relation,
+    Weight,
+    Branch,
+    Evidence,
+}
+
+impl KgEdgeField {
+    fn all() -> [Self; 6] {
+        [
+            Self::From,
+            Self::To,
+            Self::Relation,
+            Self::Weight,
+            Self::Branch,
+            Self::Evidence,
+        ]
+    }
+    fn label(&self) -> &'static str {
+        match self {
+            Self::From => "From (entity name)",
+            Self::To => "To (entity name)",
+            Self::Relation => "Relation (depends_on|introduced_by|modified_by|affects|decided_by|relates_to|supersedes|conflicts_with|documents|exposes|owns)",
+            Self::Weight => "Weight (0.0-1.0)",
+            Self::Branch => "Branch",
+            Self::Evidence => "Evidence",
+        }
+    }
+    fn next(self) -> Self {
+        let a = Self::all();
+        let i = a.iter().position(|f| *f == self).unwrap_or(0);
+        a[(i + 1) % a.len()]
+    }
+    fn prev(self) -> Self {
+        let a = Self::all();
+        let i = a.iter().position(|f| *f == self).unwrap_or(0);
+        a[(i + a.len() - 1) % a.len()]
+    }
+}
+
+impl Default for KgEdgeField {
+    fn default() -> Self {
+        Self::From
+    }
+}
+
+struct KgEdgeForm {
+    from: String,
+    to: String,
+    relation: String,
+    weight: String,
+    branch: String,
+    evidence: String,
+    active_field: KgEdgeField,
+    is_edit: bool,
+    original_id: String,
+}
+
+impl KgEdgeForm {
+    fn new_create(branch: &str) -> Self {
+        Self {
+            from: String::new(),
+            to: String::new(),
+            relation: "relates_to".to_string(),
+            weight: "1.0".to_string(),
+            branch: branch.to_string(),
+            evidence: String::new(),
+            active_field: KgEdgeField::From,
+            is_edit: false,
+            original_id: String::new(),
+        }
+    }
+    fn from_edge(e: &KgEdge) -> Self {
+        Self {
+            from: e.source.clone(),
+            to: e.target.clone(),
+            relation: e.relation.as_str().to_string(),
+            weight: format!("{:.1}", e.weight),
+            branch: e.branch.clone(),
+            evidence: e.evidence.clone(),
+            active_field: KgEdgeField::From,
+            is_edit: true,
+            original_id: e.id.clone(),
+        }
+    }
+    fn get_field(&self, f: KgEdgeField) -> &str {
+        match f {
+            KgEdgeField::From => &self.from,
+            KgEdgeField::To => &self.to,
+            KgEdgeField::Relation => &self.relation,
+            KgEdgeField::Weight => &self.weight,
+            KgEdgeField::Branch => &self.branch,
+            KgEdgeField::Evidence => &self.evidence,
+        }
+    }
+    fn get_field_mut(&mut self, f: KgEdgeField) -> &mut String {
+        match f {
+            KgEdgeField::From => &mut self.from,
+            KgEdgeField::To => &mut self.to,
+            KgEdgeField::Relation => &mut self.relation,
+            KgEdgeField::Weight => &mut self.weight,
+            KgEdgeField::Branch => &mut self.branch,
+            KgEdgeField::Evidence => &mut self.evidence,
+        }
+    }
+}
+
 // ─── App mode ─────────────────────────────────────────────────────────────────
 
 enum AppMode {
@@ -190,6 +403,11 @@ enum AppMode {
     DeleteConfirm(String),
     SourceDeleteConfirm(String),
     PackageDetail,
+    KgEntityForm(KgEntityForm),
+    KgEdgeForm(KgEdgeForm),
+    KgEntityDelete(String),
+    KgEdgeDelete(String),
+    KgBranchPicker,
 }
 
 // ─── Audit log ────────────────────────────────────────────────────────────────
@@ -240,6 +458,15 @@ fn load_audit_log() -> Vec<AuditEntry> {
     entries
 }
 
+// ─── Knowledge graph view ────────────────────────────────────────────────────
+
+#[derive(Clone, Copy, PartialEq)]
+enum KgView {
+    Entities,
+    Edges,
+    Visual,
+}
+
 // ─── App state ────────────────────────────────────────────────────────────────
 
 struct App {
@@ -253,6 +480,14 @@ struct App {
     mode: AppMode,
     status: Option<(String, bool)>, // (message, is_error)
     audit: Vec<AuditEntry>,
+    kg_entities: Vec<KgEntity>,
+    kg_edges: Vec<KgEdge>,
+    kg_entity_state: ListState,
+    kg_selected_entity: Option<usize>,
+    kg_view: KgView,
+    kg_branch: String,
+    kg_branches: Vec<String>,
+    kg_branch_idx: usize,
 }
 
 impl App {
@@ -280,6 +515,42 @@ impl App {
     fn reload_audit(&mut self) {
         self.audit = load_audit_log();
         self.audit_scroll = 0;
+    }
+
+    fn reload_kg(&mut self) {
+        let graph = storage::load_graph(Some(&self.kg_branch)).unwrap_or_default();
+        self.kg_entities = graph.entities;
+        self.kg_edges = graph.edges;
+        self.kg_entity_state = ListState::default();
+        if !self.kg_entities.is_empty() {
+            self.kg_entity_state.select(Some(0));
+        }
+    }
+
+    fn reload_kg_all(&mut self) {
+        let graph = storage::load_graph(None).unwrap_or_default();
+        self.kg_entities = graph.entities;
+        self.kg_edges = graph.edges;
+        self.kg_entity_state = ListState::default();
+        if !self.kg_entities.is_empty() {
+            self.kg_entity_state.select(Some(0));
+        }
+    }
+
+    fn reload_kg_branches(&mut self) {
+        let all_entities = storage::list_entities(None, None).unwrap_or_default();
+        let mut branches: Vec<String> = all_entities.iter().map(|e| e.branch.clone()).collect();
+        branches.sort();
+        branches.dedup();
+        if branches.is_empty() {
+            branches.push(storage::detect_current_branch());
+        }
+        self.kg_branches = branches;
+        self.kg_branch_idx = self
+            .kg_branches
+            .iter()
+            .position(|b| b == &self.kg_branch)
+            .unwrap_or(0);
     }
 
     fn selected_idx(&self) -> Option<usize> {
@@ -323,9 +594,18 @@ impl App {
     }
 }
 
-// ─── Public entry point ───────────────────────────────────────────────────────
+// ─── Public entry points ─────────────────────────────────────────────────────
 
 pub fn run() {
+    run_inner(TraceTab::Notes, storage::detect_current_branch());
+}
+
+pub fn run_kg(branch: Option<String>) {
+    let b = branch.unwrap_or_else(storage::detect_current_branch);
+    run_inner(TraceTab::Graph, b);
+}
+
+fn run_inner(initial_tab: TraceTab, kg_branch: String) {
     let _ = enable_raw_mode();
     let mut stdout = io::stdout();
     let _ = execute!(stdout, EnterAlternateScreen);
@@ -357,7 +637,7 @@ pub fn run() {
     }
 
     let mut app = App {
-        tab: TraceTab::Notes,
+        tab: initial_tab,
         notes,
         packages,
         list_state,
@@ -367,7 +647,20 @@ pub fn run() {
         mode: AppMode::Browse,
         status: None,
         audit,
+        kg_entities: Vec::new(),
+        kg_edges: Vec::new(),
+        kg_entity_state: ListState::default(),
+        kg_selected_entity: None,
+        kg_view: KgView::Entities,
+        kg_branch,
+        kg_branches: Vec::new(),
+        kg_branch_idx: 0,
     };
+
+    if app.tab == TraceTab::Graph {
+        app.reload_kg();
+        app.reload_kg_branches();
+    }
 
     loop {
         let cfg = storage::load_config().unwrap_or_default();
@@ -397,6 +690,26 @@ pub fn run() {
             }
             AppMode::SourceDeleteConfirm(_) => {
                 handle_source_delete_confirm(&mut app, key.code);
+                false
+            }
+            AppMode::KgEntityForm(_) => {
+                handle_kg_entity_form(&mut app, key.code);
+                false
+            }
+            AppMode::KgEdgeForm(_) => {
+                handle_kg_edge_form(&mut app, key.code);
+                false
+            }
+            AppMode::KgEntityDelete(_) => {
+                handle_kg_entity_delete(&mut app, key.code);
+                false
+            }
+            AppMode::KgEdgeDelete(_) => {
+                handle_kg_edge_delete(&mut app, key.code);
+                false
+            }
+            AppMode::KgBranchPicker => {
+                handle_kg_branch_picker(&mut app, key.code);
                 false
             }
         };
@@ -434,22 +747,33 @@ fn handle_browse(app: &mut App, code: KeyCode) -> bool {
             app.mode = AppMode::Browse;
             app.reload_audit();
         }
+        KeyCode::Char('6') => {
+            app.tab = TraceTab::Graph;
+            app.mode = AppMode::Browse;
+            app.reload_kg();
+        }
         KeyCode::Right | KeyCode::Char('l')
             if !matches!(app.mode, AppMode::ViewDetail | AppMode::PackageDetail) =>
         {
-            let next = (app.tab.index() + 1) % 5;
+            let next = (app.tab.index() + 1) % 6;
             app.tab = TraceTab::all()[next];
             app.mode = AppMode::Browse;
             if app.tab == TraceTab::EditLog {
                 app.reload_audit();
             }
+            if app.tab == TraceTab::Graph {
+                app.reload_kg();
+            }
         }
         KeyCode::Left | KeyCode::Char('h')
             if !matches!(app.mode, AppMode::ViewDetail | AppMode::PackageDetail) =>
         {
-            let prev = (app.tab.index() + 5 - 1) % 5;
+            let prev = (app.tab.index() + 6 - 1) % 6;
             app.tab = TraceTab::all()[prev];
             app.mode = AppMode::Browse;
+            if app.tab == TraceTab::Graph {
+                app.reload_kg();
+            }
         }
 
         // ── Notes tab ────────────────────────────────────────────────────────
@@ -592,6 +916,143 @@ fn handle_browse(app: &mut App, code: KeyCode) -> bool {
         KeyCode::Char('r') if app.tab == TraceTab::EditLog => {
             app.reload_audit();
             app.ok("Edit log reloaded");
+        }
+
+        // ── Graph tab ───────────────────────────────────────────────────────
+        KeyCode::Char('n') if app.tab == TraceTab::Graph && app.kg_view == KgView::Entities => {
+            app.mode = AppMode::KgEntityForm(KgEntityForm::new_create(&app.kg_branch));
+        }
+        KeyCode::Char('n') if app.tab == TraceTab::Graph && app.kg_view == KgView::Edges => {
+            app.mode = AppMode::KgEdgeForm(KgEdgeForm::new_create(&app.kg_branch));
+        }
+        KeyCode::Enter if app.tab == TraceTab::Graph && app.kg_view == KgView::Entities => {
+            if let Some(idx) = app.kg_entity_state.selected() {
+                if let Some(ent) = app.kg_entities.get(idx) {
+                    app.mode = AppMode::KgEntityForm(KgEntityForm::from_entity(ent));
+                }
+            }
+        }
+        KeyCode::Enter if app.tab == TraceTab::Graph && app.kg_view == KgView::Edges => {
+            if let Some(idx) = app.kg_entity_state.selected() {
+                if let Some(edge) = app.kg_edges.get(idx) {
+                    app.mode = AppMode::KgEdgeForm(KgEdgeForm::from_edge(edge));
+                }
+            }
+        }
+        KeyCode::Char('d') if app.tab == TraceTab::Graph && app.kg_view == KgView::Entities => {
+            if let Some(idx) = app.kg_entity_state.selected() {
+                if let Some(ent) = app.kg_entities.get(idx) {
+                    app.mode = AppMode::KgEntityDelete(ent.id.clone());
+                }
+            }
+        }
+        KeyCode::Char('d') if app.tab == TraceTab::Graph && app.kg_view == KgView::Edges => {
+            if let Some(idx) = app.kg_entity_state.selected() {
+                if let Some(edge) = app.kg_edges.get(idx) {
+                    app.mode = AppMode::KgEdgeDelete(edge.id.clone());
+                }
+            }
+        }
+        KeyCode::Char('b') if app.tab == TraceTab::Graph => {
+            app.reload_kg_branches();
+            app.mode = AppMode::KgBranchPicker;
+        }
+        KeyCode::Char('a') if app.tab == TraceTab::Graph => {
+            if app.kg_branch == "*" {
+                app.kg_branch = storage::detect_current_branch();
+                app.reload_kg();
+                app.ok("Showing current branch");
+            } else {
+                app.kg_branch = "*".to_string();
+                app.reload_kg_all();
+                app.ok("Showing all branches");
+            }
+        }
+        KeyCode::Char('B') if app.tab == TraceTab::Graph => {
+            let _ = storage::ensure_kg_layout();
+            let branch = if app.kg_branch == "*" {
+                storage::detect_current_branch()
+            } else {
+                app.kg_branch.clone()
+            };
+            match storage::auto_build_graph(&branch) {
+                Ok((ents, edges)) => {
+                    app.ok(format!("Built: {} entities, {} edges", ents, edges));
+                    app.reload_kg();
+                    app.reload_kg_branches();
+                }
+                Err(e) => app.err(e),
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') if app.tab == TraceTab::Graph => {
+            match app.kg_view {
+                KgView::Entities => {
+                    let len = app.kg_entities.len();
+                    if len > 0 {
+                        let next = app.kg_entity_state.selected().map(|i| (i + 1) % len).unwrap_or(0);
+                        app.kg_entity_state.select(Some(next));
+                        app.kg_selected_entity = Some(next);
+                    }
+                }
+                KgView::Edges | KgView::Visual => {
+                    let len = app.kg_edges.len();
+                    if len > 0 {
+                        let next = app.kg_entity_state.selected().map(|i| (i + 1) % len).unwrap_or(0);
+                        app.kg_entity_state.select(Some(next));
+                    }
+                }
+            }
+        }
+        KeyCode::Up | KeyCode::Char('k') if app.tab == TraceTab::Graph => {
+            match app.kg_view {
+                KgView::Entities => {
+                    let len = app.kg_entities.len();
+                    if len > 0 {
+                        let prev = app.kg_entity_state.selected()
+                            .map(|i| if i == 0 { len - 1 } else { i - 1 })
+                            .unwrap_or(0);
+                        app.kg_entity_state.select(Some(prev));
+                        app.kg_selected_entity = Some(prev);
+                    }
+                }
+                KgView::Edges | KgView::Visual => {
+                    let len = app.kg_edges.len();
+                    if len > 0 {
+                        let prev = app.kg_entity_state.selected()
+                            .map(|i| if i == 0 { len - 1 } else { i - 1 })
+                            .unwrap_or(0);
+                        app.kg_entity_state.select(Some(prev));
+                    }
+                }
+            }
+        }
+        KeyCode::Tab if app.tab == TraceTab::Graph => {
+            app.kg_view = match app.kg_view {
+                KgView::Entities => KgView::Edges,
+                KgView::Edges => KgView::Visual,
+                KgView::Visual => KgView::Entities,
+            };
+            app.kg_entity_state = ListState::default();
+            let len = match app.kg_view {
+                KgView::Entities => app.kg_entities.len(),
+                KgView::Edges | KgView::Visual => app.kg_edges.len(),
+            };
+            if len > 0 {
+                app.kg_entity_state.select(Some(0));
+            }
+        }
+        KeyCode::Char('r') if app.tab == TraceTab::Graph => {
+            app.reload_kg();
+            app.ok("Knowledge graph reloaded");
+        }
+        KeyCode::Char('v') if app.tab == TraceTab::Graph => {
+            app.kg_view = KgView::Visual;
+        }
+        KeyCode::Char('e') if app.tab == TraceTab::Graph => {
+            app.kg_view = KgView::Entities;
+        }
+        KeyCode::Char('w') if app.tab == TraceTab::Graph => {
+            app.kg_view = KgView::Edges;
         }
 
         _ => {}
@@ -800,6 +1261,299 @@ fn handle_source_delete_confirm(app: &mut App, code: KeyCode) {
     }
 }
 
+fn handle_kg_entity_form(app: &mut App, code: KeyCode) {
+    let AppMode::KgEntityForm(ref mut form) = app.mode else {
+        return;
+    };
+    match code {
+        KeyCode::Esc => {
+            app.mode = AppMode::Browse;
+            return;
+        }
+        KeyCode::Tab => {
+            form.active_field = form.active_field.next();
+        }
+        KeyCode::BackTab => {
+            form.active_field = form.active_field.prev();
+        }
+        KeyCode::Backspace => {
+            let field = form.active_field;
+            form.get_field_mut(field).pop();
+        }
+        KeyCode::Char(c) => {
+            let field = form.active_field;
+            form.get_field_mut(field).push(c);
+        }
+        KeyCode::Enter => {
+            let is_edit = form.is_edit;
+            let original_id = form.original_id.clone();
+            let name = form.name.trim().to_string();
+            let kind_s = form.kind.trim().to_string();
+            let branch = form.branch.trim().to_string();
+            let meta_s = form.meta.trim().to_string();
+
+            if name.is_empty() {
+                app.err("Name is required");
+                return;
+            }
+            let kind = match EntityKind::from_str(&kind_s) {
+                Ok(v) => v,
+                Err(e) => {
+                    app.err(e);
+                    return;
+                }
+            };
+            let mut metadata = std::collections::HashMap::new();
+            if !meta_s.is_empty() {
+                for pair in meta_s.split(',') {
+                    let pair = pair.trim();
+                    if let Some((k, v)) = pair.split_once('=') {
+                        metadata.insert(k.trim().to_string(), v.trim().to_string());
+                    }
+                }
+            }
+            let id = name
+                .chars()
+                .map(|c| if c.is_alphanumeric() { c.to_ascii_lowercase() } else { '-' })
+                .collect::<String>();
+            let now = Utc::now().to_rfc3339();
+            let entity = KgEntity {
+                id: id.clone(),
+                kind,
+                name: name.clone(),
+                metadata,
+                branch: branch.clone(),
+                created_at: now.clone(),
+                updated_at: now,
+            };
+
+            if is_edit {
+                let _ = storage::delete_entity(&original_id);
+            }
+            match storage::create_entity(entity) {
+                Ok(()) => {
+                    app.ok(format!(
+                        "Entity '{}' {}",
+                        name,
+                        if is_edit { "updated" } else { "created" }
+                    ));
+                    if app.kg_branch == "*" {
+                        app.reload_kg_all();
+                    } else {
+                        app.reload_kg();
+                    }
+                    app.reload_kg_branches();
+                }
+                Err(e) => app.err(e),
+            }
+            app.mode = AppMode::Browse;
+        }
+        _ => {}
+    }
+}
+
+fn handle_kg_edge_form(app: &mut App, code: KeyCode) {
+    let AppMode::KgEdgeForm(ref mut form) = app.mode else {
+        return;
+    };
+    match code {
+        KeyCode::Esc => {
+            app.mode = AppMode::Browse;
+            return;
+        }
+        KeyCode::Tab => {
+            form.active_field = form.active_field.next();
+        }
+        KeyCode::BackTab => {
+            form.active_field = form.active_field.prev();
+        }
+        KeyCode::Backspace => {
+            let field = form.active_field;
+            form.get_field_mut(field).pop();
+        }
+        KeyCode::Char(c) => {
+            let field = form.active_field;
+            form.get_field_mut(field).push(c);
+        }
+        KeyCode::Enter => {
+            let is_edit = form.is_edit;
+            let original_id = form.original_id.clone();
+            let from_s = form.from.trim().to_string();
+            let to_s = form.to.trim().to_string();
+            let rel_s = form.relation.trim().to_string();
+            let weight_s = form.weight.trim().to_string();
+            let branch = form.branch.trim().to_string();
+            let evidence = form.evidence.trim().to_string();
+
+            if from_s.is_empty() || to_s.is_empty() {
+                app.err("From and To are required");
+                return;
+            }
+            let relation = match RelationType::from_str(&rel_s) {
+                Ok(v) => v,
+                Err(e) => {
+                    app.err(e);
+                    return;
+                }
+            };
+            let weight: f64 = match weight_s.parse() {
+                Ok(v) => v,
+                Err(_) => {
+                    app.err("Invalid weight (use a number like 0.5)");
+                    return;
+                }
+            };
+
+            // Resolve from/to — use the string as-is (it may be an entity ID or name)
+            let source = match storage::find_entity_by_name(&from_s, &branch) {
+                Ok(Some(e)) => e.id,
+                _ => from_s.clone(),
+            };
+            let target = match storage::find_entity_by_name(&to_s, &branch) {
+                Ok(Some(e)) => e.id,
+                _ => to_s.clone(),
+            };
+
+            let edge_id = format!("{}-{}-{}", source, relation.as_str(), target);
+            let now = Utc::now().to_rfc3339();
+            let edge = KgEdge {
+                id: edge_id,
+                source,
+                target,
+                relation,
+                weight,
+                branch: branch.clone(),
+                evidence,
+                created_at: now,
+            };
+
+            if is_edit {
+                let _ = storage::delete_edge(&original_id);
+            }
+            match storage::create_edge(edge) {
+                Ok(()) => {
+                    app.ok(format!(
+                        "Edge {}",
+                        if is_edit { "updated" } else { "created" }
+                    ));
+                    if app.kg_branch == "*" {
+                        app.reload_kg_all();
+                    } else {
+                        app.reload_kg();
+                    }
+                }
+                Err(e) => app.err(e),
+            }
+            app.mode = AppMode::Browse;
+        }
+        _ => {}
+    }
+}
+
+fn handle_kg_entity_delete(app: &mut App, code: KeyCode) {
+    let id = match &app.mode {
+        AppMode::KgEntityDelete(id) => id.clone(),
+        _ => return,
+    };
+    match code {
+        KeyCode::Char('y') | KeyCode::Char('Y') => {
+            match storage::delete_entity(&id) {
+                Ok(()) => {
+                    app.ok(format!("Entity '{}' deleted", id));
+                    if app.kg_branch == "*" {
+                        app.reload_kg_all();
+                    } else {
+                        app.reload_kg();
+                    }
+                    app.reload_kg_branches();
+                    // clamp selection
+                    let len = app.kg_entities.len();
+                    match app.kg_entity_state.selected() {
+                        Some(i) if i >= len && len > 0 => app.kg_entity_state.select(Some(len - 1)),
+                        Some(_) if len == 0 => app.kg_entity_state.select(None),
+                        None if len > 0 => app.kg_entity_state.select(Some(0)),
+                        _ => {}
+                    }
+                }
+                Err(e) => app.err(e),
+            }
+            app.mode = AppMode::Browse;
+        }
+        KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+            app.mode = AppMode::Browse;
+        }
+        _ => {}
+    }
+}
+
+fn handle_kg_edge_delete(app: &mut App, code: KeyCode) {
+    let id = match &app.mode {
+        AppMode::KgEdgeDelete(id) => id.clone(),
+        _ => return,
+    };
+    match code {
+        KeyCode::Char('y') | KeyCode::Char('Y') => {
+            match storage::delete_edge(&id) {
+                Ok(()) => {
+                    app.ok(format!("Edge '{}' deleted", id));
+                    if app.kg_branch == "*" {
+                        app.reload_kg_all();
+                    } else {
+                        app.reload_kg();
+                    }
+                    let len = app.kg_edges.len();
+                    match app.kg_entity_state.selected() {
+                        Some(i) if i >= len && len > 0 => app.kg_entity_state.select(Some(len - 1)),
+                        Some(_) if len == 0 => app.kg_entity_state.select(None),
+                        None if len > 0 => app.kg_entity_state.select(Some(0)),
+                        _ => {}
+                    }
+                }
+                Err(e) => app.err(e),
+            }
+            app.mode = AppMode::Browse;
+        }
+        KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+            app.mode = AppMode::Browse;
+        }
+        _ => {}
+    }
+}
+
+fn handle_kg_branch_picker(app: &mut App, code: KeyCode) {
+    match code {
+        KeyCode::Down | KeyCode::Char('j') => {
+            if !app.kg_branches.is_empty() {
+                app.kg_branch_idx = (app.kg_branch_idx + 1) % app.kg_branches.len();
+            }
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            if !app.kg_branches.is_empty() {
+                app.kg_branch_idx =
+                    (app.kg_branch_idx + app.kg_branches.len() - 1) % app.kg_branches.len();
+            }
+        }
+        KeyCode::Enter => {
+            if let Some(branch) = app.kg_branches.get(app.kg_branch_idx).cloned() {
+                app.kg_branch = branch.clone();
+                app.reload_kg();
+                app.ok(format!("Switched to branch '{}'", branch));
+            }
+            app.mode = AppMode::Browse;
+        }
+        KeyCode::Char('a') => {
+            app.kg_branch = "*".to_string();
+            app.reload_kg_all();
+            app.ok("Showing all branches");
+            app.mode = AppMode::Browse;
+        }
+        KeyCode::Esc => {
+            app.mode = AppMode::Browse;
+        }
+        _ => {}
+    }
+}
+
 // ─── Drawing ──────────────────────────────────────────────────────────────────
 
 fn draw_ui(
@@ -838,6 +1592,7 @@ fn draw_ui(
             TraceTab::Notes => draw_notes_panel(f, chunks[1], app),
             TraceTab::Packages => draw_packages(f, chunks[1], app),
             TraceTab::EditLog => draw_edit_log(f, chunks[1], &app.audit, app.audit_scroll),
+            TraceTab::Graph => draw_graph_panel(f, chunks[1], app),
         },
         AppMode::ViewDetail => draw_note_detail(f, chunks[1], app),
         AppMode::PackageDetail => draw_package_detail(f, chunks[1], app),
@@ -870,6 +1625,38 @@ fn draw_ui(
                 _ => {}
             }
         }
+        AppMode::KgEntityForm(_)
+        | AppMode::KgEdgeForm(_)
+        | AppMode::KgEntityDelete(_)
+        | AppMode::KgEdgeDelete(_)
+        | AppMode::KgBranchPicker => {
+            draw_graph_panel(f, chunks[1], app);
+            match &app.mode {
+                AppMode::KgEntityForm(form) => {
+                    let status_clone = app.status.clone();
+                    draw_kg_entity_form_modal(f, area, form, status_clone.as_ref());
+                }
+                AppMode::KgEdgeForm(form) => {
+                    let status_clone = app.status.clone();
+                    draw_kg_edge_form_modal(f, area, form, status_clone.as_ref());
+                }
+                AppMode::KgEntityDelete(id) => {
+                    let id = id.clone();
+                    draw_kg_delete_modal(f, area, "entity", &id);
+                }
+                AppMode::KgEdgeDelete(id) => {
+                    let id = id.clone();
+                    draw_kg_delete_modal(f, area, "edge", &id);
+                }
+                AppMode::KgBranchPicker => {
+                    let branches = app.kg_branches.clone();
+                    let idx = app.kg_branch_idx;
+                    let current = app.kg_branch.clone();
+                    draw_kg_branch_picker(f, area, &branches, idx, &current);
+                }
+                _ => {}
+            }
+        }
     }
 
     // Status bar
@@ -877,8 +1664,15 @@ fn draw_ui(
         AppMode::ViewDetail => " ↑↓/jk: nav   e: edit   d: delete   Esc/q: back",
         AppMode::PackageDetail => " ↑↓/jk: nav   Esc/q: back to list",
         AppMode::EditForm(_) => " Tab: next field   Shift+Tab: prev   Enter: save   Esc: cancel",
-        AppMode::DeleteConfirm(_) | AppMode::SourceDeleteConfirm(_) => {
+        AppMode::DeleteConfirm(_) | AppMode::SourceDeleteConfirm(_)
+        | AppMode::KgEntityDelete(_) | AppMode::KgEdgeDelete(_) => {
             " y: confirm delete   n/Esc: cancel"
+        }
+        AppMode::KgEntityForm(_) | AppMode::KgEdgeForm(_) => {
+            " Tab: next  Shift+Tab: prev  Enter: save  Esc: cancel"
+        }
+        AppMode::KgBranchPicker => {
+            " up/down: select  Enter: switch  a: all branches  Esc: cancel"
         }
         AppMode::Browse => match app.tab {
             TraceTab::Notes => {
@@ -893,7 +1687,18 @@ fn draw_ui(
             TraceTab::EditLog => {
                 " ↑↓/jk: scroll   g: top   G: bottom   r: reload   h/l: tabs   q: quit"
             }
-            _ => " 1-5: tabs   h/l: switch tab   q: quit",
+            TraceTab::Graph => match app.kg_view {
+                KgView::Entities => {
+                    " up/down: nav  n: new  Enter: edit  d: delete  b: branch  a: all  B: build  Tab: view  r: reload  q: quit"
+                }
+                KgView::Edges => {
+                    " up/down: nav  n: new  Enter: edit  d: delete  b: branch  a: all  Tab: view  r: reload  q: quit"
+                }
+                KgView::Visual => {
+                    " up/down: nav  b: branch  a: all  B: build  Tab: view  e/w/v: switch  r: reload  q: quit"
+                }
+            }
+            _ => " 1-6: tabs   h/l: switch tab   q: quit",
         },
     };
     let status_text = match &app.status {
@@ -1413,6 +2218,531 @@ fn draw_source_delete_modal(f: &mut ratatui::Frame, area: Rect, id: &str) {
             .border_style(Style::default().fg(Color::Red)),
     );
     f.render_widget(p, popup);
+}
+
+// ─── Knowledge graph panels ──────────────────────────────────────────────────
+
+fn draw_graph_panel(f: &mut ratatui::Frame, area: Rect, app: &mut App) {
+    match app.kg_view {
+        KgView::Entities => draw_kg_entities(f, area, app),
+        KgView::Edges => draw_kg_edges(f, area, app),
+        KgView::Visual => draw_kg_visual(f, area, app),
+    }
+}
+
+fn entity_kind_color(kind: &EntityKind) -> Color {
+    match kind {
+        EntityKind::File => Color::Cyan,
+        EntityKind::Package => Color::Yellow,
+        EntityKind::Person => Color::Green,
+        EntityKind::Decision => Color::Magenta,
+        EntityKind::Vulnerability => Color::Red,
+        EntityKind::Endpoint => Color::LightBlue,
+        EntityKind::Module => Color::LightCyan,
+        EntityKind::Pr => Color::LightYellow,
+        EntityKind::Branch => Color::LightGreen,
+        EntityKind::Note => Color::Gray,
+    }
+}
+
+fn draw_kg_entities(f: &mut ratatui::Frame, area: Rect, app: &mut App) {
+    let branch_label = if app.kg_branch == "*" {
+        "all".to_string()
+    } else {
+        app.kg_branch.clone()
+    };
+    let title = format!(
+        " Graph Entities [{}]  [ n=new  Enter=edit  d=delete  b=branch  a=all  B=build ] ",
+        branch_label
+    );
+    let items: Vec<ListItem> = if app.kg_entities.is_empty() {
+        vec![ListItem::new(
+            "  No entities in knowledge graph. Add entities with: infynon trace kg entity add",
+        )]
+    } else {
+        app.kg_entities
+            .iter()
+            .map(|e| {
+                let kc = entity_kind_color(&e.kind);
+                ListItem::new(Line::from(vec![
+                    Span::styled(
+                        format!("  {:<14} ", e.kind.as_str()),
+                        Style::default().fg(kc).add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        format!("{:<30} ", e.name),
+                        Style::default().fg(Color::White),
+                    ),
+                    Span::styled(
+                        format!("{}", e.branch),
+                        Style::default().fg(Color::DarkGray),
+                    ),
+                ]))
+            })
+            .collect()
+    };
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(title),
+        )
+        .highlight_style(
+            Style::default()
+                .bg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol("▶ ");
+    if app.kg_entities.is_empty() {
+        f.render_widget(list, area);
+    } else {
+        f.render_stateful_widget(list, area, &mut app.kg_entity_state);
+    }
+}
+
+fn draw_kg_edges(f: &mut ratatui::Frame, area: Rect, app: &mut App) {
+    let branch_label = if app.kg_branch == "*" {
+        "all".to_string()
+    } else {
+        app.kg_branch.clone()
+    };
+    let title = format!(
+        " Graph Edges [{}]  [ n=new  Enter=edit  d=delete  b=branch  a=all ] ",
+        branch_label
+    );
+    let items: Vec<ListItem> = if app.kg_edges.is_empty() {
+        vec![ListItem::new(
+            "  No edges in knowledge graph. Add edges with: infynon trace kg edge add",
+        )]
+    } else {
+        app.kg_edges
+            .iter()
+            .map(|e| {
+                let rel_color = match e.relation.as_str() {
+                    "depends_on" => Color::Yellow,
+                    "modified_by" => Color::Green,
+                    "introduced_by" => Color::Red,
+                    "exposes" => Color::LightRed,
+                    "tested_by" => Color::Cyan,
+                    _ => Color::Gray,
+                };
+                let evidence_short = if e.evidence.len() > 30 {
+                    format!("{}...", &e.evidence[..27])
+                } else {
+                    e.evidence.clone()
+                };
+                ListItem::new(Line::from(vec![
+                    Span::styled(
+                        format!("  {:<20}", e.source),
+                        Style::default().fg(Color::Cyan),
+                    ),
+                    Span::styled(
+                        " \u{2192} ",
+                        Style::default().fg(Color::DarkGray),
+                    ),
+                    Span::styled(
+                        format!("{:<20} ", e.target),
+                        Style::default().fg(Color::Cyan),
+                    ),
+                    Span::styled(
+                        format!("({}) ", e.relation.as_str()),
+                        Style::default().fg(rel_color).add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        format!("[{:.1}] ", e.weight),
+                        Style::default().fg(Color::Yellow),
+                    ),
+                    Span::styled(
+                        evidence_short,
+                        Style::default().fg(Color::DarkGray),
+                    ),
+                ]))
+            })
+            .collect()
+    };
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(title),
+        )
+        .highlight_style(
+            Style::default()
+                .bg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol("▶ ");
+    if app.kg_edges.is_empty() {
+        f.render_widget(list, area);
+    } else {
+        f.render_stateful_widget(list, area, &mut app.kg_entity_state);
+    }
+}
+
+fn draw_kg_visual(f: &mut ratatui::Frame, area: Rect, app: &mut App) {
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+        .split(area);
+
+    // Left: entity list
+    draw_kg_entities(f, chunks[0], app);
+
+    // Right: visual graph
+    let selected_id = app
+        .kg_selected_entity
+        .and_then(|i| app.kg_entities.get(i))
+        .map(|e| e.id.clone());
+
+    let mut lines: Vec<Line> = Vec::new();
+    lines.push(Line::from(""));
+
+    // Group entities by kind
+    let mut grouped: std::collections::BTreeMap<String, Vec<&KgEntity>> =
+        std::collections::BTreeMap::new();
+    for ent in &app.kg_entities {
+        grouped
+            .entry(ent.kind.as_str().to_string())
+            .or_default()
+            .push(ent);
+    }
+
+    let max_lines = chunks[1].height.saturating_sub(4) as usize;
+    let mut line_count = 0;
+
+    for (kind, entities) in &grouped {
+        if line_count >= max_lines {
+            break;
+        }
+        // Section header
+        let header = format!("  \u{250c}\u{2500} {} ", kind);
+        let pad = (chunks[1].width as usize).saturating_sub(header.len() + 3);
+        lines.push(Line::from(Span::styled(
+            format!("{}{}\u{2510}", header, "\u{2500}".repeat(pad)),
+            Style::default().fg(Color::DarkGray),
+        )));
+        line_count += 1;
+
+        for ent in entities {
+            if line_count >= max_lines {
+                break;
+            }
+            let kc = entity_kind_color(&ent.kind);
+            let is_selected = selected_id.as_deref() == Some(&ent.id);
+            let name_style = if is_selected {
+                Style::default().fg(kc).add_modifier(Modifier::BOLD | Modifier::REVERSED)
+            } else {
+                Style::default().fg(kc)
+            };
+
+            // Find outgoing edges for this entity
+            let outgoing: Vec<&KgEdge> = app
+                .kg_edges
+                .iter()
+                .filter(|edge| edge.source == ent.id)
+                .collect();
+
+            if outgoing.is_empty() {
+                lines.push(Line::from(vec![
+                    Span::styled("  \u{2502}  ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(format!("[{}]", ent.name), name_style),
+                ]));
+                line_count += 1;
+            } else {
+                for edge in &outgoing {
+                    if line_count >= max_lines {
+                        break;
+                    }
+                    let rel_color = match edge.relation.as_str() {
+                        "depends_on" => Color::Yellow,
+                        "modified_by" => Color::Green,
+                        "introduced_by" => Color::Red,
+                        "exposes" => Color::LightRed,
+                        "tested_by" => Color::Cyan,
+                        _ => Color::Gray,
+                    };
+                    // Find target entity name
+                    let target_name = app
+                        .kg_entities
+                        .iter()
+                        .find(|e| e.id == edge.target)
+                        .map(|e| e.name.as_str())
+                        .unwrap_or(&edge.target);
+                    let target_kind = app
+                        .kg_entities
+                        .iter()
+                        .find(|e| e.id == edge.target)
+                        .map(|e| &e.kind);
+                    let tc = target_kind.map(entity_kind_color).unwrap_or(Color::White);
+
+                    lines.push(Line::from(vec![
+                        Span::styled("  \u{2502}  ", Style::default().fg(Color::DarkGray)),
+                        Span::styled(format!("[{}]", ent.name), name_style),
+                        Span::styled(
+                            format!(" \u{2500}\u{2500}{}\u{2500}\u{2500}\u{25b6} ", edge.relation.as_str()),
+                            Style::default().fg(rel_color),
+                        ),
+                        Span::styled(format!("[{}]", target_name), Style::default().fg(tc)),
+                    ]));
+                    line_count += 1;
+                }
+            }
+        }
+
+        if line_count < max_lines {
+            let footer_pad = (chunks[1].width as usize).saturating_sub(5);
+            lines.push(Line::from(Span::styled(
+                format!("  \u{2514}{}\u{2518}", "\u{2500}".repeat(footer_pad)),
+                Style::default().fg(Color::DarkGray),
+            )));
+            line_count += 1;
+        }
+    }
+
+    if app.kg_entities.is_empty() && app.kg_edges.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "  Empty knowledge graph.",
+            Style::default().fg(Color::DarkGray),
+        )));
+    }
+
+    let vg_branch_label = if app.kg_branch == "*" {
+        "all".to_string()
+    } else {
+        app.kg_branch.clone()
+    };
+    let title = format!(
+        " Visual Graph [{}] ",
+        vg_branch_label
+    );
+    let p = Paragraph::new(lines)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(title),
+        )
+        .wrap(Wrap { trim: false });
+    f.render_widget(p, chunks[1]);
+}
+
+// ─── KG modals ──────────────────────────────────────────────────────────────
+
+fn draw_kg_entity_form_modal(
+    f: &mut ratatui::Frame,
+    area: Rect,
+    form: &KgEntityForm,
+    status: Option<&(String, bool)>,
+) {
+    let popup = centered_rect(78, 70, area);
+    f.render_widget(Clear, popup);
+
+    let title = if form.is_edit {
+        " Edit Entity  [ Tab: next   Enter: save   Esc: cancel ] "
+    } else {
+        " New Entity   [ Tab: next   Enter: save   Esc: cancel ] "
+    };
+
+    let mut lines: Vec<Line> = vec![Line::from("")];
+
+    for &fld in &KgEntityField::all() {
+        let is_active = fld == form.active_field;
+        let lbl_style = if is_active {
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::Yellow)
+        };
+        let val_style = if is_active {
+            Style::default().fg(Color::White).bg(Color::DarkGray)
+        } else {
+            Style::default().fg(Color::Gray)
+        };
+
+        lines.push(Line::from(vec![Span::styled(
+            format!("  {} ", fld.label()),
+            lbl_style,
+        )]));
+        lines.push(Line::from(vec![Span::styled(
+            format!("  {}\u{2588} ", form.get_field(fld)),
+            val_style,
+        )]));
+        lines.push(Line::from(""));
+    }
+
+    if let Some((msg, is_err)) = status {
+        let style = if *is_err {
+            Style::default().fg(Color::Red)
+        } else {
+            Style::default().fg(Color::Green)
+        };
+        lines.push(Line::from(vec![Span::styled(
+            format!("  !  {} ", msg),
+            style,
+        )]));
+    }
+
+    let p = Paragraph::new(lines)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(title)
+                .border_style(Style::default().fg(Color::Cyan)),
+        )
+        .wrap(Wrap { trim: false });
+    f.render_widget(p, popup);
+}
+
+fn draw_kg_edge_form_modal(
+    f: &mut ratatui::Frame,
+    area: Rect,
+    form: &KgEdgeForm,
+    status: Option<&(String, bool)>,
+) {
+    let popup = centered_rect(78, 90, area);
+    f.render_widget(Clear, popup);
+
+    let title = if form.is_edit {
+        " Edit Edge  [ Tab: next   Enter: save   Esc: cancel ] "
+    } else {
+        " New Edge   [ Tab: next   Enter: save   Esc: cancel ] "
+    };
+
+    let mut lines: Vec<Line> = vec![Line::from("")];
+
+    for &fld in &KgEdgeField::all() {
+        let is_active = fld == form.active_field;
+        let lbl_style = if is_active {
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::Yellow)
+        };
+        let val_style = if is_active {
+            Style::default().fg(Color::White).bg(Color::DarkGray)
+        } else {
+            Style::default().fg(Color::Gray)
+        };
+
+        lines.push(Line::from(vec![Span::styled(
+            format!("  {} ", fld.label()),
+            lbl_style,
+        )]));
+        lines.push(Line::from(vec![Span::styled(
+            format!("  {}\u{2588} ", form.get_field(fld)),
+            val_style,
+        )]));
+        lines.push(Line::from(""));
+    }
+
+    if let Some((msg, is_err)) = status {
+        let style = if *is_err {
+            Style::default().fg(Color::Red)
+        } else {
+            Style::default().fg(Color::Green)
+        };
+        lines.push(Line::from(vec![Span::styled(
+            format!("  !  {} ", msg),
+            style,
+        )]));
+    }
+
+    let p = Paragraph::new(lines)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(title)
+                .border_style(Style::default().fg(Color::Cyan)),
+        )
+        .wrap(Wrap { trim: false });
+    f.render_widget(p, popup);
+}
+
+fn draw_kg_delete_modal(f: &mut ratatui::Frame, area: Rect, entity_type: &str, id: &str) {
+    let popup = centered_rect(48, 22, area);
+    f.render_widget(Clear, popup);
+    let lines = vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                format!("  Delete {}: ", entity_type),
+                Style::default().fg(Color::Yellow),
+            ),
+            Span::styled(
+                id,
+                Style::default()
+                    .fg(Color::Red)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled(
+            "  This action cannot be undone.",
+            Style::default().fg(Color::White),
+        )),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                "  [y]  confirm delete",
+                Style::default()
+                    .fg(Color::Red)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("      "),
+            Span::styled("[n / Esc]  cancel", Style::default().fg(Color::Green)),
+        ]),
+    ];
+    let p = Paragraph::new(lines).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" Confirm Delete ")
+            .border_style(Style::default().fg(Color::Red)),
+    );
+    f.render_widget(p, popup);
+}
+
+fn draw_kg_branch_picker(
+    f: &mut ratatui::Frame,
+    area: Rect,
+    branches: &[String],
+    selected: usize,
+    current: &str,
+) {
+    let popup = centered_rect(50, 60, area);
+    f.render_widget(Clear, popup);
+
+    let items: Vec<ListItem> = branches
+        .iter()
+        .enumerate()
+        .map(|(i, b)| {
+            let is_current = b == current;
+            let marker = if is_current { " *" } else { "" };
+            let style = if i == selected {
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD | Modifier::REVERSED)
+            } else if is_current {
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::White)
+            };
+            ListItem::new(Line::from(Span::styled(
+                format!("  {}{}", b, marker),
+                style,
+            )))
+        })
+        .collect();
+
+    let list = List::new(items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" Branch Picker  [ Enter: switch   a: all   Esc: cancel ] ")
+            .border_style(Style::default().fg(Color::Cyan)),
+    );
+    f.render_widget(list, popup);
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

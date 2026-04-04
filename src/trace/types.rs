@@ -237,3 +237,152 @@ pub struct PackageRisk {
     pub source_file: String,
     pub installed_by: Option<String>,
 }
+
+// ─── Knowledge Graph types ───────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum EntityKind {
+    File,
+    Package,
+    Person,
+    Decision,
+    Endpoint,
+    Module,
+    Pr,
+    Branch,
+    Note,
+    Vulnerability,
+}
+
+impl EntityKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            EntityKind::File => "file",
+            EntityKind::Package => "package",
+            EntityKind::Person => "person",
+            EntityKind::Decision => "decision",
+            EntityKind::Endpoint => "endpoint",
+            EntityKind::Module => "module",
+            EntityKind::Pr => "pr",
+            EntityKind::Branch => "branch",
+            EntityKind::Note => "note",
+            EntityKind::Vulnerability => "vulnerability",
+        }
+    }
+}
+
+impl FromStr for EntityKind {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "file" => Ok(Self::File),
+            "package" => Ok(Self::Package),
+            "person" => Ok(Self::Person),
+            "decision" => Ok(Self::Decision),
+            "endpoint" => Ok(Self::Endpoint),
+            "module" => Ok(Self::Module),
+            "pr" => Ok(Self::Pr),
+            "branch" => Ok(Self::Branch),
+            "note" => Ok(Self::Note),
+            "vulnerability" | "vuln" => Ok(Self::Vulnerability),
+            _ => Err(format!("invalid entity kind '{}'", s)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RelationType {
+    DependsOn,
+    IntroducedBy,
+    ModifiedBy,
+    Affects,
+    DecidedBy,
+    RelatesTo,
+    Supersedes,
+    ConflictsWith,
+    Documents,
+    Exposes,
+    Owns,
+}
+
+impl RelationType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            RelationType::DependsOn => "depends_on",
+            RelationType::IntroducedBy => "introduced_by",
+            RelationType::ModifiedBy => "modified_by",
+            RelationType::Affects => "affects",
+            RelationType::DecidedBy => "decided_by",
+            RelationType::RelatesTo => "relates_to",
+            RelationType::Supersedes => "supersedes",
+            RelationType::ConflictsWith => "conflicts_with",
+            RelationType::Documents => "documents",
+            RelationType::Exposes => "exposes",
+            RelationType::Owns => "owns",
+        }
+    }
+}
+
+impl FromStr for RelationType {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "depends_on" => Ok(Self::DependsOn),
+            "introduced_by" => Ok(Self::IntroducedBy),
+            "modified_by" => Ok(Self::ModifiedBy),
+            "affects" => Ok(Self::Affects),
+            "decided_by" => Ok(Self::DecidedBy),
+            "relates_to" => Ok(Self::RelatesTo),
+            "supersedes" => Ok(Self::Supersedes),
+            "conflicts_with" => Ok(Self::ConflictsWith),
+            "documents" => Ok(Self::Documents),
+            "exposes" => Ok(Self::Exposes),
+            "owns" => Ok(Self::Owns),
+            _ => Err(format!("invalid relation type '{}'", s)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KgEntity {
+    pub id: String,
+    pub kind: EntityKind,
+    pub name: String,
+    #[serde(default)]
+    pub metadata: std::collections::HashMap<String, String>,
+    #[serde(default = "default_branch")]
+    pub branch: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KgEdge {
+    pub id: String,
+    pub source: String,
+    pub target: String,
+    pub relation: RelationType,
+    #[serde(default = "default_weight")]
+    pub weight: f64,
+    #[serde(default = "default_branch")]
+    pub branch: String,
+    #[serde(default)]
+    pub evidence: String,
+    pub created_at: String,
+}
+
+fn default_branch() -> String {
+    "main".to_string()
+}
+
+fn default_weight() -> f64 {
+    1.0
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct KgGraph {
+    pub entities: Vec<KgEntity>,
+    pub edges: Vec<KgEdge>,
+}

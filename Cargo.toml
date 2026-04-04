@@ -2,12 +2,16 @@
 name = "infynon"
 version = "0.2.0-beta.8.5"
 edition = "2021"
+authors = ["d4rkNinja"]
 description = "Package intelligence, API flow testing, and shared coding memory for AI-assisted development"
 license = "MIT"
 repository = "https://github.com/d4rkNinja/infynon-cli"
+homepage = "https://cli.infynon.com"
+documentation = "https://cli.infynon.com/docs"
 keywords = ["security", "package-manager", "vulnerability", "api-testing", "memory"]
 categories = ["command-line-utilities", "development-tools", "network-programming"]
 readme = "README.md"
+exclude = [".github/", ".infynon/", "assets/", "npm/", "scripts/"]
 
 [profile.release]
 opt-level = "z"

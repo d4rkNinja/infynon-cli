@@ -1,4 +1,4 @@
-use crate::trace::types::{TraceNote, TraceSource, PackageRisk, SourceKind, SyncRun};
+use crate::trace::types::{TraceNote, TraceSource, PackageRisk, SourceKind, SyncRun, KgEntity, KgEdge};
 use mysql::{prelude::Queryable, Opts, Pool};
 use postgres::{Client, NoTls};
 use rusqlite::Connection;
@@ -57,6 +57,78 @@ pub fn pull_notes(source: &TraceSource) -> Result<Vec<TraceNote>, String> {
             store::pull_notes_mysql(&mut conn)
         }
         SourceKind::Redis => unreachable!(),
+    }
+}
+
+pub fn push_kg(
+    source: &TraceSource,
+    entities: &[KgEntity],
+    edges: &[KgEdge],
+) -> Result<(), String> {
+    match source.kind {
+        SourceKind::Sqlite => {
+            let conn = sqlite_connection(source)?;
+            init_sqlite(&conn)?;
+            for e in entities {
+                store::upsert_kg_entity_sqlite(&conn, e)?;
+            }
+            for e in edges {
+                store::upsert_kg_edge_sqlite(&conn, e)?;
+            }
+            Ok(())
+        }
+        SourceKind::Postgres => {
+            let mut client = postgres_connection(source)?;
+            init_postgres(&mut client)?;
+            for e in entities {
+                store::upsert_kg_entity_postgres(&mut client, e)?;
+            }
+            for e in edges {
+                store::upsert_kg_edge_postgres(&mut client, e)?;
+            }
+            Ok(())
+        }
+        SourceKind::Mysql => {
+            let pool = mysql_pool(source)?;
+            let mut conn = pool.get_conn().map_err(|e| e.to_string())?;
+            init_mysql(&mut conn)?;
+            for e in entities {
+                store::upsert_kg_entity_mysql(&mut conn, e)?;
+            }
+            for e in edges {
+                store::upsert_kg_edge_mysql(&mut conn, e)?;
+            }
+            Ok(())
+        }
+        _ => unreachable!(),
+    }
+}
+
+pub fn pull_kg(source: &TraceSource) -> Result<(Vec<KgEntity>, Vec<KgEdge>), String> {
+    match source.kind {
+        SourceKind::Sqlite => {
+            let conn = sqlite_connection(source)?;
+            Ok((
+                store::pull_kg_entities_sqlite(&conn)?,
+                store::pull_kg_edges_sqlite(&conn)?,
+            ))
+        }
+        SourceKind::Postgres => {
+            let mut client = postgres_connection(source)?;
+            Ok((
+                store::pull_kg_entities_postgres(&mut client)?,
+                store::pull_kg_edges_postgres(&mut client)?,
+            ))
+        }
+        SourceKind::Mysql => {
+            let pool = mysql_pool(source)?;
+            let mut conn = pool.get_conn().map_err(|e| e.to_string())?;
+            Ok((
+                store::pull_kg_entities_mysql(&mut conn)?,
+                store::pull_kg_edges_mysql(&mut conn)?,
+            ))
+        }
+        _ => unreachable!(),
     }
 }
 
