@@ -16,12 +16,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 )
 
 const (
 	repo    = "d4rkNinja/infynon-cli"
-	version = "0.2.0-beta.9"
+	version = "0.2.0-beta.9.0.1"
 )
 
 func targetTriple() (target, ext string, ok bool) {
@@ -134,8 +133,6 @@ func main() {
 		}
 	} else {
 		// Show version info after fresh install
-		parts := strings.Split(version, "")
-		_ = parts
 		fmt.Printf("[infynon] Run: infynon --help\n")
 	}
 }

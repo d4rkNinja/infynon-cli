@@ -505,12 +505,6 @@ fn execute_graph(action: GraphAction) {
     }
 }
 
-fn sanitize_id(name: &str) -> String {
-    name.chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' || c == '.' { c } else { '-' })
-        .collect()
-}
-
 fn resolve_branch(branch: Option<String>) -> String {
     branch.unwrap_or_else(|| storage::detect_current_branch())
 }
@@ -531,7 +525,7 @@ fn execute_graph_entity(action: GraphEntityAction) {
             let branch = resolve_branch(branch);
             let now = Utc::now().to_rfc3339();
             let entity = KgEntity {
-                id: sanitize_id(&name),
+                id: storage::sanitize(&name),
                 kind,
                 name: name.clone(),
                 metadata,
@@ -575,7 +569,7 @@ fn execute_graph_entity(action: GraphEntityAction) {
 fn resolve_entity_id(name: &str, branch: &str) -> String {
     match storage::find_entity_by_name(name, branch) {
         Ok(Some(entity)) => entity.id,
-        _ => sanitize_id(name),
+        _ => storage::sanitize(name),
     }
 }
 
@@ -739,6 +733,13 @@ fn cmd_graph_path(from: &str, to: &str, branch: Option<String>) {
     let source_id = resolve_entity_id(from, &branch);
     let target_id = resolve_entity_id(to, &branch);
 
+    // Build adjacency list for BFS
+    let mut adj: HashMap<String, Vec<String>> = HashMap::new();
+    for edge in &graph.edges {
+        adj.entry(edge.source.clone()).or_default().push(edge.target.clone());
+        adj.entry(edge.target.clone()).or_default().push(edge.source.clone());
+    }
+
     // BFS
     let mut visited: HashMap<String, String> = HashMap::new();
     let mut queue = std::collections::VecDeque::new();
@@ -762,17 +763,12 @@ fn cmd_graph_path(from: &str, to: &str, branch: Option<String>) {
             println!("  {}", path.join(" -> "));
             return;
         }
-        for edge in &graph.edges {
-            let neighbor = if edge.source == current {
-                &edge.target
-            } else if edge.target == current {
-                &edge.source
-            } else {
-                continue;
-            };
-            if !visited.contains_key(neighbor) {
-                visited.insert(neighbor.clone(), current.clone());
-                queue.push_back(neighbor.clone());
+        if let Some(neighbors) = adj.get(&current) {
+            for neighbor in neighbors {
+                if !visited.contains_key(neighbor) {
+                    visited.insert(neighbor.clone(), current.clone());
+                    queue.push_back(neighbor.clone());
+                }
             }
         }
     }
@@ -789,6 +785,13 @@ fn cmd_graph_impact(entity: &str, branch: Option<String>) {
 
     let start_id = resolve_entity_id(entity, &branch);
 
+    // Build adjacency list for BFS
+    let mut adj: HashMap<String, Vec<String>> = HashMap::new();
+    for edge in &graph.edges {
+        adj.entry(edge.source.clone()).or_default().push(edge.target.clone());
+        adj.entry(edge.target.clone()).or_default().push(edge.source.clone());
+    }
+
     // BFS outward
     let mut visited: HashMap<String, usize> = HashMap::new();
     let mut queue = std::collections::VecDeque::new();
@@ -796,17 +799,12 @@ fn cmd_graph_impact(entity: &str, branch: Option<String>) {
     visited.insert(start_id.clone(), 0);
 
     while let Some((current, depth)) = queue.pop_front() {
-        for edge in &graph.edges {
-            let neighbor = if edge.source == current {
-                &edge.target
-            } else if edge.target == current {
-                &edge.source
-            } else {
-                continue;
-            };
-            if !visited.contains_key(neighbor) {
-                visited.insert(neighbor.clone(), depth + 1);
-                queue.push_back((neighbor.clone(), depth + 1));
+        if let Some(neighbors) = adj.get(&current) {
+            for neighbor in neighbors {
+                if !visited.contains_key(neighbor) {
+                    visited.insert(neighbor.clone(), depth + 1);
+                    queue.push_back((neighbor.clone(), depth + 1));
+                }
             }
         }
     }

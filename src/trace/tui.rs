@@ -20,6 +20,36 @@ use ratatui::{
 use serde::{Deserialize, Serialize};
 use std::{fs, io};
 
+macro_rules! impl_field_nav {
+    ($t:ty) => {
+        impl $t {
+            fn next(self) -> Self {
+                let all = Self::all();
+                let idx = all.iter().position(|f| *f == self).unwrap_or(0);
+                all[(idx + 1) % all.len()]
+            }
+            fn prev(self) -> Self {
+                let all = Self::all();
+                let idx = all.iter().position(|f| *f == self).unwrap_or(0);
+                all[(idx + all.len() - 1) % all.len()]
+            }
+        }
+    };
+}
+
+macro_rules! impl_field_accessors {
+    ($form:ty, $field:ty, { $($variant:ident => $member:ident),+ $(,)? }) => {
+        impl $form {
+            fn get_field(&self, f: $field) -> &str {
+                match f { $(<$field>::$variant => &self.$member,)+ }
+            }
+            fn get_field_mut(&mut self, f: $field) -> &mut String {
+                match f { $(<$field>::$variant => &mut self.$member,)+ }
+            }
+        }
+    };
+}
+
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 
 #[derive(Clone, Copy, PartialEq)]
@@ -103,17 +133,9 @@ impl EditField {
             EditField::Tags => "Tags  (comma-separated)",
         }
     }
-    fn next(self) -> EditField {
-        let all = EditField::all();
-        let idx = all.iter().position(|f| *f == self).unwrap_or(0);
-        all[(idx + 1) % all.len()]
-    }
-    fn prev(self) -> EditField {
-        let all = EditField::all();
-        let idx = all.iter().position(|f| *f == self).unwrap_or(0);
-        all[(idx + all.len() - 1) % all.len()]
-    }
 }
+
+impl_field_nav!(EditField);
 
 // ─── Note form state ──────────────────────────────────────────────────────────
 
@@ -158,32 +180,12 @@ impl NoteForm {
         }
     }
 
-    fn get_field(&self, field: EditField) -> &str {
-        match field {
-            EditField::Id => &self.id,
-            EditField::Title => &self.title,
-            EditField::Body => &self.body,
-            EditField::Layer => &self.layer,
-            EditField::Scope => &self.scope,
-            EditField::Target => &self.target,
-            EditField::Author => &self.author,
-            EditField::Tags => &self.tags,
-        }
-    }
-
-    fn get_field_mut(&mut self, field: EditField) -> &mut String {
-        match field {
-            EditField::Id => &mut self.id,
-            EditField::Title => &mut self.title,
-            EditField::Body => &mut self.body,
-            EditField::Layer => &mut self.layer,
-            EditField::Scope => &mut self.scope,
-            EditField::Target => &mut self.target,
-            EditField::Author => &mut self.author,
-            EditField::Tags => &mut self.tags,
-        }
-    }
 }
+
+impl_field_accessors!(NoteForm, EditField, {
+    Id => id, Title => title, Body => body, Layer => layer,
+    Scope => scope, Target => target, Author => author, Tags => tags
+});
 
 // ─── KG Entity form ──────────────────────────────────────────────────────────
 
@@ -207,17 +209,9 @@ impl KgEntityField {
             Self::Meta => "Metadata (key=value, comma-separated)",
         }
     }
-    fn next(self) -> Self {
-        let a = Self::all();
-        let i = a.iter().position(|f| *f == self).unwrap_or(0);
-        a[(i + 1) % a.len()]
-    }
-    fn prev(self) -> Self {
-        let a = Self::all();
-        let i = a.iter().position(|f| *f == self).unwrap_or(0);
-        a[(i + a.len() - 1) % a.len()]
-    }
 }
+
+impl_field_nav!(KgEntityField);
 
 impl Default for KgEntityField {
     fn default() -> Self {
@@ -264,23 +258,11 @@ impl KgEntityForm {
             original_id: e.id.clone(),
         }
     }
-    fn get_field(&self, f: KgEntityField) -> &str {
-        match f {
-            KgEntityField::Name => &self.name,
-            KgEntityField::Kind => &self.kind,
-            KgEntityField::Branch => &self.branch,
-            KgEntityField::Meta => &self.meta,
-        }
-    }
-    fn get_field_mut(&mut self, f: KgEntityField) -> &mut String {
-        match f {
-            KgEntityField::Name => &mut self.name,
-            KgEntityField::Kind => &mut self.kind,
-            KgEntityField::Branch => &mut self.branch,
-            KgEntityField::Meta => &mut self.meta,
-        }
-    }
 }
+
+impl_field_accessors!(KgEntityForm, KgEntityField, {
+    Name => name, Kind => kind, Branch => branch, Meta => meta
+});
 
 // ─── KG Edge form ────────────────────────────────────────────────────────────
 
@@ -315,17 +297,9 @@ impl KgEdgeField {
             Self::Evidence => "Evidence",
         }
     }
-    fn next(self) -> Self {
-        let a = Self::all();
-        let i = a.iter().position(|f| *f == self).unwrap_or(0);
-        a[(i + 1) % a.len()]
-    }
-    fn prev(self) -> Self {
-        let a = Self::all();
-        let i = a.iter().position(|f| *f == self).unwrap_or(0);
-        a[(i + a.len() - 1) % a.len()]
-    }
 }
+
+impl_field_nav!(KgEdgeField);
 
 impl Default for KgEdgeField {
     fn default() -> Self {
@@ -372,27 +346,12 @@ impl KgEdgeForm {
             original_id: e.id.clone(),
         }
     }
-    fn get_field(&self, f: KgEdgeField) -> &str {
-        match f {
-            KgEdgeField::From => &self.from,
-            KgEdgeField::To => &self.to,
-            KgEdgeField::Relation => &self.relation,
-            KgEdgeField::Weight => &self.weight,
-            KgEdgeField::Branch => &self.branch,
-            KgEdgeField::Evidence => &self.evidence,
-        }
-    }
-    fn get_field_mut(&mut self, f: KgEdgeField) -> &mut String {
-        match f {
-            KgEdgeField::From => &mut self.from,
-            KgEdgeField::To => &mut self.to,
-            KgEdgeField::Relation => &mut self.relation,
-            KgEdgeField::Weight => &mut self.weight,
-            KgEdgeField::Branch => &mut self.branch,
-            KgEdgeField::Evidence => &mut self.evidence,
-        }
-    }
 }
+
+impl_field_accessors!(KgEdgeForm, KgEdgeField, {
+    From => from, To => to, Relation => relation, Weight => weight,
+    Branch => branch, Evidence => evidence
+});
 
 // ─── App mode ─────────────────────────────────────────────────────────────────
 
@@ -662,8 +621,9 @@ fn run_inner(initial_tab: TraceTab, kg_branch: String) {
         app.reload_kg_branches();
     }
 
+    let mut cfg = storage::load_config().unwrap_or_default();
+
     loop {
-        let cfg = storage::load_config().unwrap_or_default();
         if terminal.draw(|f| draw_ui(f, &mut app, &cfg)).is_err() {
             break;
         }
@@ -676,6 +636,7 @@ fn run_inner(initial_tab: TraceTab, kg_branch: String) {
             continue;
         };
 
+        let prev_tab = app.tab;
         let quit = match &app.mode {
             AppMode::Browse | AppMode::ViewDetail | AppMode::PackageDetail => {
                 handle_browse(&mut app, key.code)
@@ -715,6 +676,9 @@ fn run_inner(initial_tab: TraceTab, kg_branch: String) {
         };
         if quit {
             break;
+        }
+        if app.tab != prev_tab || key.code == KeyCode::Char('r') {
+            cfg = storage::load_config().unwrap_or_default();
         }
     }
 
@@ -1113,17 +1077,17 @@ fn handle_form(app: &mut App, code: KeyCode) {
                 app.err("Title is required");
                 return;
             }
-            let layer = match parse_layer(&layer_s) {
+            let layer: TraceLayer = match layer_s.parse() {
                 Ok(v) => v,
                 Err(e) => {
-                    app.err(e);
+                    app.err(format!("Invalid layer '{}'. Use canonical | team | user", layer_s));
                     return;
                 }
             };
-            let scope = match parse_scope(&scope_s) {
+            let scope: TraceScope = match scope_s.parse() {
                 Ok(v) => v,
-                Err(e) => {
-                    app.err(e);
+                Err(_) => {
+                    app.err(format!("Invalid scope '{}'. Use repo | branch | pr | file | user | session | package", scope_s));
                     return;
                 }
             };
@@ -2775,10 +2739,3 @@ fn centered_rect(pct_x: u16, pct_y: u16, r: Rect) -> Rect {
         .split(vert[1])[1]
 }
 
-fn parse_layer(v: &str) -> Result<TraceLayer, String> {
-    v.parse().map_err(|_| format!("Invalid layer '{}'. Use canonical | team | user", v))
-}
-
-fn parse_scope(v: &str) -> Result<TraceScope, String> {
-    v.parse().map_err(|_| format!("Invalid scope '{}'. Use repo | branch | pr | file | user | session | package", v))
-}

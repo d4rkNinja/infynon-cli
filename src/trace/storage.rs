@@ -126,7 +126,7 @@ fn note_path(layer: TraceLayer, id: &str) -> PathBuf {
         .join(format!("{}.json", sanitize(id)))
 }
 
-fn sanitize(input: &str) -> String {
+pub fn sanitize(input: &str) -> String {
     input.chars()
         .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
         .collect()
@@ -807,6 +807,12 @@ pub fn auto_build_graph(branch: &str) -> Result<(usize, usize), String> {
     let mut entities_created = 0usize;
     let mut edges_created = 0usize;
 
+    // Pre-load all existing entities and edges into HashSets to avoid N+1 filesystem scans
+    let existing = list_entities(Some(branch), None).unwrap_or_default();
+    let mut known_entities: std::collections::HashSet<String> = existing.iter().map(|e| e.name.clone()).collect();
+    let existing_edges = list_edges(Some(branch), None).unwrap_or_default();
+    let mut known_edges: std::collections::HashSet<String> = existing_edges.iter().map(|e| e.id.clone()).collect();
+
     // Run git log to extract person->file relationships
     let output = std::process::Command::new("git")
         .args(["log", "--name-only", "--format=%an", "--no-merges", "-100", branch])
@@ -833,7 +839,7 @@ pub fn auto_build_graph(branch: &str) -> Result<(usize, usize), String> {
             current_person = Some(line.to_string());
             // Create person entity if not exists
             let person_id = format!("person-{}", sanitize(line));
-            if find_entity_by_name(line, branch)?.is_none() {
+            if !known_entities.contains(line) {
                 create_entity(KgEntity {
                     id: person_id,
                     kind: EntityKind::Person,
@@ -843,6 +849,7 @@ pub fn auto_build_graph(branch: &str) -> Result<(usize, usize), String> {
                     created_at: now.clone(),
                     updated_at: now.clone(),
                 })?;
+                known_entities.insert(line.to_string());
                 entities_created += 1;
             }
             continue;
@@ -851,7 +858,7 @@ pub fn auto_build_graph(branch: &str) -> Result<(usize, usize), String> {
         // It's a file path
         if let Some(ref person) = current_person {
             let file_id = format!("file-{}", sanitize(line));
-            if find_entity_by_name(line, branch)?.is_none() {
+            if !known_entities.contains(line) {
                 create_entity(KgEntity {
                     id: file_id.clone(),
                     kind: EntityKind::File,
@@ -861,14 +868,15 @@ pub fn auto_build_graph(branch: &str) -> Result<(usize, usize), String> {
                     created_at: now.clone(),
                     updated_at: now.clone(),
                 })?;
+                known_entities.insert(line.to_string());
                 entities_created += 1;
             }
 
             let person_id = format!("person-{}", sanitize(person));
             let edge_id = format!("edge-{}-{}", sanitize(line), sanitize(person));
-            if load_edge(&edge_id)?.is_none() {
+            if !known_edges.contains(&edge_id) {
                 create_edge(KgEdge {
-                    id: edge_id,
+                    id: edge_id.clone(),
                     source: file_id,
                     target: person_id,
                     relation: RelationType::ModifiedBy,
@@ -877,6 +885,7 @@ pub fn auto_build_graph(branch: &str) -> Result<(usize, usize), String> {
                     evidence: format!("git log on {}", branch),
                     created_at: now.clone(),
                 })?;
+                known_edges.insert(edge_id);
                 edges_created += 1;
             }
         }
@@ -886,7 +895,7 @@ pub fn auto_build_graph(branch: &str) -> Result<(usize, usize), String> {
     let notes = list_notes().unwrap_or_default();
     for note in &notes {
         let note_entity_id = format!("note-{}", sanitize(&note.id));
-        if find_entity_by_name(&note.title, branch)?.is_none() {
+        if !known_entities.contains(&note.title) {
             create_entity(KgEntity {
                 id: note_entity_id.clone(),
                 kind: EntityKind::Note,
@@ -901,6 +910,7 @@ pub fn auto_build_graph(branch: &str) -> Result<(usize, usize), String> {
                 created_at: note.created_at.clone(),
                 updated_at: note.updated_at.clone(),
             })?;
+            known_entities.insert(note.title.clone());
             entities_created += 1;
         }
 
@@ -908,9 +918,9 @@ pub fn auto_build_graph(branch: &str) -> Result<(usize, usize), String> {
         if !note.target.is_empty() {
             let target_id = format!("file-{}", sanitize(&note.target));
             let edge_id = format!("edge-note-{}-{}", sanitize(&note.id), sanitize(&note.target));
-            if load_edge(&edge_id)?.is_none() {
+            if !known_edges.contains(&edge_id) {
                 create_edge(KgEdge {
-                    id: edge_id,
+                    id: edge_id.clone(),
                     source: note_entity_id,
                     target: target_id,
                     relation: RelationType::Documents,
@@ -919,6 +929,7 @@ pub fn auto_build_graph(branch: &str) -> Result<(usize, usize), String> {
                     evidence: format!("trace note {}", note.id),
                     created_at: note.created_at.clone(),
                 })?;
+                known_edges.insert(edge_id);
                 edges_created += 1;
             }
         }

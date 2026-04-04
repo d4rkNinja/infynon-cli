@@ -326,8 +326,8 @@ fn note_from_hash(hash: &HashMap<String, String>) -> Result<TraceNote, String> {
         id: value(hash, "id")?,
         title: value(hash, "title")?,
         body: value(hash, "body")?,
-        layer: parse_layer(&value(hash, "layer")?)?,
-        scope: parse_scope(&value(hash, "scope")?)?,
+        layer: value(hash, "layer")?.parse()?,
+        scope: value(hash, "scope")?.parse()?,
         target: value(hash, "target")?,
         files: serde_json::from_str(&value(hash, "files_json")?).map_err(|e| e.to_string())?,
         tags: serde_json::from_str(&value(hash, "tags_json")?).map_err(|e| e.to_string())?,
@@ -340,7 +340,7 @@ fn note_from_hash(hash: &HashMap<String, String>) -> Result<TraceNote, String> {
         }),
         author: value(hash, "author")?,
         actor: hash.get("actor").cloned().filter(|v| !v.is_empty()),
-        status: parse_status(&value(hash, "status")?)?,
+        status: value(hash, "status")?.parse()?,
         created_at: value(hash, "created_at")?,
         updated_at: value(hash, "updated_at")?,
     })
@@ -352,9 +352,7 @@ fn value(hash: &HashMap<String, String>, key: &str) -> Result<String, String> {
         .ok_or_else(|| format!("missing field '{}'", key))
 }
 
-fn parse_layer(v: &str) -> Result<TraceLayer, String> { v.parse() }
-fn parse_scope(v: &str) -> Result<TraceScope, String> { v.parse() }
-fn parse_status(v: &str) -> Result<NoteStatus, String> { v.parse() }
+
 
 fn connection(source: &TraceSource) -> Result<Connection, String> {
     let client = redis::Client::open(source.url.as_str()).map_err(|e| e.to_string())?;
