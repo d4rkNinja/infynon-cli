@@ -19,10 +19,13 @@ Desktop.ini
 .env.*
 *.pem
 *.key
-
+tests
 # Scan output (generated at runtime)
 infynon-scan-report.md
 infynon-scan-report.pdf
+.playwright-mcp
+.tmp-eagle-eye
+.tmp-eagle-eye-env
 .infynon/
 .claude
 # Logs
