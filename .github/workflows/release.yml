@@ -83,40 +83,24 @@ jobs:
           files: ${{ env.ASSET }}
 
   sync-go-version:
-    name: Sync Go wrapper version
+    name: Verify Go wrapper version
     needs: build-and-release
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
 
-      - name: Switch to latest main
-        shell: bash
-        run: |
-          git fetch origin main
-          git switch -C main origin/main
-
-      - name: Sync version in Go wrapper
+      - name: Verify version in Go wrapper
         shell: bash
         run: |
           TAG="${GITHUB_REF_NAME#v}"
-          sed -i "s/version = \".*\"/version = \"$TAG\"/" go/main.go
-          echo "Synced Go wrapper to $TAG"
-
-      - name: Commit and push
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add go/main.go
-          git diff --cached --quiet && echo "No changes" && exit 0
-          git commit -m "ci: sync go wrapper version to ${GITHUB_REF_NAME}"
-          git push origin main
+          CURRENT="$(sed -n 's/^[[:space:]]*version = \"\\(.*\\)\"/\\1/p' go/main.go | head -n 1)"
+          if [[ "$CURRENT" != "$TAG" ]]; then
+            echo "Go wrapper version mismatch: expected $TAG, found $CURRENT"
+            echo "Update go/main.go before creating the release tag."
+            exit 1
+          fi
+          echo "Verified Go wrapper version $CURRENT"
 
       - name: Trigger Go proxy indexing
         run: |
