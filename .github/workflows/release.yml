@@ -94,13 +94,44 @@ jobs:
         shell: bash
         run: |
           TAG="${GITHUB_REF_NAME#v}"
-          CURRENT="$(sed -n 's/^[[:space:]]*version = \"\\(.*\\)\"/\\1/p' go/main.go | head -n 1)"
-          if [[ "$CURRENT" != "$TAG" ]]; then
-            echo "Go wrapper version mismatch: expected $TAG, found $CURRENT"
-            echo "Update go/main.go before creating the release tag."
-            exit 1
-          fi
-          echo "Verified Go wrapper version $CURRENT"
+          python3 - "$TAG" <<'PY'
+          import json
+          import re
+          import sys
+          from pathlib import Path
+
+          expected = sys.argv[1]
+
+          cargo_text = Path("Cargo.toml").read_text(encoding="utf-8")
+          cargo_match = re.search(r'^version = "([^"]+)"', cargo_text, re.MULTILINE)
+          if not cargo_match:
+              print("Could not parse version from Cargo.toml")
+              sys.exit(1)
+
+          npm_version = json.loads(Path("npm/package.json").read_text(encoding="utf-8"))["version"]
+
+          go_text = Path("go/main.go").read_text(encoding="utf-8")
+          go_match = re.search(r'^\s*version = "([^"]+)"', go_text, re.MULTILINE)
+          if not go_match:
+              print("Could not parse version from go/main.go")
+              sys.exit(1)
+
+          versions = {
+              "Cargo.toml": cargo_match.group(1),
+              "npm/package.json": npm_version,
+              "go/main.go": go_match.group(1),
+          }
+
+          mismatches = {name: value for name, value in versions.items() if value != expected}
+          if mismatches:
+              print(f"Release metadata mismatch for tag {expected}:")
+              for name, value in mismatches.items():
+                  print(f"  {name}: found {value}")
+              print("Update release metadata before creating the release tag.")
+              sys.exit(1)
+
+          print(f"Verified release metadata version {expected}")
+          PY
 
       - name: Trigger Go proxy indexing
         run: |
