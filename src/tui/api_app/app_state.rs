@@ -15,7 +15,7 @@ pub struct ApiApp {
     // ── Data ──────────────────────────────────────────────────────────────
     pub flows: Vec<crate::api::types::Flow>,
     pub nodes: HashMap<String, crate::api::types::Node>,
-    pub active_flow_idx: usize,   // index into self.flows
+    pub active_flow_idx: usize, // index into self.flows
     pub last_run: Option<FlowRunResult>,
     pub compare_run: Option<FlowRunResult>,
     pub security_probes: Vec<SecurityProbeResult>,
@@ -32,13 +32,13 @@ pub struct ApiApp {
 
     // ── Navigation ────────────────────────────────────────────────────────
     pub scroll_offset: usize,
-    pub selected_index: usize,   // selected node in graph / row in list views
+    pub selected_index: usize, // selected node in graph / row in list views
 
     // ── Graph state ───────────────────────────────────────────────────────
     pub graph_layout: Vec<GraphNode>,
     pub graph_selected_id: Option<String>,
     pub attach_mode: AttachMode,
-    pub attach_input: String,    // typed node ID during attach
+    pub attach_input: String, // typed node ID during attach
     pub detail_panel: Option<NodeDetailPanel>,
 
     // ── Search ────────────────────────────────────────────────────────────
@@ -88,17 +88,29 @@ pub struct EnvEditState {
     pub original_key: String, // empty = new entry
     pub key_input: String,
     pub value_input: String,
-    pub editing_key: bool,    // true when adding new entry and cursor is in key field
+    pub editing_key: bool, // true when adding new entry and cursor is in key field
 }
 
 impl EnvEditState {
     pub fn new_entry() -> Self {
-        Self { original_key: String::new(), key_input: String::new(), value_input: String::new(), editing_key: true }
+        Self {
+            original_key: String::new(),
+            key_input: String::new(),
+            value_input: String::new(),
+            editing_key: true,
+        }
     }
     pub fn edit_existing(key: &str, value: &str) -> Self {
-        Self { original_key: key.to_string(), key_input: key.to_string(), value_input: value.to_string(), editing_key: false }
+        Self {
+            original_key: key.to_string(),
+            key_input: key.to_string(),
+            value_input: value.to_string(),
+            editing_key: false,
+        }
     }
-    pub fn is_new(&self) -> bool { self.original_key.is_empty() }
+    pub fn is_new(&self) -> bool {
+        self.original_key.is_empty()
+    }
 }
 
 impl ApiApp {
@@ -114,13 +126,18 @@ impl ApiApp {
         };
 
         // Load last run result for the active flow
-        let last_run = flows.get(active_flow_idx)
+        let last_run = flows
+            .get(active_flow_idx)
             .and_then(|f| storage::load_recent_runs(&f.id, 1).into_iter().next());
 
         // Cache pass/fail status for every flow (avoids N disk reads per render frame)
-        let flow_run_statuses: HashMap<String, Option<bool>> = flows.iter()
+        let flow_run_statuses: HashMap<String, Option<bool>> = flows
+            .iter()
             .map(|f| {
-                let status = storage::load_recent_runs(&f.id, 1).into_iter().next().map(|r| r.passed);
+                let status = storage::load_recent_runs(&f.id, 1)
+                    .into_iter()
+                    .next()
+                    .map(|r| r.passed);
                 (f.id.clone(), status)
             })
             .collect();
@@ -194,9 +211,14 @@ impl ApiApp {
         self.flows = storage::list_flows();
         self.nodes = storage::load_nodes_map();
         // Refresh per-flow run status cache
-        self.flow_run_statuses = self.flows.iter()
+        self.flow_run_statuses = self
+            .flows
+            .iter()
             .map(|f| {
-                let status = storage::load_recent_runs(&f.id, 1).into_iter().next().map(|r| r.passed);
+                let status = storage::load_recent_runs(&f.id, 1)
+                    .into_iter()
+                    .next()
+                    .map(|r| r.passed);
                 (f.id.clone(), status)
             })
             .collect();
@@ -248,9 +270,9 @@ impl ApiApp {
     }
 
     pub fn selected_graph_node(&self) -> Option<&GraphNode> {
-        self.graph_selected_id.as_ref().and_then(|id| {
-            self.graph_layout.iter().find(|g| &g.node_id == id)
-        })
+        self.graph_selected_id
+            .as_ref()
+            .and_then(|id| self.graph_layout.iter().find(|g| &g.node_id == id))
     }
 
     pub fn move_graph_selection(&mut self, direction: GraphDirection) {
@@ -267,30 +289,34 @@ impl ApiApp {
         let new_id = match direction {
             GraphDirection::Down => {
                 // Find a node in the next layer
-                self.graph_layout.iter()
+                self.graph_layout
+                    .iter()
                     .filter(|g| g.layer == current.layer + 1)
                     .min_by_key(|g| (g.col as i64 - current.col as i64).abs())
                     .map(|g| g.node_id.clone())
             }
             GraphDirection::Up => {
-                if current.layer == 0 { return; }
-                self.graph_layout.iter()
+                if current.layer == 0 {
+                    return;
+                }
+                self.graph_layout
+                    .iter()
                     .filter(|g| g.layer + 1 == current.layer)
                     .min_by_key(|g| (g.col as i64 - current.col as i64).abs())
                     .map(|g| g.node_id.clone())
             }
-            GraphDirection::Left => {
-                self.graph_layout.iter()
-                    .filter(|g| g.layer == current.layer && g.col < current.col)
-                    .max_by_key(|g| g.col)
-                    .map(|g| g.node_id.clone())
-            }
-            GraphDirection::Right => {
-                self.graph_layout.iter()
-                    .filter(|g| g.layer == current.layer && g.col > current.col)
-                    .min_by_key(|g| g.col)
-                    .map(|g| g.node_id.clone())
-            }
+            GraphDirection::Left => self
+                .graph_layout
+                .iter()
+                .filter(|g| g.layer == current.layer && g.col < current.col)
+                .max_by_key(|g| g.col)
+                .map(|g| g.node_id.clone()),
+            GraphDirection::Right => self
+                .graph_layout
+                .iter()
+                .filter(|g| g.layer == current.layer && g.col > current.col)
+                .min_by_key(|g| g.col)
+                .map(|g| g.node_id.clone()),
         };
 
         if let Some(id) = new_id {
@@ -369,7 +395,10 @@ impl ApiApp {
         if self.detail_panel.is_some() {
             self.detail_panel = None;
         } else if let Some(id) = self.graph_selected_id.clone() {
-            self.detail_panel = Some(NodeDetailPanel { node_id: id, scroll: 0 });
+            self.detail_panel = Some(NodeDetailPanel {
+                node_id: id,
+                scroll: 0,
+            });
         }
     }
 }

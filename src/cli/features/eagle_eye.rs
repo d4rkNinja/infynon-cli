@@ -1,5 +1,5 @@
-use crate::tui::logger::Logger;
 use crate::engine::{osv, scanner};
+use crate::tui::logger::Logger;
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -18,8 +18,12 @@ pub struct SmtpConfig {
     pub tls: bool,
 }
 
-fn default_smtp_port() -> u16 { 587 }
-fn default_tls() -> bool { true }
+fn default_smtp_port() -> u16 {
+    587
+}
+fn default_tls() -> bool {
+    true
+}
 
 impl Default for SmtpConfig {
     fn default() -> Self {
@@ -51,7 +55,9 @@ pub struct EagleEyeConfig {
     pub from: String,
 }
 
-fn default_interval() -> u32 { 24 }
+fn default_interval() -> u32 {
+    24
+}
 fn default_risk_levels() -> Vec<String> {
     vec!["CRITICAL".into(), "HIGH".into()]
 }
@@ -103,10 +109,9 @@ fn save_config(config: &EagleEyeConfig) -> Result<(), String> {
         std::fs::create_dir_all(parent)
             .map_err(|e| format!("Failed to create config dir: {}", e))?;
     }
-    let content = toml::to_string_pretty(config)
-        .map_err(|e| format!("Failed to serialize config: {}", e))?;
-    std::fs::write(&path, content)
-        .map_err(|e| format!("Failed to write config: {}", e))
+    let content =
+        toml::to_string_pretty(config).map_err(|e| format!("Failed to serialize config: {}", e))?;
+    std::fs::write(&path, content).map_err(|e| format!("Failed to write config: {}", e))
 }
 
 // ── Commands ────────────────────────────────────────────────────────────────
@@ -115,70 +120,138 @@ pub fn cmd_setup() {
     use std::io::{self, Write};
 
     Logger::title("EAGLE EYE SETUP", "blue");
-    println!("  {}  Configure scheduled vulnerability monitoring with email alerts.\n",
-        "🦅".bold());
+    println!(
+        "  {}  Configure scheduled vulnerability monitoring with email alerts.\n",
+        "🦅".bold()
+    );
 
     let mut config = load_config();
 
-    println!("  {}  {}\n", "1".bold().bright_cyan(), "SMTP Configuration".bold().white());
+    println!(
+        "  {}  {}\n",
+        "1".bold().bright_cyan(),
+        "SMTP Configuration".bold().white()
+    );
 
-    print!("  SMTP Host [{}]: ", if config.smtp.host.is_empty() { "smtp.gmail.com" } else { &config.smtp.host });
+    print!(
+        "  SMTP Host [{}]: ",
+        if config.smtp.host.is_empty() {
+            "smtp.gmail.com"
+        } else {
+            &config.smtp.host
+        }
+    );
     io::stdout().flush().ok();
     let mut input = String::new();
     io::stdin().read_line(&mut input).ok();
     let input = input.trim();
-    if !input.is_empty() { config.smtp.host = input.to_string(); }
-    else if config.smtp.host.is_empty() { config.smtp.host = "smtp.gmail.com".to_string(); }
+    if !input.is_empty() {
+        config.smtp.host = input.to_string();
+    } else if config.smtp.host.is_empty() {
+        config.smtp.host = "smtp.gmail.com".to_string();
+    }
 
     print!("  SMTP Port [{}]: ", config.smtp.port);
     io::stdout().flush().ok();
     let mut input = String::new();
     io::stdin().read_line(&mut input).ok();
-    if let Ok(p) = input.trim().parse::<u16>() { config.smtp.port = p; }
+    if let Ok(p) = input.trim().parse::<u16>() {
+        config.smtp.port = p;
+    }
 
-    print!("  SMTP Username [{}]: ", if config.smtp.username.is_empty() { "your-email@gmail.com" } else { &config.smtp.username });
+    print!(
+        "  SMTP Username [{}]: ",
+        if config.smtp.username.is_empty() {
+            "your-email@gmail.com"
+        } else {
+            &config.smtp.username
+        }
+    );
     io::stdout().flush().ok();
     let mut input = String::new();
     io::stdin().read_line(&mut input).ok();
     let input = input.trim();
-    if !input.is_empty() { config.smtp.username = input.to_string(); }
+    if !input.is_empty() {
+        config.smtp.username = input.to_string();
+    }
 
-    print!("  SMTP Password [{}]: ", if config.smtp.password.is_empty() { "enter password" } else { "****" });
+    print!(
+        "  SMTP Password [{}]: ",
+        if config.smtp.password.is_empty() {
+            "enter password"
+        } else {
+            "****"
+        }
+    );
     io::stdout().flush().ok();
     let mut input = String::new();
     io::stdin().read_line(&mut input).ok();
     let input = input.trim();
-    if !input.is_empty() { config.smtp.password = input.to_string(); }
+    if !input.is_empty() {
+        config.smtp.password = input.to_string();
+    }
 
-    print!("  Use TLS [{}]: ", if config.smtp.tls { "yes" } else { "no" });
+    print!(
+        "  Use TLS [{}]: ",
+        if config.smtp.tls { "yes" } else { "no" }
+    );
     io::stdout().flush().ok();
     let mut input = String::new();
     io::stdin().read_line(&mut input).ok();
     let input = input.trim().to_lowercase();
-    if input == "no" || input == "false" || input == "n" { config.smtp.tls = false; }
-    else if !input.is_empty() { config.smtp.tls = true; }
+    if input == "no" || input == "false" || input == "n" {
+        config.smtp.tls = false;
+    } else if !input.is_empty() {
+        config.smtp.tls = true;
+    }
 
-    println!("\n  {}  {}\n", "2".bold().bright_cyan(), "Email Addresses".bold().white());
+    println!(
+        "\n  {}  {}\n",
+        "2".bold().bright_cyan(),
+        "Email Addresses".bold().white()
+    );
 
-    print!("  From address [{}]: ", if config.from.is_empty() { &config.smtp.username } else { &config.from });
+    print!(
+        "  From address [{}]: ",
+        if config.from.is_empty() {
+            &config.smtp.username
+        } else {
+            &config.from
+        }
+    );
     io::stdout().flush().ok();
     let mut input = String::new();
     io::stdin().read_line(&mut input).ok();
     let input = input.trim();
-    if !input.is_empty() { config.from = input.to_string(); }
-    else if config.from.is_empty() { config.from = config.smtp.username.clone(); }
+    if !input.is_empty() {
+        config.from = input.to_string();
+    } else if config.from.is_empty() {
+        config.from = config.smtp.username.clone();
+    }
 
-    let recip_display = if config.recipients.is_empty() { "admin@example.com".to_string() } else { config.recipients.join(", ") };
+    let recip_display = if config.recipients.is_empty() {
+        "admin@example.com".to_string()
+    } else {
+        config.recipients.join(", ")
+    };
     print!("  Recipients (comma-separated) [{}]: ", recip_display);
     io::stdout().flush().ok();
     let mut input = String::new();
     io::stdin().read_line(&mut input).ok();
     let input = input.trim();
     if !input.is_empty() {
-        config.recipients = input.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+        config.recipients = input
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
     }
 
-    println!("\n  {}  {}\n", "3".bold().bright_cyan(), "Project Paths to Monitor".bold().white());
+    println!(
+        "\n  {}  {}\n",
+        "3".bold().bright_cyan(),
+        "Project Paths to Monitor".bold().white()
+    );
     println!("  Enter full paths to project directories (one per line).");
     println!("  Eagle Eye will scan for lock files in each path.");
     println!("  Enter an empty line when done.\n");
@@ -186,7 +259,11 @@ pub fn cmd_setup() {
     if !config.scan_paths.is_empty() {
         println!("  Current paths:");
         for p in &config.scan_paths {
-            println!("    {} {}", "·".truecolor(60, 60, 80), p.truecolor(180, 180, 200));
+            println!(
+                "    {} {}",
+                "·".truecolor(60, 60, 80),
+                p.truecolor(180, 180, 200)
+            );
         }
         print!("\n  Keep existing paths? [Y/n]: ");
         io::stdout().flush().ok();
@@ -203,24 +280,45 @@ pub fn cmd_setup() {
         let mut input = String::new();
         io::stdin().read_line(&mut input).ok();
         let input = input.trim();
-        if input.is_empty() { break; }
+        if input.is_empty() {
+            break;
+        }
         config.scan_paths.push(input.to_string());
     }
 
-    println!("\n  {}  {}\n", "4".bold().bright_cyan(), "Scan Schedule".bold().white());
+    println!(
+        "\n  {}  {}\n",
+        "4".bold().bright_cyan(),
+        "Scan Schedule".bold().white()
+    );
     print!("  Scan interval in hours [{}]: ", config.interval_hours);
     io::stdout().flush().ok();
     let mut input = String::new();
     io::stdin().read_line(&mut input).ok();
-    if let Ok(h) = input.trim().parse::<u32>() { config.interval_hours = h.max(1); }
+    if let Ok(h) = input.trim().parse::<u32>() {
+        config.interval_hours = h.max(1);
+    }
 
-    println!("\n  {}  {}\n", "5".bold().bright_cyan(), "Risk Level Threshold".bold().white());
+    println!(
+        "\n  {}  {}\n",
+        "5".bold().bright_cyan(),
+        "Risk Level Threshold".bold().white()
+    );
     println!("  Select which severity levels trigger an email alert:");
     println!("  {}  CRITICAL only", "[1]".bold().bright_red());
     println!("  {}  CRITICAL + HIGH", "[2]".bold().bright_red());
-    println!("  {}  CRITICAL + HIGH + MEDIUM", "[3]".bold().bright_yellow());
-    println!("  {}  CRITICAL + HIGH + MEDIUM + LOW", "[4]".bold().bright_green());
-    println!("  {}  ALL (including INFORMATIONAL)", "[5]".bold().bright_cyan());
+    println!(
+        "  {}  CRITICAL + HIGH + MEDIUM",
+        "[3]".bold().bright_yellow()
+    );
+    println!(
+        "  {}  CRITICAL + HIGH + MEDIUM + LOW",
+        "[4]".bold().bright_green()
+    );
+    println!(
+        "  {}  ALL (including INFORMATIONAL)",
+        "[5]".bold().bright_cyan()
+    );
     println!();
     print!("  Choice [2]: ");
     io::stdout().flush().ok();
@@ -229,8 +327,19 @@ pub fn cmd_setup() {
     config.risk_levels = match input.trim() {
         "1" => vec!["CRITICAL".into()],
         "3" => vec!["CRITICAL".into(), "HIGH".into(), "MEDIUM".into()],
-        "4" => vec!["CRITICAL".into(), "HIGH".into(), "MEDIUM".into(), "LOW".into()],
-        "5" => vec!["CRITICAL".into(), "HIGH".into(), "MEDIUM".into(), "LOW".into(), "INFORMATIONAL".into()],
+        "4" => vec![
+            "CRITICAL".into(),
+            "HIGH".into(),
+            "MEDIUM".into(),
+            "LOW".into(),
+        ],
+        "5" => vec![
+            "CRITICAL".into(),
+            "HIGH".into(),
+            "MEDIUM".into(),
+            "LOW".into(),
+            "INFORMATIONAL".into(),
+        ],
         _ => vec!["CRITICAL".into(), "HIGH".into()],
     };
 
@@ -241,8 +350,14 @@ pub fn cmd_setup() {
             println!();
             Logger::success("Eagle Eye configuration saved!");
             Logger::detail("  Config:", &config_path().display().to_string());
-            Logger::detail("  Paths:", &format!("{} project(s)", config.scan_paths.len()));
-            Logger::detail("  Interval:", &format!("every {} hours", config.interval_hours));
+            Logger::detail(
+                "  Paths:",
+                &format!("{} project(s)", config.scan_paths.len()),
+            );
+            Logger::detail(
+                "  Interval:",
+                &format!("every {} hours", config.interval_hours),
+            );
             Logger::detail("  Risk:", &config.risk_levels.join(", "));
             Logger::detail("  Email to:", &config.recipients.join(", "));
             Logger::detail("  Status:", "ENABLED");
@@ -257,7 +372,11 @@ pub fn cmd_status() {
     Logger::title("EAGLE EYE STATUS", "blue");
     let config = load_config();
 
-    let status = if config.enabled { "ENABLED".bold().bright_green().to_string() } else { "DISABLED".bold().bright_red().to_string() };
+    let status = if config.enabled {
+        "ENABLED".bold().bright_green().to_string()
+    } else {
+        "DISABLED".bold().bright_red().to_string()
+    };
     Logger::detail("  Status:", &status);
     Logger::detail("  Config:", &config_path().display().to_string());
 
@@ -268,11 +387,21 @@ pub fn cmd_status() {
 
     Logger::detail("  Paths:", &format!("{}", config.scan_paths.len()));
     for p in &config.scan_paths {
-        println!("    {} {}", "·".truecolor(60, 60, 80), p.truecolor(180, 180, 200));
+        println!(
+            "    {} {}",
+            "·".truecolor(60, 60, 80),
+            p.truecolor(180, 180, 200)
+        );
     }
-    Logger::detail("  Interval:", &format!("every {} hours", config.interval_hours));
+    Logger::detail(
+        "  Interval:",
+        &format!("every {} hours", config.interval_hours),
+    );
     Logger::detail("  Risk levels:", &config.risk_levels.join(", "));
-    Logger::detail("  SMTP:", &format!("{}:{}", config.smtp.host, config.smtp.port));
+    Logger::detail(
+        "  SMTP:",
+        &format!("{}:{}", config.smtp.host, config.smtp.port),
+    );
     Logger::detail("  From:", &config.from);
     Logger::detail("  To:", &config.recipients.join(", "));
 }
@@ -314,9 +443,18 @@ pub fn cmd_start() {
     }
 
     Logger::title("EAGLE EYE MONITORING", "blue");
-    println!("  {}  Starting scheduled vulnerability monitoring...\n", "🦅".bold());
-    Logger::detail("  Paths:", &format!("{} project(s)", config.scan_paths.len()));
-    Logger::detail("  Interval:", &format!("every {} hours", config.interval_hours));
+    println!(
+        "  {}  Starting scheduled vulnerability monitoring...\n",
+        "🦅".bold()
+    );
+    Logger::detail(
+        "  Paths:",
+        &format!("{} project(s)", config.scan_paths.len()),
+    );
+    Logger::detail(
+        "  Interval:",
+        &format!("every {} hours", config.interval_hours),
+    );
     Logger::detail("  Risk:", &config.risk_levels.join(", "));
     Logger::detail("  Email to:", &config.recipients.join(", "));
     println!();
@@ -327,7 +465,10 @@ pub fn cmd_start() {
 
     loop {
         let sleep_secs = config.interval_hours as u64 * 3600;
-        Logger::raw_dim(&format!("  Next scan in {} hours...", config.interval_hours));
+        Logger::raw_dim(&format!(
+            "  Next scan in {} hours...",
+            config.interval_hours
+        ));
         std::thread::sleep(std::time::Duration::from_secs(sleep_secs));
 
         // Reload config in case it changed
@@ -344,12 +485,20 @@ pub fn cmd_start() {
 
 fn run_scan_cycle(config: &EagleEyeConfig) {
     let timestamp = chrono::Utc::now().format("%Y-%m-%d %H:%M UTC").to_string();
-    println!("  {} {} Starting scan cycle...", "🔎".bold(), timestamp.truecolor(120, 120, 140));
+    println!(
+        "  {} {} Starting scan cycle...",
+        "🔎".bold(),
+        timestamp.truecolor(120, 120, 140)
+    );
 
     let mut all_findings: Vec<ScanFinding> = Vec::new();
 
     for path in &config.scan_paths {
-        println!("  {} Scanning: {}", ">>".truecolor(255, 100, 100).bold(), path.bold());
+        println!(
+            "  {} Scanning: {}",
+            ">>".truecolor(255, 100, 100).bold(),
+            path.bold()
+        );
 
         let original_dir = std::env::current_dir().ok();
         if std::env::set_current_dir(path).is_err() {
@@ -366,11 +515,16 @@ fn run_scan_cycle(config: &EagleEyeConfig) {
             continue;
         }
 
-        println!("    {} Found {} packages", "·".truecolor(100, 100, 120), packages.len());
+        println!(
+            "    {} Found {} packages",
+            "·".truecolor(100, 100, 120),
+            packages.len()
+        );
 
-        let queries: Vec<(String, String, String)> = packages.iter().map(|p| {
-            (p.name.clone(), p.ecosystem.clone(), p.version.clone())
-        }).collect();
+        let queries: Vec<(String, String, String)> = packages
+            .iter()
+            .map(|p| (p.name.clone(), p.ecosystem.clone(), p.version.clone()))
+            .collect();
 
         let results = match osv::batch_query(&queries) {
             Ok(r) => r,
@@ -384,7 +538,8 @@ fn run_scan_cycle(config: &EagleEyeConfig) {
         };
 
         // Collect all vuln IDs and fetch details in batch (avoids N+1 API calls)
-        let all_vuln_ids: Vec<String> = results.iter()
+        let all_vuln_ids: Vec<String> = results
+            .iter()
             .flat_map(|refs| refs.iter().map(|r| r.id.clone()))
             .collect();
 
@@ -397,7 +552,9 @@ fn run_scan_cycle(config: &EagleEyeConfig) {
         let mut path_vulns = 0;
 
         for (i, vuln_refs) in results.iter().enumerate() {
-            if vuln_refs.is_empty() { continue; }
+            if vuln_refs.is_empty() {
+                continue;
+            }
             let pkg = &packages[i];
 
             for vuln_ref in vuln_refs {
@@ -406,7 +563,11 @@ fn run_scan_cycle(config: &EagleEyeConfig) {
                     .map(|d| osv::severity_label(d))
                     .unwrap_or("INFORMATIONAL");
 
-                if !config.risk_levels.iter().any(|r| r.eq_ignore_ascii_case(severity)) {
+                if !config
+                    .risk_levels
+                    .iter()
+                    .any(|r| r.eq_ignore_ascii_case(severity))
+                {
                     continue;
                 }
 
@@ -429,7 +590,10 @@ fn run_scan_cycle(config: &EagleEyeConfig) {
         }
 
         let status = if path_vulns > 0 {
-            format!("{} vulnerabilities found", path_vulns).bright_red().bold().to_string()
+            format!("{} vulnerabilities found", path_vulns)
+                .bright_red()
+                .bold()
+                .to_string()
         } else {
             "clean".bright_green().bold().to_string()
         };
@@ -443,9 +607,13 @@ fn run_scan_cycle(config: &EagleEyeConfig) {
     // Summary
     println!();
     if all_findings.is_empty() {
-        Logger::success(&format!("All {} projects are clean!", config.scan_paths.len()));
+        Logger::success(&format!(
+            "All {} projects are clean!",
+            config.scan_paths.len()
+        ));
     } else {
-        println!("  {} {} vulnerabilities found across {} project(s)\n",
+        println!(
+            "  {} {} vulnerabilities found across {} project(s)\n",
             "⚠".bright_yellow().bold(),
             all_findings.len(),
             config.scan_paths.len(),
@@ -460,7 +628,8 @@ fn run_scan_cycle(config: &EagleEyeConfig) {
                 "LOW" => finding.severity.green().to_string(),
                 _ => finding.severity.truecolor(120, 120, 140).to_string(),
             };
-            println!("    [{}] {} {} @ {} — {}",
+            println!(
+                "    [{}] {} {} @ {} — {}",
                 sev_color,
                 finding.cve_id.truecolor(180, 180, 200),
                 finding.package.bold(),
@@ -518,9 +687,13 @@ fn build_eagle_eye_html(findings: &[ScanFinding], config: &EagleEyeConfig) -> St
     let timestamp = chrono::Utc::now().format("%Y-%m-%d %H:%M UTC").to_string();
 
     // Group by project
-    let mut by_project: std::collections::BTreeMap<String, Vec<&ScanFinding>> = std::collections::BTreeMap::new();
+    let mut by_project: std::collections::BTreeMap<String, Vec<&ScanFinding>> =
+        std::collections::BTreeMap::new();
     for f in findings {
-        by_project.entry(f.project_path.clone()).or_default().push(f);
+        by_project
+            .entry(f.project_path.clone())
+            .or_default()
+            .push(f);
     }
 
     // Count by severity
@@ -573,7 +746,8 @@ fn build_eagle_eye_html(findings: &[ScanFinding], config: &EagleEyeConfig) -> St
         )
     }).collect();
 
-    format!(r#"<!DOCTYPE html>
+    format!(
+        r#"<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head>
 <body style="margin:0;padding:0;background:#0a0a14;font-family:system-ui,-apple-system,sans-serif">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0a14;padding:20px 0">

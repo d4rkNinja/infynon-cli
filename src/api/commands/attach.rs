@@ -61,7 +61,10 @@ pub fn cmd_attach(
     for mut flow in flows {
         if flow.all_node_ids().contains(&from_id.to_string()) {
             // Check not already attached
-            let already = flow.edges.iter().any(|e| e.from == from_id && e.to == to_id);
+            let already = flow
+                .edges
+                .iter()
+                .any(|e| e.from == from_id && e.to == to_id);
             if !already {
                 flow.edges.push(edge.clone());
                 if let Ok(_) = storage::save_flow(&flow) {
@@ -127,14 +130,21 @@ pub fn cmd_attach_ai(from_id: &str, description: Option<&str>, flow_id: Option<&
     // Get suggestions
     let suggestions = ai::suggest_next_nodes(
         &from_node,
-        &all_nodes.iter().filter(|n| n.id != from_id).cloned().collect::<Vec<_>>(),
+        &all_nodes
+            .iter()
+            .filter(|n| n.id != from_id)
+            .cloned()
+            .collect::<Vec<_>>(),
     );
 
     if suggestions.is_empty() {
         println!();
         if let Some(desc) = description {
             // No existing nodes match — offer to create one
-            println!("  {}  No matching node found. Creating from description...", "→".bright_cyan());
+            println!(
+                "  {}  No matching node found. Creating from description...",
+                "→".bright_cyan()
+            );
             super::node::cmd_node_create(Some(desc));
 
             // Reload and try to attach
@@ -154,10 +164,27 @@ pub fn cmd_attach_ai(from_id: &str, description: Option<&str>, flow_id: Option<&
     let best = &suggestions[0];
 
     println!();
-    println!("  {}  Best match: {}", "→".bright_cyan(), best.node.id.bold());
-    println!("     {} {} {}", best.node.method.bright_yellow(), best.node.path.bright_cyan(), format!("(confidence: {:.0}%)", best.confidence * 100.0).truecolor(140, 140, 160));
+    println!(
+        "  {}  Best match: {}",
+        "→".bright_cyan(),
+        best.node.id.bold()
+    );
+    println!(
+        "     {} {} {}",
+        best.node.method.bright_yellow(),
+        best.node.path.bright_cyan(),
+        format!("(confidence: {:.0}%)", best.confidence * 100.0).truecolor(140, 140, 160)
+    );
     println!("     Reason: {}", best.reason.truecolor(180, 180, 200));
-    println!("     Carries: {}", if best.edge.carry.is_empty() { "all context".to_string() } else { best.edge.carry.join(", ") }.bright_yellow());
+    println!(
+        "     Carries: {}",
+        if best.edge.carry.is_empty() {
+            "all context".to_string()
+        } else {
+            best.edge.carry.join(", ")
+        }
+        .bright_yellow()
+    );
 
     if suggestions.len() > 1 {
         println!();
@@ -175,7 +202,12 @@ pub fn cmd_attach_ai(from_id: &str, description: Option<&str>, flow_id: Option<&
 
     attach_edge_to_flows(best.edge.clone(), flow_id);
     println!();
-    println!("  {}  Attached: {} → {}", "✔".bright_green(), from_id.bold(), best.node.id.bold().bright_cyan());
+    println!(
+        "  {}  Attached: {} → {}",
+        "✔".bright_green(),
+        from_id.bold(),
+        best.node.id.bold().bright_cyan()
+    );
     println!();
 }
 
@@ -183,10 +215,15 @@ fn attach_edge_to_flows(edge: Edge, flow_id_filter: Option<&str>) {
     let flows = storage::list_flows();
     for mut flow in flows {
         if let Some(fid) = flow_id_filter {
-            if flow.id != fid { continue; }
+            if flow.id != fid {
+                continue;
+            }
         }
         if flow.all_node_ids().contains(&edge.from) {
-            let already = flow.edges.iter().any(|e| e.from == edge.from && e.to == edge.to);
+            let already = flow
+                .edges
+                .iter()
+                .any(|e| e.from == edge.from && e.to == edge.to);
             if !already {
                 flow.edges.push(edge.clone());
                 storage::save_flow(&flow).ok();
@@ -224,7 +261,12 @@ pub fn cmd_detach(from_id: &str, to_id: &str) {
         );
     } else {
         println!();
-        println!("  {}  No edge found from '{}' to '{}'", "ℹ".bright_yellow(), from_id, to_id);
+        println!(
+            "  {}  No edge found from '{}' to '{}'",
+            "ℹ".bright_yellow(),
+            from_id,
+            to_id
+        );
     }
     println!();
 }

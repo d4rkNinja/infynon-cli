@@ -1,8 +1,8 @@
 use super::*;
 
 pub fn cmd_outdated(pkg_file: Option<&str>) {
+    use tabled::settings::{object::Rows, Color, Padding, Style};
     use tabled::{Table, Tabled};
-    use tabled::settings::{Style, Padding, object::Rows, Color};
 
     println!();
     Logger::title("INFYNON Outdated Check", "blue");
@@ -16,7 +16,8 @@ pub fn cmd_outdated(pkg_file: Option<&str>) {
 
     // Deduplicate
     let mut seen: HashSet<String> = HashSet::new();
-    let unique: Vec<&scanner::LockedPackage> = packages.iter()
+    let unique: Vec<&scanner::LockedPackage> = packages
+        .iter()
         .filter(|p| seen.insert(format!("{}:{}", p.ecosystem, p.name)))
         .collect();
 
@@ -29,11 +30,16 @@ pub fn cmd_outdated(pkg_file: Option<&str>) {
 
     #[derive(Tabled)]
     struct Row {
-        #[tabled(rename = " Ecosystem ")] eco: String,
-        #[tabled(rename = " Package ")]   pkg: String,
-        #[tabled(rename = " Current ")]   current: String,
-        #[tabled(rename = " Latest ")]    latest: String,
-        #[tabled(rename = " Update ")]    update: String,
+        #[tabled(rename = " Ecosystem ")]
+        eco: String,
+        #[tabled(rename = " Package ")]
+        pkg: String,
+        #[tabled(rename = " Current ")]
+        current: String,
+        #[tabled(rename = " Latest ")]
+        latest: String,
+        #[tabled(rename = " Update ")]
+        update: String,
     }
     let mut rows: Vec<Row> = Vec::new();
 
@@ -51,8 +57,12 @@ pub fn cmd_outdated(pkg_file: Option<&str>) {
                     update: classify_update(&pkg.version, &latest),
                 });
             }
-            Some(_) => { up_to_date += 1; }
-            None => { unknown += 1; }
+            Some(_) => {
+                up_to_date += 1;
+            }
+            None => {
+                unknown += 1;
+            }
         }
     }
     pb.finish_and_clear();
@@ -66,11 +76,15 @@ pub fn cmd_outdated(pkg_file: Option<&str>) {
 
     // Sort: major first
     rows.sort_by_key(|r| match r.update.as_str() {
-        "MAJOR" => 0, "MINOR" => 1, _ => 2,
+        "MAJOR" => 0,
+        "MINOR" => 1,
+        _ => 2,
     });
 
     let mut table = Table::new(rows);
-    table.with(Style::modern()).with(Padding::new(1, 1, 0, 0))
+    table
+        .with(Style::modern())
+        .with(Padding::new(1, 1, 0, 0))
         .modify(Rows::first(), Color::BOLD | Color::FG_BRIGHT_CYAN);
 
     println!();
@@ -87,13 +101,24 @@ pub fn cmd_outdated(pkg_file: Option<&str>) {
 
 fn classify_update(current: &str, latest: &str) -> String {
     let parse = |v: &str| -> (u32, u32, u32) {
-        let parts: Vec<u32> = v.trim_start_matches('v')
-            .split('.').filter_map(|p| p.split('-').next().and_then(|n| n.parse().ok())).collect();
-        (*parts.first().unwrap_or(&0), *parts.get(1).unwrap_or(&0), *parts.get(2).unwrap_or(&0))
+        let parts: Vec<u32> = v
+            .trim_start_matches('v')
+            .split('.')
+            .filter_map(|p| p.split('-').next().and_then(|n| n.parse().ok()))
+            .collect();
+        (
+            *parts.first().unwrap_or(&0),
+            *parts.get(1).unwrap_or(&0),
+            *parts.get(2).unwrap_or(&0),
+        )
     };
     let (cm, cmi, _) = parse(current);
     let (lm, lmi, _) = parse(latest);
-    if lm > cm { "MAJOR".to_string() }
-    else if lmi > cmi { "MINOR".to_string() }
-    else { "PATCH".to_string() }
+    if lm > cm {
+        "MAJOR".to_string()
+    } else if lmi > cmi {
+        "MINOR".to_string()
+    } else {
+        "PATCH".to_string()
+    }
 }

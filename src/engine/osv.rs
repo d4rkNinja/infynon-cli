@@ -1,9 +1,9 @@
-use serde::{Deserialize, Serialize};
 use reqwest::blocking::Client;
+use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
 
 const BATCH_URL: &str = "https://api.osv.dev/v1/querybatch";
-const VULN_URL:  &str = "https://api.osv.dev/v1/vulns";
+const VULN_URL: &str = "https://api.osv.dev/v1/vulns";
 const BATCH_CHUNK_SIZE: usize = 1000;
 const DETAIL_CONCURRENCY: usize = 20;
 
@@ -11,7 +11,7 @@ const DETAIL_CONCURRENCY: usize = 20;
 
 #[derive(Serialize)]
 pub struct OsvPackage {
-    pub name:      String,
+    pub name: String,
     pub ecosystem: String,
 }
 
@@ -30,7 +30,7 @@ pub struct OsvBatchRequest {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct OsvVulnRef {
-    pub id:       String,
+    pub id: String,
     pub modified: Option<String>,
 }
 
@@ -50,7 +50,7 @@ pub struct OsvBatchResponse {
 #[derive(Deserialize, Debug, Clone)]
 pub struct OsvSeverity {
     #[serde(rename = "type")]
-    pub kind:  Option<String>,
+    pub kind: Option<String>,
     pub score: Option<String>,
 }
 
@@ -58,19 +58,19 @@ pub struct OsvSeverity {
 pub struct OsvReference {
     #[serde(rename = "type")]
     pub kind: Option<String>,
-    pub url:  String,
+    pub url: String,
 }
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct OsvEvent {
     pub introduced: Option<String>,
-    pub fixed:      Option<String>,
+    pub fixed: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct OsvRange {
     #[serde(rename = "type")]
-    pub kind:   String,
+    pub kind: String,
     #[serde(default)]
     pub events: Vec<OsvEvent>,
 }
@@ -78,7 +78,7 @@ pub struct OsvRange {
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct OsvAffectedPackage {
     #[serde(default)]
-    pub name:      String,
+    pub name: String,
     #[serde(default)]
     pub ecosystem: String,
 }
@@ -93,19 +93,18 @@ pub struct OsvAffected {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct OsvVulnDetail {
-    pub id:          String,
-    pub summary:     Option<String>,
-    pub details:     Option<String>,
-    pub published:   Option<String>,
-    pub modified:    Option<String>,
+    pub id: String,
+    pub summary: Option<String>,
+    pub details: Option<String>,
+    pub published: Option<String>,
+    pub modified: Option<String>,
     #[serde(default)]
-    pub severity:    Vec<OsvSeverity>,
+    pub severity: Vec<OsvSeverity>,
     #[serde(default)]
-    pub references:  Vec<OsvReference>,
+    pub references: Vec<OsvReference>,
     #[serde(default)]
-    pub affected:    Vec<OsvAffected>,
+    pub affected: Vec<OsvAffected>,
 }
-
 
 /// For Go modules, extract the required major version from the module path (/vN suffix).
 /// Returns `None` if no major suffix is present (v0/v1 modules).
@@ -125,12 +124,14 @@ fn go_module_major(pkg_name: &str) -> Option<u64> {
 /// Check whether a version string is compatible with a Go module's major version constraint.
 fn go_version_compatible(pkg_name: &str, version: &str) -> bool {
     let v = version.trim_start_matches('v');
-    let ver_major: u64 = v.split('.').next()
+    let ver_major: u64 = v
+        .split('.')
+        .next()
         .and_then(|m| m.parse().ok())
         .unwrap_or(0);
     match go_module_major(pkg_name) {
         Some(m) => ver_major == m,
-        None    => ver_major <= 1, // v0/v1 module — reject anything v2+
+        None => ver_major <= 1, // v0/v1 module — reject anything v2+
     }
 }
 
@@ -154,9 +155,9 @@ fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
 
     match (pa, pb) {
         (Some(ta), Some(tb)) => return ta.cmp(&tb),
-        (None, Some(_))      => return std::cmp::Ordering::Greater, // regular > pseudo
-        (Some(_), None)      => return std::cmp::Ordering::Less,
-        (None, None)         => {}
+        (None, Some(_)) => return std::cmp::Ordering::Greater, // regular > pseudo
+        (Some(_), None) => return std::cmp::Ordering::Less,
+        (None, None) => {}
     }
 
     let parse = |v: &str| -> ((u64, u64, u64), Option<String>) {
@@ -186,27 +187,37 @@ fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
 
     // At equal numeric version, stable > rc > beta > alpha
     match (pre_a, pre_b) {
-        (None,     None)     => std::cmp::Ordering::Equal,
-        (None,     Some(_))  => std::cmp::Ordering::Greater, // stable > pre-release
-        (Some(_),  None)     => std::cmp::Ordering::Less,
+        (None, None) => std::cmp::Ordering::Equal,
+        (None, Some(_)) => std::cmp::Ordering::Greater, // stable > pre-release
+        (Some(_), None) => std::cmp::Ordering::Less,
         (Some(pa), Some(pb)) => {
             let rank = |s: &str| -> u8 {
                 let s = s.to_ascii_lowercase();
-                if s.starts_with("rc")    { 3 }
-                else if s.starts_with("beta") { 2 }
-                else if s.starts_with("alpha") { 1 }
-                else { 0 }
+                if s.starts_with("rc") {
+                    3
+                } else if s.starts_with("beta") {
+                    2
+                } else if s.starts_with("alpha") {
+                    1
+                } else {
+                    0
+                }
             };
             let ra = rank(&pa);
             let rb = rank(&pb);
-            if ra != rb { ra.cmp(&rb) } else { pa.cmp(&pb) }
+            if ra != rb {
+                ra.cmp(&rb)
+            } else {
+                pa.cmp(&pb)
+            }
         }
     }
 }
 
 /// Return the highest version string from a list.
 pub fn max_version(versions: &[String]) -> Option<String> {
-    versions.iter()
+    versions
+        .iter()
         .max_by(|a, b| compare_versions(a, b))
         .cloned()
 }
@@ -217,11 +228,15 @@ pub fn max_version(versions: &[String]) -> Option<String> {
 /// (`matched`) and from all entries (`all`) simultaneously. Uses `matched` when
 /// non-empty so jwt/v4 fixes don't leak into jwt/v5. Falls back to `all` for older
 /// CVEs that omit the package name. Go major-version filter applied to both.
-pub fn best_fixed_version(detail: &OsvVulnDetail, pkg_name: &str, ecosystem: &str) -> Option<String> {
+pub fn best_fixed_version(
+    detail: &OsvVulnDetail,
+    pkg_name: &str,
+    ecosystem: &str,
+) -> Option<String> {
     let is_go = ecosystem == "Go" && !pkg_name.is_empty();
 
     let mut matched: Vec<String> = Vec::new(); // from entries whose name == pkg_name
-    let mut all:     Vec<String> = Vec::new(); // from every entry (fallback)
+    let mut all: Vec<String> = Vec::new(); // from every entry (fallback)
 
     for affected in &detail.affected {
         let name_matches = pkg_name.is_empty()
@@ -229,12 +244,20 @@ pub fn best_fixed_version(detail: &OsvVulnDetail, pkg_name: &str, ecosystem: &st
             || affected.package.name == pkg_name;
 
         for range in &affected.ranges {
-            if range.kind != "SEMVER" && range.kind != "ECOSYSTEM" { continue; }
+            if range.kind != "SEMVER" && range.kind != "ECOSYSTEM" {
+                continue;
+            }
             for event in &range.events {
                 if let Some(ref fixed) = event.fixed {
-                    if fixed.is_empty() || fixed == "0" { continue; }
-                    if is_go && !go_version_compatible(pkg_name, fixed) { continue; }
-                    if name_matches { matched.push(fixed.clone()); }
+                    if fixed.is_empty() || fixed == "0" {
+                        continue;
+                    }
+                    if is_go && !go_version_compatible(pkg_name, fixed) {
+                        continue;
+                    }
+                    if name_matches {
+                        matched.push(fixed.clone());
+                    }
                     all.push(fixed.clone());
                 }
             }
@@ -338,7 +361,9 @@ pub fn find_safest_candidate_vs(
 
     // Helper: pick the best from a tier (clean first, then least-vulns)
     let pick_best = |tier: &[(&String, usize)]| -> Option<(String, bool)> {
-        if tier.is_empty() { return None; }
+        if tier.is_empty() {
+            return None;
+        }
         // Clean version (0 CVEs)? Return the first (= highest, since sorted desc)
         if let Some((ver, _)) = tier.iter().find(|(_, c)| *c == 0) {
             return Some((ver.to_string(), true));
@@ -403,13 +428,19 @@ pub fn batch_query(packages: &[(String, String, String)]) -> Result<Vec<Vec<OsvV
 
     // Process in chunks to avoid oversized requests
     for chunk_indices in valid_indices.chunks(BATCH_CHUNK_SIZE) {
-        let queries: Vec<OsvQuery> = chunk_indices.iter().map(|&i| {
-            let (name, ecosystem, version) = &packages[i];
-            OsvQuery {
-                package: OsvPackage { name: name.clone(), ecosystem: ecosystem.clone() },
-                version: version.clone(),
-            }
-        }).collect();
+        let queries: Vec<OsvQuery> = chunk_indices
+            .iter()
+            .map(|&i| {
+                let (name, ecosystem, version) = &packages[i];
+                OsvQuery {
+                    package: OsvPackage {
+                        name: name.clone(),
+                        ecosystem: ecosystem.clone(),
+                    },
+                    version: version.clone(),
+                }
+            })
+            .collect();
 
         let body = OsvBatchRequest { queries };
 
@@ -422,12 +453,18 @@ pub fn batch_query(packages: &[(String, String, String)]) -> Result<Vec<Vec<OsvV
         let status = resp.status();
         if !status.is_success() {
             let body_text = resp.text().unwrap_or_default();
-            return Err(format!("API returned HTTP {} — {}", status, body_text.chars().take(200).collect::<String>()));
+            return Err(format!(
+                "API returned HTTP {} — {}",
+                status,
+                body_text.chars().take(200).collect::<String>()
+            ));
         }
 
-        let text = resp.text().map_err(|e| format!("failed to read response: {}", e))?;
-        let batch: OsvBatchResponse = serde_json::from_str(&text)
-            .map_err(|e| format!("failed to parse response: {}", e))?;
+        let text = resp
+            .text()
+            .map_err(|e| format!("failed to read response: {}", e))?;
+        let batch: OsvBatchResponse =
+            serde_json::from_str(&text).map_err(|e| format!("failed to parse response: {}", e))?;
 
         // Map results back to original indices
         for (j, result) in batch.results.into_iter().enumerate() {
@@ -449,7 +486,8 @@ pub fn fetch_vuln_details_batch(ids: &[String]) -> Vec<(String, Result<OsvVulnDe
         return vec![];
     }
 
-    let results: Mutex<Vec<(String, Result<OsvVulnDetail, String>)>> = Mutex::new(Vec::with_capacity(ids.len()));
+    let results: Mutex<Vec<(String, Result<OsvVulnDetail, String>)>> =
+        Mutex::new(Vec::with_capacity(ids.len()));
     let work: Mutex<std::slice::Iter<String>> = Mutex::new(ids.iter());
 
     std::thread::scope(|s| {
@@ -479,16 +517,21 @@ pub fn fetch_vuln_details_batch(ids: &[String]) -> Vec<(String, Result<OsvVulnDe
 /// Fetch full detail for a single vulnerability ID using the provided client.
 fn fetch_single_detail(c: &Client, id: &str) -> Result<OsvVulnDetail, String> {
     let url = format!("{}/{}", VULN_URL, id);
-    let resp = c.get(&url).send().map_err(|e| format!("request failed: {}", e))?;
+    let resp = c
+        .get(&url)
+        .send()
+        .map_err(|e| format!("request failed: {}", e))?;
 
     let status = resp.status();
     if !status.is_success() {
         return Err(format!("API returned HTTP {} for {}", status, id));
     }
 
-    let text = resp.text().map_err(|e| format!("failed to read response: {}", e))?;
-    let detail: OsvVulnDetail = serde_json::from_str(&text)
-        .map_err(|e| format!("failed to parse vuln detail: {}", e))?;
+    let text = resp
+        .text()
+        .map_err(|e| format!("failed to read response: {}", e))?;
+    let detail: OsvVulnDetail =
+        serde_json::from_str(&text).map_err(|e| format!("failed to parse vuln detail: {}", e))?;
     Ok(detail)
 }
 
@@ -504,10 +547,18 @@ pub fn severity_label(detail: &OsvVulnDetail) -> &'static str {
         if let Some(score) = &s.score {
             // CVSS v3 vector string contains a numeric base score
             let score_str = score.to_uppercase();
-            if score_str.contains("CRITICAL") { return "CRITICAL"; }
-            if score_str.contains("HIGH")     { return "HIGH"; }
-            if score_str.contains("MEDIUM")   { return "MEDIUM"; }
-            if score_str.contains("LOW")      { return "LOW"; }
+            if score_str.contains("CRITICAL") {
+                return "CRITICAL";
+            }
+            if score_str.contains("HIGH") {
+                return "HIGH";
+            }
+            if score_str.contains("MEDIUM") {
+                return "MEDIUM";
+            }
+            if score_str.contains("LOW") {
+                return "LOW";
+            }
             // Try to parse numeric CVSS base score
             let parts: Vec<&str> = score.split('/').collect();
             for p in parts {
@@ -516,7 +567,7 @@ pub fn severity_label(detail: &OsvVulnDetail) -> &'static str {
                         s if s >= 9.0 => "CRITICAL",
                         s if s >= 7.0 => "HIGH",
                         s if s >= 4.0 => "MEDIUM",
-                        _             => "LOW",
+                        _ => "LOW",
                     };
                 }
             }
@@ -524,9 +575,15 @@ pub fn severity_label(detail: &OsvVulnDetail) -> &'static str {
     }
     // Keyword fallback on summary
     let summary = detail.summary.as_deref().unwrap_or("").to_uppercase();
-    if summary.contains("CRITICAL") { "CRITICAL" }
-    else if summary.contains("HIGH") { "HIGH" }
-    else if summary.contains("MEDIUM") { "MEDIUM" }
-    else if summary.contains("LOW") { "LOW" }
-    else { "INFORMATIONAL" }
+    if summary.contains("CRITICAL") {
+        "CRITICAL"
+    } else if summary.contains("HIGH") {
+        "HIGH"
+    } else if summary.contains("MEDIUM") {
+        "MEDIUM"
+    } else if summary.contains("LOW") {
+        "LOW"
+    } else {
+        "INFORMATIONAL"
+    }
 }

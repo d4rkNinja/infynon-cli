@@ -22,7 +22,9 @@ pub fn compute_graph_layout(flow: &Flow) -> Vec<GraphNode> {
     let mut visited: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     while let Some((node_id, layer)) = queue.pop_front() {
-        if visited.contains(&node_id) { continue; }
+        if visited.contains(&node_id) {
+            continue;
+        }
         visited.insert(node_id.clone());
         layers.entry(node_id.clone()).or_insert(layer);
 
@@ -42,14 +44,19 @@ pub fn compute_graph_layout(flow: &Flow) -> Vec<GraphNode> {
     let mut result: Vec<GraphNode> = Vec::new();
 
     for layer in 0..=max_layer {
-        let mut nodes_in_layer: Vec<String> = layers.iter()
+        let mut nodes_in_layer: Vec<String> = layers
+            .iter()
             .filter(|(_, &l)| l == layer)
             .map(|(id, _)| id.clone())
             .collect();
         nodes_in_layer.sort();
 
         for (col, node_id) in nodes_in_layer.into_iter().enumerate() {
-            result.push(GraphNode { node_id, layer, col });
+            result.push(GraphNode {
+                node_id,
+                layer,
+                col,
+            });
         }
     }
 
@@ -67,7 +74,9 @@ impl super::app_state::ApiApp {
             None => return,
         };
         let nodes = self.nodes.clone();
-        let base_url = match flow.base_url.clone()
+        let base_url = match flow
+            .base_url
+            .clone()
             .or_else(|| crate::api::commands::env::env_base_url())
         {
             Some(u) => u,
@@ -98,21 +107,29 @@ impl super::app_state::ApiApp {
             // Pre-seed context with env vars so {VAR} placeholders already in env
             // don't trigger prompts unnecessarily.
             let initial_context = crate::api::variables::load_env_context();
-            let result = execute_flow(&flow, &nodes, FlowExecuteOptions {
-                base_url,
-                initial_context,
-                on_step: Some(Box::new(move |step| {
-                    tx.send(LiveEvent::Step(step.clone())).ok();
-                })),
-                on_prompt: Some(Box::new(move |node_id: &str, inputs: &[crate::api::types::PromptInput]| {
-                    tx_prompt.send(LiveEvent::NeedInput {
-                        node_id: node_id.to_string(),
-                        inputs: inputs.to_vec(),
-                    }).ok();
-                    // Block until the TUI sends back the values
-                    reply_rx.recv().unwrap_or_default()
-                })),
-            });
+            let result = execute_flow(
+                &flow,
+                &nodes,
+                FlowExecuteOptions {
+                    base_url,
+                    initial_context,
+                    on_step: Some(Box::new(move |step| {
+                        tx.send(LiveEvent::Step(step.clone())).ok();
+                    })),
+                    on_prompt: Some(Box::new(
+                        move |node_id: &str, inputs: &[crate::api::types::PromptInput]| {
+                            tx_prompt
+                                .send(LiveEvent::NeedInput {
+                                    node_id: node_id.to_string(),
+                                    inputs: inputs.to_vec(),
+                                })
+                                .ok();
+                            // Block until the TUI sends back the values
+                            reply_rx.recv().unwrap_or_default()
+                        },
+                    )),
+                },
+            );
             let passed = result.passed;
             // Persist run result to disk so future sessions can load it
             crate::api::storage::save_run_result(&result).ok();
@@ -133,7 +150,8 @@ impl super::app_state::ApiApp {
                 return;
             }
         };
-        let base_url = match self.active_flow()
+        let base_url = match self
+            .active_flow()
             .and_then(|f| f.base_url.clone())
             .or_else(|| crate::api::commands::env::env_base_url())
         {
@@ -165,10 +183,12 @@ impl super::app_state::ApiApp {
             let context = crate::api::variables::load_env_context();
             let tx_prompt = tx.clone();
             let on_prompt = move |node_id: &str, inputs: &[crate::api::types::PromptInput]| {
-                tx_prompt.send(LiveEvent::NeedInput {
-                    node_id: node_id.to_string(),
-                    inputs: inputs.to_vec(),
-                }).ok();
+                tx_prompt
+                    .send(LiveEvent::NeedInput {
+                        node_id: node_id.to_string(),
+                        inputs: inputs.to_vec(),
+                    })
+                    .ok();
                 reply_rx.recv().unwrap_or_default()
             };
             let step = execute_node(&node, &context, &base_url, Some(&on_prompt));
@@ -229,7 +249,11 @@ impl super::app_state::ApiApp {
                     self.flow_running = false;
                     self.run_rx = None;
                     self.prompt_reply_tx = None;
-                    self.notify(if passed { "Flow passed ✔" } else { "Flow failed ✘" });
+                    self.notify(if passed {
+                        "Flow passed ✔"
+                    } else {
+                        "Flow failed ✘"
+                    });
                     self.refresh_data();
                     // Auto-save report if config flags are set
                     if let Some(run) = &self.last_run {

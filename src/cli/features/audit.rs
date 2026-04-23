@@ -1,6 +1,6 @@
 use super::*;
-use crate::engine::osv;
 use crate::cli::scan;
+use crate::engine::osv;
 
 pub fn cmd_audit_deep(pkg_file: Option<&str>) {
     println!();
@@ -16,7 +16,11 @@ pub fn cmd_audit_deep(pkg_file: Option<&str>) {
     sources.sort();
     sources.dedup();
     Logger::step("Scanning all dependencies (direct + transitive)...");
-    Logger::success(&format!("Found {} total packages from: {}", packages.len(), sources.join(", ")));
+    Logger::success(&format!(
+        "Found {} total packages from: {}",
+        packages.len(),
+        sources.join(", ")
+    ));
 
     // Build tree structure
     Logger::step("Building dependency tree...");
@@ -24,17 +28,23 @@ pub fn cmd_audit_deep(pkg_file: Option<&str>) {
 
     // Query OSV for all packages
     let pb = bar(packages.len() as u64);
-    let tuples: Vec<(String, String, String)> = packages.iter().map(|p| {
-        pb.set_message(format!("{}@{}", p.name, p.version));
-        pb.inc(1);
-        (p.name.clone(), p.ecosystem.clone(), p.version.clone())
-    }).collect();
+    let tuples: Vec<(String, String, String)> = packages
+        .iter()
+        .map(|p| {
+            pb.set_message(format!("{}@{}", p.name, p.version));
+            pb.inc(1);
+            (p.name.clone(), p.ecosystem.clone(), p.version.clone())
+        })
+        .collect();
     pb.finish_and_clear();
 
     Logger::step("Querying vulnerability database...");
     let results = match osv::batch_query(&tuples) {
         Ok(r) => r,
-        Err(e) => { Logger::error(&format!("Vulnerability DB error: {}", e)); return; }
+        Err(e) => {
+            Logger::error(&format!("Vulnerability DB error: {}", e));
+            return;
+        }
     };
 
     // Map vulnerabilities to packages
@@ -61,19 +71,32 @@ pub fn cmd_audit_deep(pkg_file: Option<&str>) {
         let mut vuln_to_pkgs: HashMap<String, Vec<String>> = HashMap::new();
         for (key, ids) in &vuln_map {
             for id in ids {
-                vuln_to_pkgs.entry(id.clone()).or_default().push(key.clone());
+                vuln_to_pkgs
+                    .entry(id.clone())
+                    .or_default()
+                    .push(key.clone());
             }
         }
 
         let details = osv::fetch_vuln_details_batch(&detail_ids);
-        let rank = |s: &str| match s { "CRITICAL" => 4, "HIGH" => 3, "MEDIUM" => 2, "LOW" => 1, _ => 0 };
+        let rank = |s: &str| match s {
+            "CRITICAL" => 4,
+            "HIGH" => 3,
+            "MEDIUM" => 2,
+            "LOW" => 1,
+            _ => 0,
+        };
         for (id, result) in &details {
             if let Ok(detail) = result {
                 let sev = osv::severity_label(detail).to_string();
                 if let Some(pkg_keys) = vuln_to_pkgs.get(id) {
                     for key in pkg_keys {
-                        let entry = vuln_sev.entry(key.clone()).or_insert_with(|| "INFORMATIONAL".to_string());
-                        if rank(&sev) > rank(entry) { *entry = sev.clone(); }
+                        let entry = vuln_sev
+                            .entry(key.clone())
+                            .or_insert_with(|| "INFORMATIONAL".to_string());
+                        if rank(&sev) > rank(entry) {
+                            *entry = sev.clone();
+                        }
                     }
                 }
             }
@@ -89,7 +112,10 @@ pub fn cmd_audit_deep(pkg_file: Option<&str>) {
         "Dependency Tree".bold().truecolor(0, 210, 255),
         "─".repeat(30).truecolor(40, 40, 60),
         if total_vulns > 0 {
-            format!("{} CVEs found", total_vulns).bold().bright_red().to_string()
+            format!("{} CVEs found", total_vulns)
+                .bold()
+                .bright_red()
+                .to_string()
         } else {
             "all clear".bold().bright_green().to_string()
         }
@@ -104,49 +130,67 @@ pub fn cmd_audit_deep(pkg_file: Option<&str>) {
     let (mut critical, mut high, mut medium, mut low, mut informational) = (0, 0, 0, 0, 0);
     for sev in vuln_sev.values() {
         match sev.as_str() {
-            "CRITICAL"      => critical += 1,
-            "HIGH"          => high += 1,
-            "MEDIUM"        => medium += 1,
-            "LOW"           => low += 1,
-            _               => informational += 1,
+            "CRITICAL" => critical += 1,
+            "HIGH" => high += 1,
+            "MEDIUM" => medium += 1,
+            "LOW" => low += 1,
+            _ => informational += 1,
         }
     }
-    let clean        = packages.len().saturating_sub(vuln_map.len());
+    let clean = packages.len().saturating_sub(vuln_map.len());
 
     // Weighted risk score 0–100
     let weighted = critical * 40 + high * 20 + medium * 8 + low * 2 + informational;
     let max_weighted = packages.len() * 40;
-    let risk_score: usize = if max_weighted == 0 { 0 } else { (weighted * 100 / max_weighted).min(100) };
+    let risk_score: usize = if max_weighted == 0 {
+        0
+    } else {
+        (weighted * 100 / max_weighted).min(100)
+    };
 
     const SEV_COLORS: [(u8, u8, u8); 6] = [
-        (255,  60,  60), // CRITICAL
-        (255, 140,  40), // HIGH
-        (255, 200,  40), // MEDIUM
+        (255, 60, 60),   // CRITICAL
+        (255, 140, 40),  // HIGH
+        (255, 200, 40),  // MEDIUM
         (200, 220, 100), // LOW
         (160, 160, 200), // INFORMATIONAL
-        ( 50, 220, 130), // CLEAN
+        (50, 220, 130),  // CLEAN
     ];
 
-    let (overall_label, overall_color) = if critical > 0       { ("CRITICAL RISK", SEV_COLORS[0]) }
-        else if high > 0                                        { ("HIGH RISK",     SEV_COLORS[1]) }
-        else if medium > 0                                      { ("MEDIUM RISK",   SEV_COLORS[2]) }
-        else if low > 0 || informational > 0                    { ("LOW RISK",      SEV_COLORS[3]) }
-        else                                                    { ("CLEAN",         (50u8, 255u8, 160u8)) };
+    let (overall_label, overall_color) = if critical > 0 {
+        ("CRITICAL RISK", SEV_COLORS[0])
+    } else if high > 0 {
+        ("HIGH RISK", SEV_COLORS[1])
+    } else if medium > 0 {
+        ("MEDIUM RISK", SEV_COLORS[2])
+    } else if low > 0 || informational > 0 {
+        ("LOW RISK", SEV_COLORS[3])
+    } else {
+        ("CLEAN", (50u8, 255u8, 160u8))
+    };
 
     println!();
     println!("  {}", "─".repeat(66).truecolor(40, 40, 60));
     println!();
-    println!("  {}  {}", "◆ Risk Breakdown".bold().truecolor(0, 210, 255), format!("— {}", overall_label).bold().truecolor(overall_color.0, overall_color.1, overall_color.2));
+    println!(
+        "  {}  {}",
+        "◆ Risk Breakdown".bold().truecolor(0, 210, 255),
+        format!("— {}", overall_label).bold().truecolor(
+            overall_color.0,
+            overall_color.1,
+            overall_color.2
+        )
+    );
     println!();
 
     let total = packages.len();
     let rows = [
-        ("CRITICAL",      critical,      SEV_COLORS[0]),
-        ("HIGH",          high,          SEV_COLORS[1]),
-        ("MEDIUM",        medium,        SEV_COLORS[2]),
-        ("LOW",           low,           SEV_COLORS[3]),
+        ("CRITICAL", critical, SEV_COLORS[0]),
+        ("HIGH", high, SEV_COLORS[1]),
+        ("MEDIUM", medium, SEV_COLORS[2]),
+        ("LOW", low, SEV_COLORS[3]),
         ("INFORMATIONAL", informational, SEV_COLORS[4]),
-        ("CLEAN",         clean,         SEV_COLORS[5]),
+        ("CLEAN", clean, SEV_COLORS[5]),
     ];
     for (label, count, (r, g, b)) in rows {
         let bar_str = format_severity_bar(count, total);
@@ -162,7 +206,11 @@ pub fn cmd_audit_deep(pkg_file: Option<&str>) {
     println!(
         "  {}  Risk Score: {}  ·  {} total pkgs  ·  {} CVEs  ·  {} unique pkgs affected",
         "◆".truecolor(0, 210, 255),
-        format!("{}/100", risk_score).bold().truecolor(overall_color.0, overall_color.1, overall_color.2),
+        format!("{}/100", risk_score).bold().truecolor(
+            overall_color.0,
+            overall_color.1,
+            overall_color.2
+        ),
         total.to_string().bold(),
         total_vulns.to_string().bold().bright_yellow(),
         vuln_map.len().to_string().bold().bright_red(),
@@ -203,11 +251,18 @@ fn build_dep_tree(packages: &[scanner::LockedPackage]) -> Vec<DepNode> {
         }
     }
     for (eco, pkgs) in &other {
-        let children = pkgs.iter().map(|p| DepNode {
-            name: p.name.clone(), version: p.version.clone(), children: vec![],
-        }).collect();
+        let children = pkgs
+            .iter()
+            .map(|p| DepNode {
+                name: p.name.clone(),
+                version: p.version.clone(),
+                children: vec![],
+            })
+            .collect();
         roots.push(DepNode {
-            name: format!("[{}]", eco), version: String::new(), children,
+            name: format!("[{}]", eco),
+            version: String::new(),
+            children,
         });
     }
 
@@ -232,51 +287,96 @@ fn build_npm_tree() -> Option<Vec<DepNode>> {
     for name in &dep_names {
         let key = format!("node_modules/{}", name);
         if let Some(pkg_data) = packages.get(&key) {
-            let version = pkg_data.get("version").and_then(|v| v.as_str()).unwrap_or("?").to_string();
+            let version = pkg_data
+                .get("version")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?")
+                .to_string();
             let mut children = Vec::new();
             if let Some(sub_deps) = pkg_data.get("dependencies").and_then(|d| d.as_object()) {
                 for (sub_name, _) in sub_deps.iter().take(8) {
                     let sub_key = format!("node_modules/{}", sub_name);
                     if let Some(sub_data) = packages.get(&sub_key) {
-                        let sub_ver = sub_data.get("version").and_then(|v| v.as_str()).unwrap_or("?");
-                        children.push(DepNode { name: sub_name.clone(), version: sub_ver.to_string(), children: vec![] });
+                        let sub_ver = sub_data
+                            .get("version")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("?");
+                        children.push(DepNode {
+                            name: sub_name.clone(),
+                            version: sub_ver.to_string(),
+                            children: vec![],
+                        });
                     }
                 }
             }
-            nodes.push(DepNode { name: name.clone(), version, children });
+            nodes.push(DepNode {
+                name: name.clone(),
+                version,
+                children,
+            });
         }
     }
-    if nodes.is_empty() { None } else { Some(nodes) }
+    if nodes.is_empty() {
+        None
+    } else {
+        Some(nodes)
+    }
 }
 
 fn build_cargo_tree(packages: &[scanner::LockedPackage]) -> Option<Vec<DepNode>> {
     let pkg_deps = cargo_lock_deps();
-    if pkg_deps.is_empty() { return None; }
+    if pkg_deps.is_empty() {
+        return None;
+    }
 
     let root_name = cargo_root_name()?;
 
-    let pkg_map: HashMap<&str, &scanner::LockedPackage> = packages.iter()
+    let pkg_map: HashMap<&str, &scanner::LockedPackage> = packages
+        .iter()
         .filter(|p| p.ecosystem == "crates.io")
         .map(|p| (p.name.as_str(), p))
         .collect();
 
     let root_deps = pkg_deps.get(&root_name).cloned().unwrap_or_default();
-    let nodes: Vec<DepNode> = root_deps.iter().filter_map(|dep_name| {
-        let pkg = pkg_map.get(dep_name.as_str())?;
-        let children: Vec<DepNode> = pkg_deps.get(dep_name.as_str())
-            .map(|deps| deps.iter().take(6).filter_map(|d| {
-                let p = pkg_map.get(d.as_str())?;
-                Some(DepNode { name: p.name.clone(), version: p.version.clone(), children: vec![] })
-            }).collect())
-            .unwrap_or_default();
-        Some(DepNode { name: pkg.name.clone(), version: pkg.version.clone(), children })
-    }).collect();
+    let nodes: Vec<DepNode> = root_deps
+        .iter()
+        .filter_map(|dep_name| {
+            let pkg = pkg_map.get(dep_name.as_str())?;
+            let children: Vec<DepNode> = pkg_deps
+                .get(dep_name.as_str())
+                .map(|deps| {
+                    deps.iter()
+                        .take(6)
+                        .filter_map(|d| {
+                            let p = pkg_map.get(d.as_str())?;
+                            Some(DepNode {
+                                name: p.name.clone(),
+                                version: p.version.clone(),
+                                children: vec![],
+                            })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            Some(DepNode {
+                name: pkg.name.clone(),
+                version: pkg.version.clone(),
+                children,
+            })
+        })
+        .collect();
 
-    if nodes.is_empty() { None } else { Some(nodes) }
+    if nodes.is_empty() {
+        None
+    } else {
+        Some(nodes)
+    }
 }
 
 fn print_tree_node(
-    node: &DepNode, prefix: &str, is_last: bool,
+    node: &DepNode,
+    prefix: &str,
+    is_last: bool,
     vuln_map: &HashMap<String, Vec<String>>,
     vuln_sev: &HashMap<String, String>,
 ) {
@@ -284,15 +384,21 @@ fn print_tree_node(
     let key = format!("{}@{}", node.name, node.version);
     let is_vuln = vuln_map.contains_key(&key);
 
-    let ver = if node.version.is_empty() { String::new() } else { format!("@{}", node.version) };
+    let ver = if node.version.is_empty() {
+        String::new()
+    } else {
+        format!("@{}", node.version)
+    };
 
     if is_vuln {
         let ids = &vuln_map[&key];
         let sev = vuln_sev.get(&key).map(|s| s.as_str()).unwrap_or("UNKNOWN");
         println!(
             "  {}{}{}{}  {} [{}] {}",
-            prefix.truecolor(60, 60, 80), connector.truecolor(60, 60, 80),
-            node.name.bold().bright_red(), ver.truecolor(180, 80, 80),
+            prefix.truecolor(60, 60, 80),
+            connector.truecolor(60, 60, 80),
+            node.name.bold().bright_red(),
+            ver.truecolor(180, 80, 80),
             "⚠".bright_yellow(),
             scan::severity_colored(sev),
             ids.join(", ").truecolor(100, 160, 255)
@@ -300,13 +406,21 @@ fn print_tree_node(
     } else {
         println!(
             "  {}{}{}{}",
-            prefix.truecolor(60, 60, 80), connector.truecolor(60, 60, 80),
-            node.name.bold().truecolor(200, 200, 220), ver.truecolor(120, 120, 140)
+            prefix.truecolor(60, 60, 80),
+            connector.truecolor(60, 60, 80),
+            node.name.bold().truecolor(200, 200, 220),
+            ver.truecolor(120, 120, 140)
         );
     }
 
     let child_prefix = format!("{}{}", prefix, if is_last { "    " } else { "│   " });
     for (i, child) in node.children.iter().enumerate() {
-        print_tree_node(child, &child_prefix, i == node.children.len() - 1, vuln_map, vuln_sev);
+        print_tree_node(
+            child,
+            &child_prefix,
+            i == node.children.len() - 1,
+            vuln_map,
+            vuln_sev,
+        );
     }
 }

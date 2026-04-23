@@ -1,41 +1,57 @@
-use crate::engine::{osv, scanner, reporter};
+use crate::engine::{osv, reporter, scanner};
 use crate::tui::logger::Logger;
 use indicatif::{ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
 use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum OutputFormat { Markdown, Pdf, Both }
+pub enum OutputFormat {
+    Markdown,
+    Pdf,
+    Both,
+}
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum FixLevel { Critical, High, Medium, Low, Informational, All }
+pub enum FixLevel {
+    Critical,
+    High,
+    Medium,
+    Low,
+    Informational,
+    All,
+}
 
 impl FixLevel {
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
-            "critical"      => Self::Critical,
-            "high"          => Self::High,
-            "medium"        => Self::Medium,
-            "low"           => Self::Low,
+            "critical" => Self::Critical,
+            "high" => Self::High,
+            "medium" => Self::Medium,
+            "low" => Self::Low,
             "informational" => Self::Informational,
-            _               => Self::All,
+            _ => Self::All,
         }
     }
 
     pub fn matches(&self, severity: &str) -> bool {
         match self {
-            Self::All           => true,
-            Self::Critical      => severity == "CRITICAL",
-            Self::High          => matches!(severity, "CRITICAL" | "HIGH"),
-            Self::Medium        => matches!(severity, "CRITICAL" | "HIGH" | "MEDIUM"),
-            Self::Low           => matches!(severity, "CRITICAL" | "HIGH" | "MEDIUM" | "LOW"),
+            Self::All => true,
+            Self::Critical => severity == "CRITICAL",
+            Self::High => matches!(severity, "CRITICAL" | "HIGH"),
+            Self::Medium => matches!(severity, "CRITICAL" | "HIGH" | "MEDIUM"),
+            Self::Low => matches!(severity, "CRITICAL" | "HIGH" | "MEDIUM" | "LOW"),
             Self::Informational => true,
         }
     }
 }
 
 /// Main entry point for `infynon pkg scan`
-pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_file: Option<&str>, agent: bool) {
+pub fn run_scan(
+    output: Option<OutputFormat>,
+    fix_level: Option<FixLevel>,
+    pkg_file: Option<&str>,
+    agent: bool,
+) {
     use std::io::{self, Write};
 
     if !agent {
@@ -65,8 +81,12 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
                 std::process::exit(2);
             }
             Logger::error("No packages found in supported lock/manifest files.");
-            Logger::info("Supported: package-lock.json · yarn.lock · pnpm-lock.yaml · requirements.txt");
-            Logger::info("           poetry.lock · Cargo.lock · go.sum · Gemfile.lock · composer.lock");
+            Logger::info(
+                "Supported: package-lock.json · yarn.lock · pnpm-lock.yaml · requirements.txt",
+            );
+            Logger::info(
+                "           poetry.lock · Cargo.lock · go.sum · Gemfile.lock · composer.lock",
+            );
             Logger::info("           mix.lock · pubspec.lock  — or pass --pkg-file <path>");
             return;
         }
@@ -94,10 +114,7 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
                 );
             }
             println!();
-            println!(
-                "     {}  Scan all files",
-                "[A]".bold().bright_green()
-            );
+            println!("     {}  Scan all files", "[A]".bold().bright_green());
             println!();
             print!("  Select files to scan (e.g. 1,3 or A for all): ");
             io::stdout().flush().ok();
@@ -106,10 +123,12 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
             io::stdin().read_line(&mut choice).ok();
             let choice = choice.trim();
 
-            let selected_files: Vec<&str> = if choice.eq_ignore_ascii_case("a") || choice.is_empty() {
+            let selected_files: Vec<&str> = if choice.eq_ignore_ascii_case("a") || choice.is_empty()
+            {
                 found_files.iter().map(|(f, _)| *f).collect()
             } else {
-                choice.split(',')
+                choice
+                    .split(',')
                     .filter_map(|s| {
                         let idx: usize = s.trim().parse().ok()?;
                         if idx >= 1 && idx <= found_files.len() {
@@ -152,13 +171,18 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
         let mut sources: Vec<String> = packages.iter().map(|p| p.source.clone()).collect();
         sources.sort();
         sources.dedup();
-        Logger::success(&format!("Found {} pinned packages from: {}", packages.len(), sources.join(", ")));
+        Logger::success(&format!(
+            "Found {} pinned packages from: {}",
+            packages.len(),
+            sources.join(", ")
+        ));
         println!();
     }
 
     // ── Agent mode: silent scan → JSON output ────────────────────────────────
     if agent {
-        let tuples: Vec<(String, String, String)> = packages.iter()
+        let tuples: Vec<(String, String, String)> = packages
+            .iter()
             .map(|p| (p.name.clone(), p.ecosystem.clone(), p.version.clone()))
             .collect();
 
@@ -183,7 +207,9 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
             let mut seen: HashSet<String> = HashSet::new();
             for (i, vuln_refs) in results.iter().enumerate() {
                 for vref in vuln_refs {
-                    if seen.insert(vref.id.clone()) { unique_ids.push(vref.id.clone()); }
+                    if seen.insert(vref.id.clone()) {
+                        unique_ids.push(vref.id.clone());
+                    }
                     vuln_to_packages.push((vref.id.clone(), i));
                 }
             }
@@ -193,40 +219,58 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
         let mut detail_map: std::collections::HashMap<String, osv::OsvVulnDetail> =
             std::collections::HashMap::new();
         for (id, result) in detail_results {
-            if let Ok(detail) = result { detail_map.insert(id, detail); }
+            if let Ok(detail) = result {
+                detail_map.insert(id, detail);
+            }
         }
 
         let mut vulns: Vec<serde_json::Value> = Vec::new();
         let mut counts = [0u32; 5]; // [critical, high, medium, low, info]
-        // Deduplicate: one entry per (package, cve_id) pair
-        let mut seen_pairs: std::collections::HashSet<(String, String)> = std::collections::HashSet::new();
+                                    // Deduplicate: one entry per (package, cve_id) pair
+        let mut seen_pairs: std::collections::HashSet<(String, String)> =
+            std::collections::HashSet::new();
 
         for (vuln_id, pkg_idx) in &vuln_to_packages {
             let key = (packages[*pkg_idx].name.clone(), vuln_id.clone());
-            if !seen_pairs.insert(key) { continue; }
+            if !seen_pairs.insert(key) {
+                continue;
+            }
             if let Some(detail) = detail_map.get(vuln_id) {
                 let sev = osv::severity_label(detail);
                 let fl_ok = fix_level.as_ref().map_or(true, |fl| fl.matches(sev));
-                if !fl_ok { continue; }
+                if !fl_ok {
+                    continue;
+                }
                 match sev {
                     "CRITICAL" => counts[0] += 1,
-                    "HIGH"     => counts[1] += 1,
-                    "MEDIUM"   => counts[2] += 1,
-                    "LOW"      => counts[3] += 1,
-                    _          => counts[4] += 1,
+                    "HIGH" => counts[1] += 1,
+                    "MEDIUM" => counts[2] += 1,
+                    "LOW" => counts[3] += 1,
+                    _ => counts[4] += 1,
                 }
-                let raw_fixed = osv::best_fixed_version(detail, &packages[*pkg_idx].name, &packages[*pkg_idx].ecosystem);
+                let raw_fixed = osv::best_fixed_version(
+                    detail,
+                    &packages[*pkg_idx].name,
+                    &packages[*pkg_idx].ecosystem,
+                );
                 // Cross-validate: ensure the suggested fix is itself clean
                 let (fixed, fix_verified) = match raw_fixed {
                     Some(ref fv) => {
-                        match osv::find_safest_candidate_vs(&[fv.clone()], &packages[*pkg_idx].name, &packages[*pkg_idx].ecosystem, &packages[*pkg_idx].version) {
+                        match osv::find_safest_candidate_vs(
+                            &[fv.clone()],
+                            &packages[*pkg_idx].name,
+                            &packages[*pkg_idx].ecosystem,
+                            &packages[*pkg_idx].version,
+                        ) {
                             Some((v, clean)) => (Some(v), clean),
-                            None             => (raw_fixed.clone(), false),
+                            None => (raw_fixed.clone(), false),
                         }
                     }
                     None => (None, false),
                 };
-                let fix_cmd = fixed.as_deref().map(|fv| upgrade_cmd(&packages[*pkg_idx], fv));
+                let fix_cmd = fixed
+                    .as_deref()
+                    .map(|fv| upgrade_cmd(&packages[*pkg_idx], fv));
                 vulns.push(serde_json::json!({
                     "package":         packages[*pkg_idx].name,
                     "ecosystem":       packages[*pkg_idx].ecosystem,
@@ -242,10 +286,20 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
         }
 
         let total: u32 = counts.iter().sum();
-        let status = if total == 0 { "clean" }
-            else if counts[0] > 0 || counts[1] > 0 || counts[2] > 0 { "vulnerable" }
-            else { "warnings" };
-        let exit_code: i32 = if total == 0 { 0 } else if counts[0] > 0 || counts[1] > 0 || counts[2] > 0 { 2 } else { 1 };
+        let status = if total == 0 {
+            "clean"
+        } else if counts[0] > 0 || counts[1] > 0 || counts[2] > 0 {
+            "vulnerable"
+        } else {
+            "warnings"
+        };
+        let exit_code: i32 = if total == 0 {
+            0
+        } else if counts[0] > 0 || counts[1] > 0 || counts[2] > 0 {
+            2
+        } else {
+            1
+        };
 
         let json = serde_json::json!({
             "status": status,
@@ -269,24 +323,33 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
     let pb = ProgressBar::new(packages.len() as u64);
     pb.set_style(
         ProgressStyle::with_template(
-            "  {spinner:.cyan}  checking {msg:<45} [{bar:40.cyan/blue}] {pos}/{len}"
+            "  {spinner:.cyan}  checking {msg:<45} [{bar:40.cyan/blue}] {pos}/{len}",
         )
         .unwrap()
-        .tick_strings(&["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"])
+        .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
         .progress_chars("█▉▊▋▌▍▎▏  "),
     );
     pb.enable_steady_tick(Duration::from_millis(60));
 
-    let tuples: Vec<(String, String, String)> = packages.iter().map(|p| {
-        pb.set_message(format!("{}@{}", p.name, p.version));
-        pb.inc(1);
-        (p.name.clone(), p.ecosystem.clone(), p.version.clone())
-    }).collect();
-    pb.finish_with_message(format!("{} packages queued → checking vulnerabilities...", packages.len()));
+    let tuples: Vec<(String, String, String)> = packages
+        .iter()
+        .map(|p| {
+            pb.set_message(format!("{}@{}", p.name, p.version));
+            pb.inc(1);
+            (p.name.clone(), p.ecosystem.clone(), p.version.clone())
+        })
+        .collect();
+    pb.finish_with_message(format!(
+        "{} packages queued → checking vulnerabilities...",
+        packages.len()
+    ));
 
     let results = match osv::batch_query(&tuples) {
         Ok(r) => r,
-        Err(e) => { Logger::error(&format!("Vulnerability DB error: {}", e)); return; }
+        Err(e) => {
+            Logger::error(&format!("Vulnerability DB error: {}", e));
+            return;
+        }
     };
 
     // 3. Collect unique vuln IDs and map them back to packages
@@ -316,23 +379,29 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
     let detail_pb = ProgressBar::new(unique_ids.len() as u64);
     detail_pb.set_style(
         ProgressStyle::with_template(
-            "  {spinner:.yellow}  fetching  {msg:<45} [{bar:40.yellow/blue}] {pos}/{len} CVEs"
+            "  {spinner:.yellow}  fetching  {msg:<45} [{bar:40.yellow/blue}] {pos}/{len} CVEs",
         )
         .unwrap()
-        .tick_strings(&["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"])
+        .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
         .progress_chars("█▉▊▋▌▍▎▏  "),
     );
     detail_pb.enable_steady_tick(Duration::from_millis(60));
-    detail_pb.set_message(format!("{} unique CVEs (parallel fetch)...", unique_ids.len()));
+    detail_pb.set_message(format!(
+        "{} unique CVEs (parallel fetch)...",
+        unique_ids.len()
+    ));
 
     let detail_results = osv::fetch_vuln_details_batch(&unique_ids);
 
     // Build lookup: vuln_id → detail
-    let mut detail_map: std::collections::HashMap<String, osv::OsvVulnDetail> = std::collections::HashMap::new();
+    let mut detail_map: std::collections::HashMap<String, osv::OsvVulnDetail> =
+        std::collections::HashMap::new();
     for (id, result) in detail_results {
         detail_pb.inc(1);
         match result {
-            Ok(detail) => { detail_map.insert(id, detail); }
+            Ok(detail) => {
+                detail_map.insert(id, detail);
+            }
             Err(e) => {
                 detail_pb.suspend(|| {
                     eprintln!("  {} could not fetch {}: {}", "warn:".yellow(), id, e);
@@ -356,8 +425,8 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
                     &packages[*pkg_idx].ecosystem,
                 );
                 findings.push(reporter::ScanFinding {
-                    package:           packages[*pkg_idx].clone(),
-                    vuln:              detail.clone(),
+                    package: packages[*pkg_idx].clone(),
+                    vuln: detail.clone(),
                     severity,
                     fixed_version,
                     suggested_version: None,
@@ -374,7 +443,9 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
         let mut pkg_current: HashMap<(String, String), String> = HashMap::new();
         for f in findings.iter() {
             let key = (f.package.name.clone(), f.package.ecosystem.clone());
-            pkg_current.entry(key.clone()).or_insert_with(|| f.package.version.clone());
+            pkg_current
+                .entry(key.clone())
+                .or_insert_with(|| f.package.version.clone());
             if let Some(ref fv) = f.fixed_version {
                 pkg_candidates.entry(key).or_default().push(fv.clone());
             }
@@ -382,7 +453,10 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
 
         let mut pkg_safe: HashMap<(String, String), Option<(String, bool)>> = HashMap::new();
         for ((name, eco), candidates) in &pkg_candidates {
-            let cur = pkg_current.get(&(name.clone(), eco.clone())).map(|s| s.as_str()).unwrap_or("");
+            let cur = pkg_current
+                .get(&(name.clone(), eco.clone()))
+                .map(|s| s.as_str())
+                .unwrap_or("");
             let result = osv::find_safest_candidate_vs(candidates, name, eco, cur);
             pkg_safe.insert((name.clone(), eco.clone()), result);
         }
@@ -405,13 +479,17 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
                 let key = (f.package.name.clone(), f.package.ecosystem.clone());
                 let latest = cache.entry(key).or_insert_with(|| {
                     let lv = crate::engine::registry::fetch_latest_version(
-                        &f.package.name, &f.package.ecosystem,
+                        &f.package.name,
+                        &f.package.ecosystem,
                     )?;
                     // Verify the latest version is actually clean before suggesting it
-                    let vuln_count = osv::version_vuln_count(
-                        &f.package.name, &f.package.ecosystem, &lv,
-                    );
-                    if vuln_count > 0 { None } else { Some(lv) }
+                    let vuln_count =
+                        osv::version_vuln_count(&f.package.name, &f.package.ecosystem, &lv);
+                    if vuln_count > 0 {
+                        None
+                    } else {
+                        Some(lv)
+                    }
                 });
                 // Only suggest if the latest version differs from the current one
                 if let Some(ref lv) = latest {
@@ -428,7 +506,9 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
     print_report_table(&findings);
 
     // 6. Auto-execute remediation commands when --fix was explicitly passed
-    let has_remediation = findings.iter().any(|f| f.fixed_version.is_some() || f.suggested_version.is_some());
+    let has_remediation = findings
+        .iter()
+        .any(|f| f.fixed_version.is_some() || f.suggested_version.is_some());
     if fix_level.is_some() && has_remediation {
         run_auto_fix(&findings);
     }
@@ -439,7 +519,7 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
             OutputFormat::Markdown | OutputFormat::Both => {
                 let path = "infynon-scan-report.md";
                 match reporter::write_markdown(&findings, path) {
-                    Ok(_)  => Logger::success(&format!("Markdown report written → {}", path)),
+                    Ok(_) => Logger::success(&format!("Markdown report written → {}", path)),
                     Err(e) => Logger::error(&format!("Failed to write markdown: {}", e)),
                 }
             }
@@ -449,7 +529,7 @@ pub fn run_scan(output: Option<OutputFormat>, fix_level: Option<FixLevel>, pkg_f
             OutputFormat::Pdf | OutputFormat::Both => {
                 let path = "infynon-scan-report.pdf";
                 match reporter::write_pdf(&findings, path) {
-                    Ok(_)  => Logger::success(&format!("PDF report written → {}", path)),
+                    Ok(_) => Logger::success(&format!("PDF report written → {}", path)),
                     Err(e) => Logger::error(&format!("Failed to write PDF: {}", e)),
                 }
             }
@@ -469,8 +549,14 @@ fn run_auto_fix(findings: &[reporter::ScanFinding]) {
 
     // Key: (name, ecosystem, source)  →  (pkg reference, confirmed_fixes, suggested_fixes)
     type Key = (String, String, String);
-    let mut pkg_map: HashMap<Key, (&crate::engine::scanner::LockedPackage, Vec<String>, Vec<String>)> =
-        HashMap::new();
+    let mut pkg_map: HashMap<
+        Key,
+        (
+            &crate::engine::scanner::LockedPackage,
+            Vec<String>,
+            Vec<String>,
+        ),
+    > = HashMap::new();
 
     for f in findings {
         let key = (
@@ -478,7 +564,9 @@ fn run_auto_fix(findings: &[reporter::ScanFinding]) {
             f.package.ecosystem.clone(),
             f.package.source.clone(),
         );
-        let entry = pkg_map.entry(key).or_insert_with(|| (&f.package, Vec::new(), Vec::new()));
+        let entry = pkg_map
+            .entry(key)
+            .or_insert_with(|| (&f.package, Vec::new(), Vec::new()));
         if let Some(ref fv) = f.fixed_version {
             entry.1.push(fv.clone()); // confirmed fix from CVE database
         } else if let Some(ref sv) = f.suggested_version {
@@ -487,9 +575,13 @@ fn run_auto_fix(findings: &[reporter::ScanFinding]) {
     }
 
     // Build one command per package using the best available version
-    struct FixItem { label: String, cmd: String }
+    struct FixItem {
+        label: String,
+        cmd: String,
+    }
 
-    let items: Vec<FixItem> = pkg_map.values()
+    let items: Vec<FixItem> = pkg_map
+        .values()
         .filter_map(|(pkg, confirmed, suggested)| {
             let best = if !confirmed.is_empty() {
                 osv::max_version(confirmed)
@@ -498,7 +590,7 @@ fn run_auto_fix(findings: &[reporter::ScanFinding]) {
             }?;
             Some(FixItem {
                 label: format!("{} {} → {}", pkg.name, pkg.version, best),
-                cmd:   upgrade_cmd(pkg, &best),
+                cmd: upgrade_cmd(pkg, &best),
             })
         })
         .collect();
@@ -516,14 +608,14 @@ fn run_auto_fix(findings: &[reporter::ScanFinding]) {
     );
 
     let mut success_count = 0usize;
-    let mut fail_count    = 0usize;
+    let mut fail_count = 0usize;
 
     for item in &items {
         let spinner = ProgressBar::new_spinner();
         spinner.set_style(
             ProgressStyle::with_template("  {spinner:.green}  {msg}")
                 .unwrap()
-                .tick_strings(&["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏","✔"]),
+                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏", "✔"]),
         );
         spinner.enable_steady_tick(Duration::from_millis(60));
         spinner.set_message(format!(
@@ -553,12 +645,20 @@ fn run_auto_fix(findings: &[reporter::ScanFinding]) {
                     );
                     let stderr = String::from_utf8_lossy(&out.stderr);
                     for line in stderr.lines().take(6) {
-                        println!("       {} {}", "│".truecolor(80, 80, 100), line.truecolor(200, 80, 80));
+                        println!(
+                            "       {} {}",
+                            "│".truecolor(80, 80, 100),
+                            line.truecolor(200, 80, 80)
+                        );
                     }
                     if stderr.trim().is_empty() {
                         let stdout = String::from_utf8_lossy(&out.stdout);
                         for line in stdout.lines().take(6) {
-                            println!("       {} {}", "│".truecolor(80, 80, 100), line.truecolor(180, 180, 180));
+                            println!(
+                                "       {} {}",
+                                "│".truecolor(80, 80, 100),
+                                line.truecolor(180, 180, 180)
+                            );
                         }
                     }
                 }
@@ -580,8 +680,14 @@ fn run_auto_fix(findings: &[reporter::ScanFinding]) {
     println!(
         "  Auto-fix complete  {}  {}",
         format!("{} succeeded", success_count).bold().bright_green(),
-        if fail_count > 0 { format!("{} failed", fail_count).bold().bright_red().to_string() }
-        else              { "0 failed".truecolor(100, 100, 120).to_string() }
+        if fail_count > 0 {
+            format!("{} failed", fail_count)
+                .bold()
+                .bright_red()
+                .to_string()
+        } else {
+            "0 failed".truecolor(100, 100, 120).to_string()
+        }
     );
     println!();
 }
@@ -590,34 +696,42 @@ fn run_auto_fix(findings: &[reporter::ScanFinding]) {
 
 /// Unified report table: vulnerability info + remediation in a single table.
 fn print_report_table(findings: &[reporter::ScanFinding]) {
+    use tabled::settings::{object::Rows, Color, Padding, Style};
     use tabled::{Table, Tabled};
-    use tabled::settings::{Style, Padding, object::Rows, Color};
 
     #[derive(Tabled)]
     struct Row {
-        #[tabled(rename = " Risk ")]          sev: String,
-        #[tabled(rename = " Package ")]       pkg: String,
-        #[tabled(rename = " Version ")]       ver: String,
-        #[tabled(rename = " CVE / ID ")]      cve: String,
-        #[tabled(rename = " Remediation ")]   fix: String,
+        #[tabled(rename = " Risk ")]
+        sev: String,
+        #[tabled(rename = " Package ")]
+        pkg: String,
+        #[tabled(rename = " Version ")]
+        ver: String,
+        #[tabled(rename = " CVE / ID ")]
+        cve: String,
+        #[tabled(rename = " Remediation ")]
+        fix: String,
     }
 
-    let rows: Vec<Row> = findings.iter().map(|f| {
-        let fix = if let Some(ref fv) = f.fixed_version {
-            fv.clone()
-        } else if let Some(ref sv) = f.suggested_version {
-            format!("~{} (latest)", sv)
-        } else {
-            "No fix".to_string()
-        };
-        Row {
-            sev: f.severity.to_string(),
-            pkg: f.package.name.chars().take(25).collect(),
-            ver: f.package.version.chars().take(12).collect(),
-            cve: f.vuln.id.clone(),
-            fix: fix.chars().take(18).collect(),
-        }
-    }).collect();
+    let rows: Vec<Row> = findings
+        .iter()
+        .map(|f| {
+            let fix = if let Some(ref fv) = f.fixed_version {
+                fv.clone()
+            } else if let Some(ref sv) = f.suggested_version {
+                format!("~{} (latest)", sv)
+            } else {
+                "No fix".to_string()
+            };
+            Row {
+                sev: f.severity.to_string(),
+                pkg: f.package.name.chars().take(25).collect(),
+                ver: f.package.version.chars().take(12).collect(),
+                cve: f.vuln.id.clone(),
+                fix: fix.chars().take(18).collect(),
+            }
+        })
+        .collect();
 
     let mut table = Table::new(rows);
     table
@@ -630,40 +744,44 @@ fn print_report_table(findings: &[reporter::ScanFinding]) {
 
     // Print detailed remediation info below the table
     for f in findings {
-        let summary = f.vuln.summary.as_deref().unwrap_or("CVE in this version range");
+        let summary = f
+            .vuln
+            .summary
+            .as_deref()
+            .unwrap_or("CVE in this version range");
         let short: String = summary.chars().take(80).collect();
 
         if let Some(ref fv) = f.fixed_version {
             let cmd = upgrade_cmd(&f.package, fv);
             println!(
                 "       {} {} {}  {} → {}  {}",
-                "→".truecolor(80,80,100),
-                f.vuln.id.truecolor(100,160,255),
+                "→".truecolor(80, 80, 100),
+                f.vuln.id.truecolor(100, 160, 255),
                 f.package.name.bold(),
                 "fix:".bright_green(),
                 cmd.bright_green().bold(),
-                short.truecolor(140,140,160)
+                short.truecolor(140, 140, 160)
             );
         } else if let Some(ref sv) = f.suggested_version {
             let cmd = upgrade_cmd(&f.package, sv);
             println!(
                 "       {} {} {}  {} {} → {}  {}",
-                "→".truecolor(80,80,100),
-                f.vuln.id.truecolor(100,160,255),
+                "→".truecolor(80, 80, 100),
+                f.vuln.id.truecolor(100, 160, 255),
                 f.package.name.bold(),
-                "no DB fix".truecolor(180,120,50),
-                "try latest:".truecolor(200,180,80),
-                cmd.truecolor(200,200,100).bold(),
-                short.truecolor(140,140,160)
+                "no DB fix".truecolor(180, 120, 50),
+                "try latest:".truecolor(200, 180, 80),
+                cmd.truecolor(200, 200, 100).bold(),
+                short.truecolor(140, 140, 160)
             );
         } else {
             println!(
                 "       {} {} {}  {}  {}",
-                "→".truecolor(80,80,100),
-                f.vuln.id.truecolor(100,160,255),
+                "→".truecolor(80, 80, 100),
+                f.vuln.id.truecolor(100, 160, 255),
                 f.package.name.bold(),
-                "no fix available".truecolor(180,80,50),
-                short.truecolor(140,140,160)
+                "no fix available".truecolor(180, 80, 50),
+                short.truecolor(140, 140, 160)
             );
         }
     }
@@ -673,10 +791,10 @@ fn print_report_table(findings: &[reporter::ScanFinding]) {
     println!(
         "  {}  {}  {}  {}  {}\n",
         format!("CRITICAL: {}", crit).bold().bright_red(),
-        format!("HIGH: {}",     high).bold().red(),
-        format!("MEDIUM: {}",   med).bold().yellow(),
-        format!("LOW: {}",      low).bold().bright_green(),
-        format!("INFO: {}",     info).truecolor(140, 140, 160),
+        format!("HIGH: {}", high).bold().red(),
+        format!("MEDIUM: {}", med).bold().yellow(),
+        format!("LOW: {}", low).bold().bright_green(),
+        format!("INFO: {}", info).truecolor(140, 140, 160),
     );
 
     println!(
@@ -690,22 +808,30 @@ fn print_report_table(findings: &[reporter::ScanFinding]) {
 
 pub fn severity_colored(sev: &str) -> String {
     match sev {
-        "CRITICAL"      => sev.bright_red().bold().to_string(),
-        "HIGH"          => sev.red().bold().to_string(),
-        "MEDIUM"        => sev.yellow().bold().to_string(),
-        "LOW"           => sev.bright_green().to_string(),
-        _               => sev.truecolor(140, 140, 160).to_string(),
+        "CRITICAL" => sev.bright_red().bold().to_string(),
+        "HIGH" => sev.red().bold().to_string(),
+        "MEDIUM" => sev.yellow().bold().to_string(),
+        "LOW" => sev.bright_green().to_string(),
+        _ => sev.truecolor(140, 140, 160).to_string(),
     }
 }
 
 /// Badge-style severity label with background color (used in install-time warnings).
 fn severity_badge(sev: &str) -> String {
     match sev {
-        "CRITICAL" => format!(" {} ", sev).bold().on_bright_red().white().to_string(),
-        "HIGH"     => format!(" {} ", sev).bold().on_red().white().to_string(),
-        "MEDIUM"   => format!(" {} ", sev).bold().on_yellow().black().to_string(),
-        "LOW"      => format!(" {} ", sev).bold().on_bright_green().black().to_string(),
-        _          => format!(" {} ", sev).truecolor(120,120,140).to_string(),
+        "CRITICAL" => format!(" {} ", sev)
+            .bold()
+            .on_bright_red()
+            .white()
+            .to_string(),
+        "HIGH" => format!(" {} ", sev).bold().on_red().white().to_string(),
+        "MEDIUM" => format!(" {} ", sev).bold().on_yellow().black().to_string(),
+        "LOW" => format!(" {} ", sev)
+            .bold()
+            .on_bright_green()
+            .black()
+            .to_string(),
+        _ => format!(" {} ", sev).truecolor(120, 120, 140).to_string(),
     }
 }
 
@@ -721,7 +847,7 @@ pub fn upgrade_cmd(pkg: &scanner::LockedPackage, fixed: &str) -> String {
         "npm" => {
             // Detect yarn/pnpm/bun from lock file source
             match source_file {
-                "yarn.lock"      => format!("yarn add {}@{}", pkg.name, fixed),
+                "yarn.lock" => format!("yarn add {}@{}", pkg.name, fixed),
                 "pnpm-lock.yaml" => format!("pnpm add {}@{}", pkg.name, fixed),
                 "bun.lockb" | "bun.lock" => format!("bun add {}@{}", pkg.name, fixed),
                 _ => {
@@ -739,8 +865,8 @@ pub fn upgrade_cmd(pkg: &scanner::LockedPackage, fixed: &str) -> String {
             use crate::ecosystems::detector::resolve_binary;
             // Detect uv/poetry from lock file source
             match source_file {
-                "uv.lock"      => format!("uv add {}=={}", pkg.name, fixed),
-                "poetry.lock"  => format!("poetry add {}=={}", pkg.name, fixed),
+                "uv.lock" => format!("uv add {}=={}", pkg.name, fixed),
+                "poetry.lock" => format!("poetry add {}=={}", pkg.name, fixed),
                 _ => {
                     if std::path::Path::new("uv.lock").exists() {
                         format!("uv add {}=={}", pkg.name, fixed)
@@ -754,22 +880,31 @@ pub fn upgrade_cmd(pkg: &scanner::LockedPackage, fixed: &str) -> String {
             }
         }
         "Go" => {
-            let ver = if fixed.starts_with('v') { fixed.to_string() } else { format!("v{}", fixed) };
+            let ver = if fixed.starts_with('v') {
+                fixed.to_string()
+            } else {
+                format!("v{}", fixed)
+            };
             format!("go get {}@{}", pkg.name, ver)
         }
-        "RubyGems"  => {
+        "RubyGems" => {
             use crate::ecosystems::detector::resolve_binary;
-            format!("{} install {} -v {}", resolve_binary("gem"), pkg.name, fixed)
+            format!(
+                "{} install {} -v {}",
+                resolve_binary("gem"),
+                pkg.name,
+                fixed
+            )
         }
         "Packagist" => format!("composer require {}:{}", pkg.name, fixed),
-        "NuGet"     => format!("dotnet add package {} --version {}", pkg.name, fixed),
-        "Hex"       => format!("mix deps.update {}", pkg.name),
-        "pub.dev"   => {
+        "NuGet" => format!("dotnet add package {} --version {}", pkg.name, fixed),
+        "Hex" => format!("mix deps.update {}", pkg.name),
+        "pub.dev" => {
             use crate::ecosystems::detector::resolve_binary;
             // dart or flutter — both expose `<binary> pub upgrade`
             format!("{} pub upgrade {}", resolve_binary("dart"), pkg.name)
         }
-        _           => format!("upgrade {} to {}", pkg.name, fixed),
+        _ => format!("upgrade {} to {}", pkg.name, fixed),
     }
 }
 
@@ -780,37 +915,41 @@ pub fn upgrade_cmd(pkg: &scanner::LockedPackage, fixed: &str) -> String {
 /// Tool names like "pip", "uv", "yarn", "cargo" must be translated.
 pub fn tool_to_osv_ecosystem(ecosystem: &str) -> String {
     match ecosystem {
-        "pip" | "pip3" | "uv" | "poetry"  => "PyPI".to_string(),
-        "yarn" | "pnpm" | "bun"            => "npm".to_string(),
-        "cargo"                            => "crates.io".to_string(),
-        "go"                               => "Go".to_string(),
-        "gem"                              => "RubyGems".to_string(),
-        "composer"                         => "Packagist".to_string(),
-        "nuget" | "dotnet"                 => "NuGet".to_string(),
-        "hex" | "mix"                      => "Hex".to_string(),
-        "pub" | "dart"                     => "pub.dev".to_string(),
-        other                              => other.to_string(),
+        "pip" | "pip3" | "uv" | "poetry" => "PyPI".to_string(),
+        "yarn" | "pnpm" | "bun" => "npm".to_string(),
+        "cargo" => "crates.io".to_string(),
+        "go" => "Go".to_string(),
+        "gem" => "RubyGems".to_string(),
+        "composer" => "Packagist".to_string(),
+        "nuget" | "dotnet" => "NuGet".to_string(),
+        "hex" | "mix" => "Hex".to_string(),
+        "pub" | "dart" => "pub.dev".to_string(),
+        other => other.to_string(),
     }
 }
 
 /// A single vulnerability hit found during install-time check.
 pub struct VulnHit {
-    pub package:       String,
-    pub cve_id:        String,
-    pub severity:      &'static str,
-    pub summary:       String,
+    pub package: String,
+    pub cve_id: String,
+    pub severity: &'static str,
+    pub summary: String,
     pub fixed_version: Option<String>,
-    pub upgrade_cmd:   Option<String>,
+    pub upgrade_cmd: Option<String>,
     /// `true` when `fixed_version` was verified to have zero known CVEs.
     /// `false` when the fix still has remaining vulnerabilities (reduces risk
     /// but does not eliminate it).
-    pub fix_is_clean:  bool,
+    pub fix_is_clean: bool,
 }
 
 /// Check packages before install. Returns (all_clear, hits).
 /// In human mode, prints a full rich warning block per vulnerable package.
 /// In agent mode, runs silently and returns results for the caller to serialize.
-pub fn check_packages_before_install(names: &[String], ecosystem: &str, agent: bool) -> (bool, Vec<VulnHit>) {
+pub fn check_packages_before_install(
+    names: &[String],
+    ecosystem: &str,
+    agent: bool,
+) -> Result<(bool, Vec<VulnHit>), String> {
     use indicatif::{ProgressBar, ProgressStyle};
 
     // Parse each CLI arg like `picomatch@4.0.3`, `requests==2.28.0`, `serde:1.0`
@@ -822,7 +961,7 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str, agent: b
         sp.set_style(
             ProgressStyle::with_template("  {spinner:.cyan}  {msg}")
                 .unwrap()
-                .tick_strings(&["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"]),
+                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
         );
         sp.enable_steady_tick(Duration::from_millis(60));
     }
@@ -830,11 +969,12 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str, agent: b
     // Map tool name (e.g. "pip", "uv", "yarn") to OSV ecosystem string (e.g. "PyPI", "npm")
     let eco_osv = tool_to_osv_ecosystem(ecosystem);
 
-    let tuples: Vec<(String, String, String)> = names.iter()
+    let tuples: Vec<(String, String, String)> = names
+        .iter()
         .map(|spec| {
             let (name, ver) = parse_pkg_spec(spec);
             if !ver.is_empty() {
-                return (name, eco_osv.clone(), ver);
+                return Ok((name, eco_osv.clone(), ver));
             }
             // No version specified — resolve latest from registry
             if !agent { sp.set_message(format!("Resolving latest version of {}...", name)); }
@@ -851,7 +991,7 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str, agent: b
                             );
                         });
                     }
-                    (name, eco_osv.clone(), latest)
+                    Ok((name, eco_osv.clone(), latest))
                 }
                 None => {
                     if !agent {
@@ -862,13 +1002,16 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str, agent: b
                                 name.bold()
                             );
                         });
+                        sp.finish_and_clear();
                     }
-                    // Return empty version → will return no hits → fail-open for this pkg
-                    (name, eco_osv.clone(), String::new())
+                    Err(format!(
+                        "could not resolve latest version for '{}' while verifying install safety",
+                        name
+                    ))
                 }
             }
         })
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
     if !agent {
         sp.set_message(format!(
@@ -878,19 +1021,25 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str, agent: b
     }
 
     let results = match osv::batch_query(&tuples) {
-        Ok(r)  => r,
+        Ok(r) => r,
         Err(e) => {
-            if !agent { sp.finish_and_clear(); }
-            if !agent { Logger::raw_dim(&format!("  CVE check skipped (API error): {}", e)); }
-            return (true, vec![]);
+            if !agent {
+                sp.finish_and_clear();
+                Logger::raw_dim(&format!("  CVE check skipped (API error): {}", e));
+            }
+            return Err(format!("vulnerability check failed: {}", e));
         }
     };
-    if !agent { sp.finish_and_clear(); }
+    if !agent {
+        sp.finish_and_clear();
+    }
 
     let total_hits: usize = results.iter().map(|r| r.len()).sum();
     if total_hits == 0 {
-        if !agent { Logger::success("Security check passed — no known CVEs for requested packages."); }
-        return (true, vec![]);
+        if !agent {
+            Logger::success("Security check passed — no known CVEs for requested packages.");
+        }
+        return Ok((true, vec![]));
     }
 
     // Fetch full detail for each hit, then validate that suggested fix versions
@@ -899,27 +1048,35 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str, agent: b
     let mut highest_sev = "INFORMATIONAL";
 
     for (i, vuln_refs) in results.iter().enumerate() {
-        if vuln_refs.is_empty() { continue; }
+        if vuln_refs.is_empty() {
+            continue;
+        }
         let pkg_name = &tuples[i].0;
-        let pkg_ver  = &tuples[i].2;
+        let pkg_ver = &tuples[i].2;
 
         if !agent {
             println!();
             println!(
                 "  {} {}",
                 "⚠".bright_yellow().bold(),
-                format!("'{}@{}' has {} known vulnerability(ies):", pkg_name, pkg_ver, vuln_refs.len())
-                    .bold().bright_yellow()
+                format!(
+                    "'{}@{}' has {} known vulnerability(ies):",
+                    pkg_name,
+                    pkg_ver,
+                    vuln_refs.len()
+                )
+                .bold()
+                .bright_yellow()
             );
         }
 
         // Phase 1: Fetch all CVE details for this package and collect per-CVE
         // fixed versions + metadata.
         struct CveInfo {
-            id:       String,
-            sev:      &'static str,
-            summary:  String,
-            fixed:    Option<String>, // per-CVE fix (before cross-validation)
+            id: String,
+            sev: &'static str,
+            summary: String,
+            fixed: Option<String>, // per-CVE fix (before cross-validation)
         }
         let mut cve_infos: Vec<CveInfo> = Vec::new();
         let mut all_candidates: Vec<String> = Vec::new(); // all fixed versions across CVEs
@@ -927,34 +1084,41 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str, agent: b
         for vref in vuln_refs.iter().take(5) {
             match osv::fetch_vuln_detail(&vref.id) {
                 Ok(detail) => {
-                    let sev     = osv::severity_label(&detail);
-                    let fixed   = osv::best_fixed_version(&detail, pkg_name, &eco_osv);
-                    let summary = detail.summary.clone()
+                    let sev = osv::severity_label(&detail);
+                    let fixed = osv::best_fixed_version(&detail, pkg_name, &eco_osv);
+                    let summary = detail
+                        .summary
+                        .clone()
                         .unwrap_or_else(|| "No description available".to_string());
 
                     if let Some(ref fv) = fixed {
                         all_candidates.push(fv.clone());
                     }
                     highest_sev = escalate_severity(highest_sev, sev);
-                    cve_infos.push(CveInfo { id: vref.id.clone(), sev, summary, fixed });
+                    cve_infos.push(CveInfo {
+                        id: vref.id.clone(),
+                        sev,
+                        summary,
+                        fixed,
+                    });
                 }
                 Err(_) => {
                     if !agent {
                         println!(
                             "    {}  {}  {}",
-                            " UNKNOWN ".truecolor(120,120,140),
-                            vref.id.truecolor(100,160,255),
-                            "(could not fetch CVE details)".truecolor(120,120,140)
+                            " UNKNOWN ".truecolor(120, 120, 140),
+                            vref.id.truecolor(100, 160, 255),
+                            "(could not fetch CVE details)".truecolor(120, 120, 140)
                         );
                     }
                     hits.push(VulnHit {
-                        package:       names[i].clone(),
-                        cve_id:        vref.id.clone(),
-                        severity:      "UNKNOWN",
-                        summary:       "Could not fetch CVE details".to_string(),
+                        package: names[i].clone(),
+                        cve_id: vref.id.clone(),
+                        severity: "UNKNOWN",
+                        summary: "Could not fetch CVE details".to_string(),
                         fixed_version: None,
-                        upgrade_cmd:   None,
-                        fix_is_clean:  false,
+                        upgrade_cmd: None,
+                        fix_is_clean: false,
                     });
                 }
             }
@@ -966,9 +1130,10 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str, agent: b
         let validated = osv::find_safest_candidate_vs(&all_candidates, pkg_name, &eco_osv, pkg_ver);
         let (validated_ver, fix_is_clean) = match &validated {
             Some((v, clean)) => (Some(v.clone()), *clean),
-            None             => (None, false),
+            None => (None, false),
         };
-        let up_cmd = validated_ver.as_deref()
+        let up_cmd = validated_ver
+            .as_deref()
             .map(|fv| install_cmd_for_ecosystem(pkg_name, fv, ecosystem));
 
         // Phase 3: Display and build hits — every CVE for this package gets the
@@ -980,17 +1145,21 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str, agent: b
                     "    {}  {}  {}",
                     sev_label,
                     info.id.truecolor(100, 160, 255),
-                    info.summary.chars().take(80).collect::<String>().truecolor(160, 160, 180)
+                    info.summary
+                        .chars()
+                        .take(80)
+                        .collect::<String>()
+                        .truecolor(160, 160, 180)
                 );
             }
 
             hits.push(VulnHit {
-                package:       pkg_name.clone(),
-                cve_id:        info.id.clone(),
-                severity:      info.sev,
-                summary:       info.summary.chars().take(100).collect(),
+                package: pkg_name.clone(),
+                cve_id: info.id.clone(),
+                severity: info.sev,
+                summary: info.summary.chars().take(100).collect(),
                 fixed_version: validated_ver.clone(),
-                upgrade_cmd:   up_cmd.clone(),
+                upgrade_cmd: up_cmd.clone(),
                 fix_is_clean,
             });
         }
@@ -1001,27 +1170,27 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str, agent: b
                 (Some(fv), true) => {
                     println!(
                         "       {} {} {}   {}",
-                        "→".truecolor(80,80,100),
+                        "→".truecolor(80, 80, 100),
                         "safe version:".bright_green(),
                         fv.bright_green().bold(),
-                        up_cmd.as_deref().unwrap_or("").truecolor(100,140,100)
+                        up_cmd.as_deref().unwrap_or("").truecolor(100, 140, 100)
                     );
                 }
                 (Some(fv), false) => {
                     println!(
                         "       {} {} {} {}   {}",
-                        "→".truecolor(80,80,100),
+                        "→".truecolor(80, 80, 100),
                         "best available:".bright_yellow(),
                         fv.bright_yellow().bold(),
-                        "(still has CVEs, but reduces risk)".truecolor(180,140,50),
-                        up_cmd.as_deref().unwrap_or("").truecolor(100,140,100)
+                        "(still has CVEs, but reduces risk)".truecolor(180, 140, 50),
+                        up_cmd.as_deref().unwrap_or("").truecolor(100, 140, 100)
                     );
                 }
                 (None, _) => {
                     println!(
                         "       {} {}",
-                        "→".truecolor(80,80,100),
-                        "No fixed version published yet".truecolor(180,120,50)
+                        "→".truecolor(80, 80, 100),
+                        "No fixed version published yet".truecolor(180, 120, 50)
                     );
                 }
             }
@@ -1030,39 +1199,53 @@ pub fn check_packages_before_install(names: &[String], ecosystem: &str, agent: b
         if !agent && vuln_refs.len() > 5 {
             println!(
                 "       {} {} more CVEs — run 'infynon pkg scan' for full report",
-                "…".truecolor(80,80,100),
+                "…".truecolor(80, 80, 100),
                 vuln_refs.len() - 5
             );
         }
     }
 
-    if !agent { println!(); }
-    (false, hits)
+    if !agent {
+        println!();
+    }
+    Ok((false, hits))
 }
 
 pub fn escalate_severity(current: &'static str, new: &'static str) -> &'static str {
     let rank = |s: &str| match s {
-        "CRITICAL" => 4, "HIGH" => 3, "MEDIUM" => 2, "LOW" => 1, _ => 0,
+        "CRITICAL" => 4,
+        "HIGH" => 3,
+        "MEDIUM" => 2,
+        "LOW" => 1,
+        _ => 0,
     };
-    if rank(new) > rank(current) { new } else { current }
+    if rank(new) > rank(current) {
+        new
+    } else {
+        current
+    }
 }
 
 fn install_cmd_for_ecosystem(pkg: &str, fixed: &str, ecosystem: &str) -> String {
     use crate::ecosystems::detector::resolve_binary;
     match ecosystem {
-        "npm"       => format!("npm install {}@{}", pkg, fixed),
-        "yarn"      => format!("yarn add {}@{}", pkg, fixed),
-        "pnpm"      => format!("pnpm add {}@{}", pkg, fixed),
-        "bun"       => format!("bun add {}@{}", pkg, fixed),
+        "npm" => format!("npm install {}@{}", pkg, fixed),
+        "yarn" => format!("yarn add {}@{}", pkg, fixed),
+        "pnpm" => format!("pnpm add {}@{}", pkg, fixed),
+        "bun" => format!("bun add {}@{}", pkg, fixed),
         "crates.io" | "cargo" => format!("cargo add {}@{}", pkg, fixed),
-        "uv"        => format!("uv add {}=={}", pkg, fixed),
-        "poetry"    => format!("poetry add {}=={}", pkg, fixed),
+        "uv" => format!("uv add {}=={}", pkg, fixed),
+        "poetry" => format!("poetry add {}=={}", pkg, fixed),
         "PyPI" | "pip" | "pip3" => {
             // Resolve at runtime so Linux systems with only pip3 get the right binary
             format!("{} install {}=={}", resolve_binary("pip"), pkg, fixed)
         }
         "Go" | "go" => {
-            let ver = if fixed.starts_with('v') { fixed.to_string() } else { format!("v{}", fixed) };
+            let ver = if fixed.starts_with('v') {
+                fixed.to_string()
+            } else {
+                format!("v{}", fixed)
+            };
             format!("go get {}@{}", pkg, ver)
         }
         "RubyGems" | "gem" => {
@@ -1070,7 +1253,7 @@ fn install_cmd_for_ecosystem(pkg: &str, fixed: &str, ecosystem: &str) -> String 
         }
         "Packagist" | "composer" => format!("composer require {}:{}", pkg, fixed),
         "NuGet" | "nuget" => format!("dotnet add package {} --version {}", pkg, fixed),
-        "Hex" | "hex"     => format!("mix deps.update {}", pkg),
+        "Hex" | "hex" => format!("mix deps.update {}", pkg),
         "pub.dev" | "pub" => {
             format!("{} pub upgrade {}", resolve_binary("dart"), pkg)
         }
@@ -1097,7 +1280,7 @@ pub fn parse_pkg_spec(spec: &str) -> (String, String) {
         if let Some(pos) = spec[1..].rfind('@') {
             let pos = pos + 1; // offset back
             let name = spec[..pos].to_string();
-            let ver  = spec[pos + 1..].to_string();
+            let ver = spec[pos + 1..].to_string();
             if !ver.is_empty() {
                 return (name, ver);
             }
@@ -1111,7 +1294,12 @@ pub fn parse_pkg_spec(spec: &str) -> (String, String) {
         if let Some(pos) = spec.find(sep) {
             // Strip extras: requests[security]==... → requests
             let raw_name = spec[..pos].trim();
-            let name = raw_name.split('[').next().unwrap_or(raw_name).trim().to_string();
+            let name = raw_name
+                .split('[')
+                .next()
+                .unwrap_or(raw_name)
+                .trim()
+                .to_string();
             // Only take the first version constraint if multiple (e.g. >=1.0,<2.0)
             let ver = spec[pos + sep.len()..]
                 .split(',')
@@ -1127,8 +1315,18 @@ pub fn parse_pkg_spec(spec: &str) -> (String, String) {
     // Single-char pip constraints (> / <) — less precise, use as fallback
     for sep in &[">", "<"] {
         if let Some(pos) = spec.find(sep) {
-            let name = spec[..pos].split('[').next().unwrap_or(&spec[..pos]).trim().to_string();
-            let ver  = spec[pos + 1..].split(',').next().unwrap_or("").trim().to_string();
+            let name = spec[..pos]
+                .split('[')
+                .next()
+                .unwrap_or(&spec[..pos])
+                .trim()
+                .to_string();
+            let ver = spec[pos + 1..]
+                .split(',')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_string();
             if !name.is_empty() && !ver.is_empty() {
                 return (name, ver);
             }
@@ -1140,7 +1338,7 @@ pub fn parse_pkg_spec(spec: &str) -> (String, String) {
     if spec.contains(':') && !spec.starts_with("http") && !spec.starts_with("git") {
         if let Some(pos) = spec.find(':') {
             let name = spec[..pos].trim().to_string();
-            let ver  = spec[pos + 1..].trim().to_string();
+            let ver = spec[pos + 1..].trim().to_string();
             if !name.is_empty() && !ver.is_empty() {
                 return (name, ver);
             }
@@ -1150,7 +1348,7 @@ pub fn parse_pkg_spec(spec: &str) -> (String, String) {
     // ── npm / cargo / go / bun / pnpm: name@version ──────────────────────
     if let Some(pos) = spec.find('@') {
         let name = spec[..pos].trim().to_string();
-        let ver  = spec[pos + 1..].trim().to_string();
+        let ver = spec[pos + 1..].trim().to_string();
         if !name.is_empty() && !ver.is_empty() {
             return (name, ver);
         }

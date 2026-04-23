@@ -1,15 +1,15 @@
 use crate::trace::cli::{
-    TraceAction, NoteAction, SourceAction, GraphAction, GraphEntityAction, GraphEdgeAction,
+    GraphAction, GraphEdgeAction, GraphEntityAction, NoteAction, SourceAction, TraceAction,
 };
 use crate::trace::storage;
 use crate::trace::types::{
-    TraceLayer, TraceNote, TraceScope, TraceSource, NoteStatus, SourceKind, SyncDirection,
-    KgEntity, KgEdge, EntityKind, RelationType,
+    EntityKind, KgEdge, KgEntity, NoteStatus, RelationType, SourceKind, SyncDirection, TraceLayer,
+    TraceNote, TraceScope, TraceSource,
 };
 use crate::tui::logger::Logger;
 use chrono::Utc;
-use std::str::FromStr;
 use std::collections::HashMap;
+use std::str::FromStr;
 
 pub fn execute(action: TraceAction) {
     match action {
@@ -125,7 +125,9 @@ fn execute_note(action: NoteAction) {
 }
 
 fn cmd_init(repo: Option<&str>, owner: Option<&str>, user: Option<&str>) {
-    let repo_name = repo.map(|s| s.to_string()).unwrap_or_else(storage::detect_repo_name);
+    let repo_name = repo
+        .map(|s| s.to_string())
+        .unwrap_or_else(storage::detect_repo_name);
     let owner_name = owner.unwrap_or("team");
     let detected_user = storage::detect_user_name();
     let default_user = user.or(detected_user.as_deref());
@@ -151,10 +153,18 @@ fn cmd_source_add_redis(
     make_default: bool,
 ) {
     let source = TraceSource {
-        id: id.to_string(), kind: SourceKind::Redis, url: url.to_string(), enabled: true,
-        owner_user: user.map(|value| value.to_string()).or_else(storage::configured_user),
-        database: None, namespace: Some(namespace.to_string()), username: None,
-        password_env: None, notes: notes.map(|s| s.to_string()),
+        id: id.to_string(),
+        kind: SourceKind::Redis,
+        url: url.to_string(),
+        enabled: true,
+        owner_user: user
+            .map(|value| value.to_string())
+            .or_else(storage::configured_user),
+        database: None,
+        namespace: Some(namespace.to_string()),
+        username: None,
+        password_env: None,
+        notes: notes.map(|s| s.to_string()),
     };
     if let Err(e) = crate::trace::backend::validate_and_prepare(&source) {
         return Logger::error(&format!("Redis validation failed: {}", e));
@@ -162,7 +172,9 @@ fn cmd_source_add_redis(
     match storage::add_source(source, make_default) {
         Ok(()) => {
             Logger::success(&format!("Added Redis source '{}'", id));
-            Logger::raw_dim("Benefit: low-latency lookups, live presence, and fast overlap detection.");
+            Logger::raw_dim(
+                "Benefit: low-latency lookups, live presence, and fast overlap detection.",
+            );
         }
         Err(e) => Logger::error(&e),
     }
@@ -183,20 +195,36 @@ fn cmd_source_add_sql(
         "postgres" | "postgresql" => SourceKind::Postgres,
         "mysql" => SourceKind::Mysql,
         "sqlite" => SourceKind::Sqlite,
-        other => { Logger::error(&format!("Unsupported SQL engine '{}'. Use postgres | mysql | sqlite.", other)); return; }
+        other => {
+            Logger::error(&format!(
+                "Unsupported SQL engine '{}'. Use postgres | mysql | sqlite.",
+                other
+            ));
+            return;
+        }
     };
     let source = TraceSource {
-        id: id.to_string(), kind, url: url.to_string(), enabled: true,
-        owner_user: user.map(|value| value.to_string()).or_else(storage::configured_user),
-        database: database.map(|s| s.to_string()), namespace: None,
-        username: username.map(|s| s.to_string()), password_env: password_env.map(|s| s.to_string()),
+        id: id.to_string(),
+        kind,
+        url: url.to_string(),
+        enabled: true,
+        owner_user: user
+            .map(|value| value.to_string())
+            .or_else(storage::configured_user),
+        database: database.map(|s| s.to_string()),
+        namespace: None,
+        username: username.map(|s| s.to_string()),
+        password_env: password_env.map(|s| s.to_string()),
         notes: notes.map(|s| s.to_string()),
     };
     if let Err(e) = crate::trace::backend::validate_and_prepare(&source) {
         return Logger::error(&format!("SQL validation failed: {}", e));
     }
     match storage::add_source(source, make_default) {
-        Ok(()) => { Logger::success(&format!("Added {} source '{}'", kind.as_str(), id)); Logger::raw_dim("Benefit: durable structured storage, better filtering, reporting, and canonical memory."); }
+        Ok(()) => {
+            Logger::success(&format!("Added {} source '{}'", kind.as_str(), id));
+            Logger::raw_dim("Benefit: durable structured storage, better filtering, reporting, and canonical memory.");
+        }
         Err(e) => Logger::error(&e),
     }
 }
@@ -208,7 +236,10 @@ fn cmd_source_list() {
                 Logger::info("No Trace backends configured.");
                 return;
             }
-            println!("  {:<18} {:<10} {:<8} {:<16} {}", "ID", "KIND", "DEFAULT", "USER", "URL");
+            println!(
+                "  {:<18} {:<10} {:<8} {:<16} {}",
+                "ID", "KIND", "DEFAULT", "USER", "URL"
+            );
             println!("  {}", "-".repeat(80));
             for source in cfg.sources {
                 let is_default = cfg.default_source.as_deref() == Some(source.id.as_str());
@@ -401,7 +432,9 @@ fn cmd_sync(source: Option<&str>, direction: &str) {
                 source_id: Some(source.id.clone()),
                 summary: format!("push {} notes", local_notes.len()),
             };
-            if let Err(e) = crate::trace::backend::push_all(&source, &local_notes, &package_findings, &run) {
+            if let Err(e) =
+                crate::trace::backend::push_all(&source, &local_notes, &package_findings, &run)
+            {
                 return Logger::error(&e);
             }
             match crate::trace::backend::pull_notes(&source) {
@@ -410,7 +443,10 @@ fn cmd_sync(source: Option<&str>, direction: &str) {
                         let summary = format!("push/pull merged {} notes", merged);
                         let _ = crate::trace::backend::record_sync(&source, direction, &summary);
                         let _ = storage::record_sync(direction, Some(&source.id), &summary);
-                        Logger::success(&format!("Bidirectional sync completed, merged {}", merged));
+                        Logger::success(&format!(
+                            "Bidirectional sync completed, merged {}",
+                            merged
+                        ));
                     }
                     Err(e) => Logger::error(&e),
                 },
@@ -435,7 +471,10 @@ fn cmd_schema(backend: &str) {
     match backend.to_ascii_lowercase().as_str() {
         "sql" => println!("{}", storage::supported_schema_sql()),
         "redis" => println!("{}", storage::supported_schema_redis()),
-        other => Logger::error(&format!("Unsupported backend '{}'. Use sql | redis.", other)),
+        other => Logger::error(&format!(
+            "Unsupported backend '{}'. Use sql | redis.",
+            other
+        )),
     }
 }
 
@@ -463,19 +502,30 @@ fn print_notes(notes: &[TraceNote]) {
 }
 
 fn parse_layer(value: &str) -> Result<TraceLayer, String> {
-    value.parse().map_err(|_| format!("Invalid layer '{}'. Use canonical | team | user.", value))
+    value
+        .parse()
+        .map_err(|_| format!("Invalid layer '{}'. Use canonical | team | user.", value))
 }
 
 fn parse_scope(value: &str) -> Result<TraceScope, String> {
-    value.parse().map_err(|_| format!("Invalid scope '{}'. Use repo | branch | pr | file | user | session | package.", value))
+    value.parse().map_err(|_| {
+        format!(
+            "Invalid scope '{}'. Use repo | branch | pr | file | user | session | package.",
+            value
+        )
+    })
 }
 
 fn parse_status(value: &str) -> Result<NoteStatus, String> {
-    value.parse().map_err(|_| format!("Invalid status '{}'. Use active | stale | archived.", value))
+    value
+        .parse()
+        .map_err(|_| format!("Invalid status '{}'. Use active | stale | archived.", value))
 }
 
 fn parse_direction(value: &str) -> Result<SyncDirection, String> {
-    value.parse().map_err(|_| format!("Invalid direction '{}'. Use pull | push | both.", value))
+    value
+        .parse()
+        .map_err(|_| format!("Invalid direction '{}'. Use pull | push | both.", value))
 }
 
 // ─── Knowledge Graph commands ───────────────────────────────────────────────
@@ -488,17 +538,24 @@ fn execute_graph(action: GraphAction) {
         GraphAction::Entity { action } => execute_graph_entity(action),
         GraphAction::Edge { action } => execute_graph_edge(action),
         GraphAction::Show { branch, kind } => cmd_graph_show(branch, kind.as_deref()),
-        GraphAction::Build { branch, all_branches } => cmd_graph_build(branch, all_branches),
+        GraphAction::Build {
+            branch,
+            all_branches,
+        } => cmd_graph_build(branch, all_branches),
         GraphAction::Diff { branch_a, branch_b } => cmd_graph_diff(&branch_a, &branch_b),
         GraphAction::Path { from, to, branch } => cmd_graph_path(&from, &to, branch),
         GraphAction::Impact { entity, branch } => cmd_graph_impact(&entity, branch),
         GraphAction::Orphans { branch } => cmd_graph_orphans(branch),
-        GraphAction::Export { format, branch, output } => {
-            cmd_graph_export(&format, branch, output.as_deref())
-        }
-        GraphAction::Import { file, format, branch } => {
-            cmd_graph_import(&file, format.as_deref(), branch)
-        }
+        GraphAction::Export {
+            format,
+            branch,
+            output,
+        } => cmd_graph_export(&format, branch, output.as_deref()),
+        GraphAction::Import {
+            file,
+            format,
+            branch,
+        } => cmd_graph_import(&file, format.as_deref(), branch),
         GraphAction::Tui { branch } => {
             crate::trace::tui::run_kg(branch);
         }
@@ -511,7 +568,12 @@ fn resolve_branch(branch: Option<String>) -> String {
 
 fn execute_graph_entity(action: GraphEntityAction) {
     match action {
-        GraphEntityAction::Add { name, kind, branch, meta } => {
+        GraphEntityAction::Add {
+            name,
+            kind,
+            branch,
+            meta,
+        } => {
             let kind = match EntityKind::from_str(&kind) {
                 Ok(v) => v,
                 Err(e) => return Logger::error(&e),
@@ -557,7 +619,13 @@ fn execute_graph_entity(action: GraphEntityAction) {
                     println!("  {:<24} {:<14} {:<16} {}", "ID", "KIND", "BRANCH", "NAME");
                     println!("  {}", "-".repeat(80));
                     for e in &entities {
-                        println!("  {:<24} {:<14} {:<16} {}", e.id, e.kind.as_str(), e.branch, e.name);
+                        println!(
+                            "  {:<24} {:<14} {:<16} {}",
+                            e.id,
+                            e.kind.as_str(),
+                            e.branch,
+                            e.name
+                        );
                     }
                 }
                 Err(e) => Logger::error(&e),
@@ -575,7 +643,14 @@ fn resolve_entity_id(name: &str, branch: &str) -> String {
 
 fn execute_graph_edge(action: GraphEdgeAction) {
     match action {
-        GraphEdgeAction::Add { from, to, relation, weight, branch, evidence } => {
+        GraphEdgeAction::Add {
+            from,
+            to,
+            relation,
+            weight,
+            branch,
+            evidence,
+        } => {
             let relation = match RelationType::from_str(&relation) {
                 Ok(v) => v,
                 Err(e) => return Logger::error(&e),
@@ -596,7 +671,12 @@ fn execute_graph_edge(action: GraphEdgeAction) {
             };
             match storage::create_edge(edge) {
                 Ok(()) => {
-                    Logger::success(&format!("Added edge {} -> {} ({})", from, to, relation.as_str()));
+                    Logger::success(&format!(
+                        "Added edge {} -> {} ({})",
+                        from,
+                        to,
+                        relation.as_str()
+                    ));
                     Logger::detail("Branch:", &branch);
                 }
                 Err(e) => Logger::error(&e),
@@ -608,19 +688,28 @@ fn execute_graph_edge(action: GraphEdgeAction) {
         },
         GraphEdgeAction::List { branch, relation } => {
             let branch = branch.or_else(|| Some(storage::detect_current_branch()));
-            let rel_filter = relation.as_deref().and_then(|r| RelationType::from_str(r).ok());
+            let rel_filter = relation
+                .as_deref()
+                .and_then(|r| RelationType::from_str(r).ok());
             match storage::list_edges(branch.as_deref(), rel_filter) {
                 Ok(edges) => {
                     if edges.is_empty() {
                         Logger::info("No edges found.");
                         return;
                     }
-                    println!("  {:<36} {:<18} {:<18} {:<16} {}", "ID", "SOURCE", "TARGET", "RELATION", "WEIGHT");
+                    println!(
+                        "  {:<36} {:<18} {:<18} {:<16} {}",
+                        "ID", "SOURCE", "TARGET", "RELATION", "WEIGHT"
+                    );
                     println!("  {}", "-".repeat(100));
                     for e in &edges {
                         println!(
                             "  {:<36} {:<18} {:<18} {:<16} {:.2}",
-                            e.id, e.source, e.target, e.relation.as_str(), e.weight
+                            e.id,
+                            e.source,
+                            e.target,
+                            e.relation.as_str(),
+                            e.weight
                         );
                     }
                 }
@@ -657,7 +746,12 @@ fn cmd_graph_show(branch: Option<String>, kind: Option<&str>) {
                 println!("\n  {:<18} {:<16} {:<18}", "SOURCE", "RELATION", "TARGET");
                 println!("  {}", "-".repeat(60));
                 for e in &graph.edges {
-                    println!("  {:<18} {:<16} {:<18}", e.source, e.relation.as_str(), e.target);
+                    println!(
+                        "  {:<18} {:<16} {:<18}",
+                        e.source,
+                        e.relation.as_str(),
+                        e.target
+                    );
                 }
             }
         }
@@ -671,9 +765,7 @@ fn cmd_graph_build(branch: Option<String>, _all_branches: bool) {
         Ok((ent_count, edge_count)) => {
             Logger::success(&format!(
                 "Built graph for '{}': {} entities, {} edges",
-                branch,
-                ent_count,
-                edge_count
+                branch, ent_count, edge_count
             ));
         }
         Err(e) => Logger::error(&e),
@@ -736,8 +828,12 @@ fn cmd_graph_path(from: &str, to: &str, branch: Option<String>) {
     // Build adjacency list for BFS
     let mut adj: HashMap<String, Vec<String>> = HashMap::new();
     for edge in &graph.edges {
-        adj.entry(edge.source.clone()).or_default().push(edge.target.clone());
-        adj.entry(edge.target.clone()).or_default().push(edge.source.clone());
+        adj.entry(edge.source.clone())
+            .or_default()
+            .push(edge.target.clone());
+        adj.entry(edge.target.clone())
+            .or_default()
+            .push(edge.source.clone());
     }
 
     // BFS
@@ -788,8 +884,12 @@ fn cmd_graph_impact(entity: &str, branch: Option<String>) {
     // Build adjacency list for BFS
     let mut adj: HashMap<String, Vec<String>> = HashMap::new();
     for edge in &graph.edges {
-        adj.entry(edge.source.clone()).or_default().push(edge.target.clone());
-        adj.entry(edge.target.clone()).or_default().push(edge.source.clone());
+        adj.entry(edge.source.clone())
+            .or_default()
+            .push(edge.target.clone());
+        adj.entry(edge.target.clone())
+            .or_default()
+            .push(edge.source.clone());
     }
 
     // BFS outward
@@ -815,7 +915,11 @@ fn cmd_graph_impact(entity: &str, branch: Option<String>) {
         return;
     }
 
-    Logger::success(&format!("Impact from '{}': {} reachable entities", entity, visited.len()));
+    Logger::success(&format!(
+        "Impact from '{}': {} reachable entities",
+        entity,
+        visited.len()
+    ));
     println!("  {:<24} {}", "ENTITY", "DEPTH");
     println!("  {}", "-".repeat(40));
     let mut sorted: Vec<_> = visited.into_iter().collect();
@@ -838,7 +942,11 @@ fn cmd_graph_orphans(branch: Option<String>) {
         connected.insert(edge.target.clone());
     }
 
-    let orphans: Vec<_> = graph.entities.iter().filter(|e| !connected.contains(&e.id)).collect();
+    let orphans: Vec<_> = graph
+        .entities
+        .iter()
+        .filter(|e| !connected.contains(&e.id))
+        .collect();
     if orphans.is_empty() {
         Logger::info("No orphan entities found.");
         return;
@@ -889,9 +997,7 @@ fn cmd_graph_import(file: &str, _format: Option<&str>, branch: Option<String>) {
         Ok((ent_count, edge_count)) => {
             Logger::success(&format!(
                 "Imported {} entities and {} edges into '{}'",
-                ent_count,
-                edge_count,
-                branch
+                ent_count, edge_count, branch
             ));
         }
         Err(e) => Logger::error(&e),

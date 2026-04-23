@@ -15,45 +15,45 @@ pub enum ApiView {
 impl ApiView {
     pub fn label(&self) -> &str {
         match self {
-            ApiView::Dashboard   => "Dashboard",
-            ApiView::Nodes       => "Nodes",
-            ApiView::Flows      => "Flows",
-            ApiView::Runner     => "Runner",
+            ApiView::Dashboard => "Dashboard",
+            ApiView::Nodes => "Nodes",
+            ApiView::Flows => "Flows",
+            ApiView::Runner => "Runner",
             ApiView::Environment => "Env",
-            ApiView::Settings   => "Settings",
+            ApiView::Settings => "Settings",
         }
     }
 
     pub fn key(&self) -> char {
         match self {
-            ApiView::Dashboard   => '1',
-            ApiView::Nodes       => '2',
-            ApiView::Flows      => '3',
-            ApiView::Runner     => '4',
+            ApiView::Dashboard => '1',
+            ApiView::Nodes => '2',
+            ApiView::Flows => '3',
+            ApiView::Runner => '4',
             ApiView::Environment => '5',
-            ApiView::Settings   => '6',
+            ApiView::Settings => '6',
         }
     }
 
     pub fn icon(&self) -> &str {
         match self {
-            ApiView::Dashboard   => "\u{25C9}",  // ◉
-            ApiView::Nodes       => "\u{25CE}",  // ◎
-            ApiView::Flows      => "\u{25C8}",  // ◈
-            ApiView::Runner     => "\u{25B6}",  // ▶
-            ApiView::Environment => "\u{2699}",  // ⚙
-            ApiView::Settings   => "\u{2600}",  // ☀
+            ApiView::Dashboard => "\u{25C9}",   // ◉
+            ApiView::Nodes => "\u{25CE}",       // ◎
+            ApiView::Flows => "\u{25C8}",       // ◈
+            ApiView::Runner => "\u{25B6}",      // ▶
+            ApiView::Environment => "\u{2699}", // ⚙
+            ApiView::Settings => "\u{2600}",    // ☀
         }
     }
 
     pub fn sublabel(&self) -> &str {
         match self {
-            ApiView::Dashboard   => "overview",
-            ApiView::Nodes       => "node lib",
-            ApiView::Flows      => "graph",
-            ApiView::Runner     => "execution",
+            ApiView::Dashboard => "overview",
+            ApiView::Nodes => "node lib",
+            ApiView::Flows => "graph",
+            ApiView::Runner => "execution",
             ApiView::Environment => "variables",
-            ApiView::Settings   => "config",
+            ApiView::Settings => "config",
         }
     }
 
@@ -110,15 +110,20 @@ pub enum RunnerSubview {
 impl RunnerSubview {
     pub fn label(&self) -> &str {
         match self {
-            RunnerSubview::Steps    => "Steps",
-            RunnerSubview::Latency  => "Latency",
-            RunnerSubview::Diff     => "Diff",
-            RunnerSubview::Context  => "Context",
+            RunnerSubview::Steps => "Steps",
+            RunnerSubview::Latency => "Latency",
+            RunnerSubview::Diff => "Diff",
+            RunnerSubview::Context => "Context",
         }
     }
 
     pub fn all() -> &'static [RunnerSubview] {
-        &[RunnerSubview::Steps, RunnerSubview::Latency, RunnerSubview::Diff, RunnerSubview::Context]
+        &[
+            RunnerSubview::Steps,
+            RunnerSubview::Latency,
+            RunnerSubview::Diff,
+            RunnerSubview::Context,
+        ]
     }
 }
 
@@ -129,9 +134,14 @@ pub enum LiveEvent {
     /// Sent once the entire flow run completes, carrying the full result so the
     /// TUI can update `last_run` before `refresh_data()` touches storage.
     FlowResult(FlowRunResult),
-    Done { passed: bool },
+    Done {
+        passed: bool,
+    },
     Error(String),
-    NeedInput { node_id: String, inputs: Vec<PromptInput> },
+    NeedInput {
+        node_id: String,
+        inputs: Vec<PromptInput>,
+    },
 }
 
 // ── Step detail modal ─────────────────────────────────────────────────────────
@@ -161,10 +171,10 @@ pub struct NodeFieldEditor {
 
 pub struct BodyEditor {
     pub node_id: String,
-    pub lines: Vec<String>,   // content split by newlines
+    pub lines: Vec<String>, // content split by newlines
     pub cursor_row: usize,
     pub cursor_col: usize,
-    pub scroll_top: usize,    // vertical scroll for long bodies
+    pub scroll_top: usize, // vertical scroll for long bodies
 }
 
 impl BodyEditor {
@@ -178,8 +188,18 @@ impl BodyEditor {
             })
             .unwrap_or_else(|| "{}".to_string());
         let lines: Vec<String> = content.lines().map(|l| l.to_string()).collect();
-        let lines = if lines.is_empty() { vec![String::new()] } else { lines };
-        Self { node_id, lines, cursor_row: 0, cursor_col: 0, scroll_top: 0 }
+        let lines = if lines.is_empty() {
+            vec![String::new()]
+        } else {
+            lines
+        };
+        Self {
+            node_id,
+            lines,
+            cursor_row: 0,
+            cursor_col: 0,
+            scroll_top: 0,
+        }
     }
 
     pub fn to_string(&self) -> String {
@@ -188,7 +208,10 @@ impl BodyEditor {
 
     // Current line length
     pub fn current_line_len(&self) -> usize {
-        self.lines.get(self.cursor_row).map(|l| l.len()).unwrap_or(0)
+        self.lines
+            .get(self.cursor_row)
+            .map(|l| l.len())
+            .unwrap_or(0)
     }
 }
 
@@ -197,9 +220,9 @@ impl BodyEditor {
 pub struct PromptModal {
     pub node_id: String,
     pub inputs: Vec<PromptInput>,
-    pub values: Vec<String>,        // one entry per input, same order
-    pub current_field: usize,       // which field is being edited
-    pub option_cursors: Vec<usize>, // for select/multiselect: which option is highlighted
+    pub values: Vec<String>,           // one entry per input, same order
+    pub current_field: usize,          // which field is being edited
+    pub option_cursors: Vec<usize>,    // for select/multiselect: which option is highlighted
     pub multi_checked: Vec<Vec<bool>>, // for multiselect: which options are checked
 }
 
@@ -212,38 +235,54 @@ impl PromptModal {
         let mut multi_checked = Vec::with_capacity(len);
         for pi in &inputs {
             let default_val = match pi.prompt_type {
-                PromptType::Boolean => {
-                    pi.default.as_deref()
-                        .map(|d| if d == "true" || d == "yes" || d == "1" { "true" } else { "false" })
-                        .unwrap_or("false")
-                        .to_string()
-                }
-                PromptType::Select => {
-                    pi.default.as_deref().unwrap_or("").to_string()
-                }
+                PromptType::Boolean => pi
+                    .default
+                    .as_deref()
+                    .map(|d| {
+                        if d == "true" || d == "yes" || d == "1" {
+                            "true"
+                        } else {
+                            "false"
+                        }
+                    })
+                    .unwrap_or("false")
+                    .to_string(),
+                PromptType::Select => pi.default.as_deref().unwrap_or("").to_string(),
                 _ => String::new(),
             };
             values.push(default_val);
             let cursor = match pi.prompt_type {
-                PromptType::Select | PromptType::Multiselect => {
-                    pi.default.as_deref()
-                        .and_then(|d| pi.options.iter().position(|o| o == d))
-                        .unwrap_or(0)
-                }
+                PromptType::Select | PromptType::Multiselect => pi
+                    .default
+                    .as_deref()
+                    .and_then(|d| pi.options.iter().position(|o| o == d))
+                    .unwrap_or(0),
                 _ => 0,
             };
             option_cursors.push(cursor);
             let checked: Vec<bool> = if pi.prompt_type == PromptType::Multiselect {
-                let selected: std::collections::HashSet<&str> = pi.default.as_deref()
+                let selected: std::collections::HashSet<&str> = pi
+                    .default
+                    .as_deref()
                     .map(|d| d.split(',').map(|s| s.trim()).collect())
                     .unwrap_or_default();
-                pi.options.iter().map(|o| selected.contains(o.as_str())).collect()
+                pi.options
+                    .iter()
+                    .map(|o| selected.contains(o.as_str()))
+                    .collect()
             } else {
                 vec![false; pi.options.len()]
             };
             multi_checked.push(checked);
         }
-        Self { node_id, inputs, values, current_field: 0, option_cursors, multi_checked }
+        Self {
+            node_id,
+            inputs,
+            values,
+            current_field: 0,
+            option_cursors,
+            multi_checked,
+        }
     }
 }
 
@@ -277,4 +316,9 @@ pub struct GraphNode {
     pub col: usize,
 }
 
-pub enum GraphDirection { Up, Down, Left, Right }
+pub enum GraphDirection {
+    Up,
+    Down,
+    Left,
+    Right,
+}

@@ -1,6 +1,6 @@
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 // ── PromptInput ───────────────────────────────────────────────────────────────
 
@@ -112,7 +112,9 @@ pub struct Assertion {
     pub enabled: bool,
 }
 
-fn bool_true() -> bool { true }
+fn bool_true() -> bool {
+    true
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "lowercase")]
@@ -254,7 +256,9 @@ impl FlowRunResult {
     }
 
     pub fn avg_latency_ms(&self) -> u64 {
-        if self.steps.is_empty() { return 0; }
+        if self.steps.is_empty() {
+            return 0;
+        }
         self.steps.iter().map(|s| s.duration_ms).sum::<u64>() / self.steps.len() as u64
     }
 }

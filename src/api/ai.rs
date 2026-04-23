@@ -8,8 +8,8 @@
 use std::collections::HashMap;
 
 use crate::api::types::{
-    Assertion, Edge, Extraction, FlowRunResult, Node, NodeSuggestion, OnFail,
-    ProbeSeverity, ProbeType, SecurityProbeResult, StepResult,
+    Assertion, Edge, Extraction, FlowRunResult, Node, NodeSuggestion, OnFail, ProbeSeverity,
+    ProbeType, SecurityProbeResult, StepResult,
 };
 
 // ── Variable inference ────────────────────────────────────────────────────────
@@ -36,7 +36,10 @@ pub fn analyze_node(node: &Node) -> NodeInterface {
 
 fn is_auth_like(s: &str) -> bool {
     let lower = s.to_lowercase();
-    lower.contains("token") || lower.contains("key") || lower.contains("auth") || lower.contains("session")
+    lower.contains("token")
+        || lower.contains("key")
+        || lower.contains("auth")
+        || lower.contains("session")
 }
 
 fn collect_placeholders(s: &str) -> Vec<String> {
@@ -46,7 +49,9 @@ fn collect_placeholders(s: &str) -> Vec<String> {
         if c == '{' {
             let mut name = String::new();
             for inner in chars.by_ref() {
-                if inner == '}' { break; }
+                if inner == '}' {
+                    break;
+                }
                 name.push(inner);
             }
             if !name.is_empty() {
@@ -100,21 +105,29 @@ pub fn suggest_next_nodes(current: &Node, candidates: &[Node]) -> Vec<NodeSugges
     let current_base_path = base_path(&current.path);
 
     for candidate in candidates {
-        if candidate.id == current.id { continue; }
+        if candidate.id == current.id {
+            continue;
+        }
 
         let cand_iface = analyze_node(candidate);
         let mut score: f32 = 0.0;
         let mut reasons: Vec<String> = Vec::new();
 
         // Variable dependency score
-        let matching_vars: Vec<&String> = current_iface.produces.iter()
+        let matching_vars: Vec<&String> = current_iface
+            .produces
+            .iter()
             .filter(|p| cand_iface.consumes.contains(p))
             .collect();
         if !matching_vars.is_empty() {
             score += 0.5;
             reasons.push(format!(
                 "provides variables needed by this node: {}",
-                matching_vars.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+                matching_vars
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ));
         }
 
@@ -126,7 +139,12 @@ pub fn suggest_next_nodes(current: &Node, candidates: &[Node]) -> Vec<NodeSugges
         }
 
         // Method progression score
-        score += method_progression_score(&current.method, &candidate.method, &current.path, &candidate.path);
+        score += method_progression_score(
+            &current.method,
+            &candidate.method,
+            &current.path,
+            &candidate.path,
+        );
 
         // Penalise exact duplicate
         if candidate.method == current.method && candidate.path == current.path {
@@ -171,23 +189,34 @@ fn base_path(path: &str) -> String {
     let mut out = String::new();
     for seg in path.split('/') {
         if !seg.starts_with('{') {
-            if !out.is_empty() { out.push('/'); }
+            if !out.is_empty() {
+                out.push('/');
+            }
             out.push_str(seg);
         }
     }
     out
 }
 
-fn method_progression_score(from_method: &str, to_method: &str, from_path: &str, to_path: &str) -> f32 {
+fn method_progression_score(
+    from_method: &str,
+    to_method: &str,
+    from_path: &str,
+    to_path: &str,
+) -> f32 {
     match (from_method, to_method) {
-        ("POST", "GET") => 0.25,    // create → read
-        ("POST", "DELETE") => 0.15, // create → delete (valid test)
+        ("POST", "GET") => 0.25,                   // create → read
+        ("POST", "DELETE") => 0.15,                // create → delete (valid test)
         ("GET", "PUT") | ("GET", "PATCH") => 0.15, // read → update
         ("GET", "DELETE") => 0.1,
-        ("PUT", "GET") | ("PATCH", "GET") => 0.2,  // update → verify
-        ("DELETE", "GET") => 0.2,  // delete → verify gone
+        ("PUT", "GET") | ("PATCH", "GET") => 0.2, // update → verify
+        ("DELETE", "GET") => 0.2,                 // delete → verify gone
         _ => {
-            if from_path == to_path { -0.1 } else { 0.0 }
+            if from_path == to_path {
+                -0.1
+            } else {
+                0.0
+            }
         }
     }
 }
@@ -208,12 +237,20 @@ pub fn build_flow_edges(nodes: &[Node]) -> (String, Vec<Edge>) {
     let mut current = entry;
 
     while !remaining.is_empty() {
-        let suggestions = suggest_next_nodes(current, &remaining.iter().map(|n| (*n).clone()).collect::<Vec<_>>());
+        let suggestions = suggest_next_nodes(
+            current,
+            &remaining.iter().map(|n| (*n).clone()).collect::<Vec<_>>(),
+        );
         if let Some(best) = suggestions.into_iter().next() {
             edges.push(best.edge);
-            remaining.retain(|n| n.id != best.node.id);
+            let next_id = best.node.id;
+            current = remaining
+                .iter()
+                .find(|n| n.id == next_id)
+                .copied()
+                .unwrap_or(current);
             // Find the node in the original slice for the next iteration
-            current = remaining.first().map(|n| *n).unwrap_or(current);
+            remaining.retain(|n| n.id != current.id);
         } else {
             break;
         }
@@ -227,15 +264,20 @@ fn find_entry_node(nodes: &[Node]) -> &Node {
     for n in nodes {
         let path = n.path.to_lowercase();
         let id = n.id.to_lowercase();
-        if path.contains("login") || path.contains("auth") || path.contains("register")
-            || id.contains("login") || id.contains("auth")
+        if path.contains("login")
+            || path.contains("auth")
+            || path.contains("register")
+            || id.contains("login")
+            || id.contains("auth")
         {
             return n;
         }
     }
     // Priority 2: first POST node
     for n in nodes {
-        if n.method == "POST" { return n; }
+        if n.method == "POST" {
+            return n;
+        }
     }
     // Fallback: first node alphabetically
     nodes.iter().min_by_key(|n| &n.id).unwrap_or(&nodes[0])
@@ -249,9 +291,9 @@ pub fn generate_assertions(node: &Node) -> Vec<Assertion> {
 
     // Status code assertion based on method
     let expected_status = match node.method.as_str() {
-        "POST"   => 201,
+        "POST" => 201,
         "DELETE" => 204,
-        _        => 200,
+        _ => 200,
     };
     assertions.push(Assertion {
         check: format!("status == {}", expected_status),
@@ -308,7 +350,8 @@ pub fn generate_extractions(node: &Node) -> Vec<Extraction> {
     // POST endpoint that creates a resource: extract returned id
     if node.method == "POST" {
         // Derive resource name from last path segment
-        let resource = node.path
+        let resource = node
+            .path
             .trim_end_matches('/')
             .split('/')
             .last()
@@ -383,14 +426,18 @@ fn probe_auth_bypass(
                 ),
                 reproduction: Some(format!(
                     "curl -X {} {}{} (no auth header)",
-                    node.method,
-                    base_url,
-                    node.path
+                    node.method, base_url, node.path
                 )),
                 details: if bypassed {
-                    Some("Endpoint accessible without authentication — CRITICAL vulnerability".to_string())
+                    Some(
+                        "Endpoint accessible without authentication — CRITICAL vulnerability"
+                            .to_string(),
+                    )
                 } else {
-                    Some(format!("Correctly returned {} for unauthenticated request", status))
+                    Some(format!(
+                        "Correctly returned {} for unauthenticated request",
+                        status
+                    ))
                 },
             };
         }
@@ -438,7 +485,11 @@ fn probe_missing_rate_limit(
             description: format!(
                 "POST {} — {} after 20 rapid requests",
                 node.path,
-                if got_429 { "rate limit (429) triggered ✔" } else { "no 429 returned" }
+                if got_429 {
+                    "rate limit (429) triggered ✔"
+                } else {
+                    "no 429 returned"
+                }
             ),
             reproduction: Some(format!(
                 "for i in $(seq 1 20); do curl -X POST {}{} ; done",
@@ -474,8 +525,14 @@ fn probe_sql_injection(
 
     // Inject SQLi payload into any string body field
     for payload in &payloads {
-        ctx.insert("id".to_string(), serde_json::Value::String(payload.to_string()));
-        ctx.insert("user_id".to_string(), serde_json::Value::String(payload.to_string()));
+        ctx.insert(
+            "id".to_string(),
+            serde_json::Value::String(payload.to_string()),
+        );
+        ctx.insert(
+            "user_id".to_string(),
+            serde_json::Value::String(payload.to_string()),
+        );
         let result = executor::execute_node(node, &ctx, base_url, None);
         let status = result.status_code.unwrap_or(0);
 
@@ -493,7 +550,10 @@ fn probe_sql_injection(
                     "curl -X {} {}{} -d '{{\"id\": \"{}\"}}' ",
                     node.method, base_url, node.path, payload
                 )),
-                details: Some("Server returned 500 on SQLi payload — investigate DB error handling".to_string()),
+                details: Some(
+                    "Server returned 500 on SQLi payload — investigate DB error handling"
+                        .to_string(),
+                ),
             };
         }
     }
@@ -519,10 +579,17 @@ pub fn explain_failure(run: &FlowRunResult) -> String {
     }
 
     let mut lines: Vec<String> = Vec::new();
-    lines.push(format!("Flow '{}' failed at {} step(s):\n", run.flow_name, failed_steps.len()));
+    lines.push(format!(
+        "Flow '{}' failed at {} step(s):\n",
+        run.flow_name,
+        failed_steps.len()
+    ));
 
     for step in &failed_steps {
-        lines.push(format!("  Step: {} {} {}", step.node_id, step.method, step.url));
+        lines.push(format!(
+            "  Step: {} {} {}",
+            step.node_id, step.method, step.url
+        ));
 
         if let Some(err) = &step.error {
             lines.push(format!("  Error: {}", err));
@@ -532,8 +599,11 @@ pub fn explain_failure(run: &FlowRunResult) -> String {
             lines.push(format!("  Status: {}", status));
         }
 
-        let failed_assertions: Vec<&crate::api::types::AssertionResult> =
-            step.assertion_results.iter().filter(|a| !a.passed).collect();
+        let failed_assertions: Vec<&crate::api::types::AssertionResult> = step
+            .assertion_results
+            .iter()
+            .filter(|a| !a.passed)
+            .collect();
         for fa in &failed_assertions {
             lines.push(format!(
                 "  Failed check: {} (actual: {})",
@@ -558,7 +628,11 @@ pub fn explain_failure(run: &FlowRunResult) -> String {
         for (k, v) in &run.final_context {
             let display = match v {
                 serde_json::Value::String(s) => {
-                    if s.len() > 30 { format!("{}...", &s[..30]) } else { s.clone() }
+                    if s.len() > 30 {
+                        format!("{}...", &s[..30])
+                    } else {
+                        s.clone()
+                    }
                 }
                 other => other.to_string(),
             };
@@ -567,4 +641,26 @@ pub fn explain_failure(run: &FlowRunResult) -> String {
     }
 
     lines.join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_flow_edges;
+    use crate::api::types::Node;
+
+    #[test]
+    fn build_flow_edges_follows_the_selected_next_node() {
+        let login = Node::new("login", "Login", "POST", "/auth/login");
+        let delete = Node::new("delete", "Delete Session", "DELETE", "/auth/session");
+        let profile = Node::new("profile", "Profile", "GET", "/auth/session");
+
+        let (entry, edges) = build_flow_edges(&[login, delete, profile]);
+
+        assert_eq!(entry, "login");
+        assert_eq!(edges.len(), 2);
+        assert_eq!(edges[0].from, "login");
+        assert_eq!(edges[0].to, "profile");
+        assert_eq!(edges[1].from, "profile");
+        assert_eq!(edges[1].to, "delete");
+    }
 }

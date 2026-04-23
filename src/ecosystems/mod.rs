@@ -1,1 +1,5 @@
-pub mod npm; pub mod pypi; pub mod cargo; pub mod adapter; pub mod detector;
+pub mod adapter;
+pub mod cargo;
+pub mod detector;
+pub mod npm;
+pub mod pypi;

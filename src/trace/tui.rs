@@ -1,11 +1,13 @@
 use crate::trace::{
     storage,
-    types::{TraceLayer, TraceNote, TraceScope, NoteStatus, PackageRisk, KgEntity, KgEdge, KgGraph, EntityKind, RelationType},
+    types::{
+        EntityKind, KgEdge, KgEntity, KgGraph, NoteStatus, PackageRisk, RelationType, TraceLayer,
+        TraceNote, TraceScope,
+    },
 };
-use std::str::FromStr;
 use chrono::Utc;
 use crossterm::{
-    event::{self, Event, KeyCode},
+    event::{self, Event, KeyCode, KeyEventKind},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -18,6 +20,7 @@ use ratatui::{
     Terminal,
 };
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use std::{fs, io};
 
 macro_rules! impl_field_nav {
@@ -179,7 +182,6 @@ impl NoteForm {
             is_edit: true,
         }
     }
-
 }
 
 impl_field_accessors!(NoteForm, EditField, {
@@ -204,7 +206,9 @@ impl KgEntityField {
     fn label(&self) -> &'static str {
         match self {
             Self::Name => "Name",
-            Self::Kind => "Kind (file|package|person|decision|endpoint|module|pr|branch|note|vulnerability)",
+            Self::Kind => {
+                "Kind (file|package|person|decision|endpoint|module|pr|branch|note|vulnerability)"
+            }
             Self::Branch => "Branch",
             Self::Meta => "Metadata (key=value, comma-separated)",
         }
@@ -391,11 +395,7 @@ fn append_audit(entry: AuditEntry) {
             let _ = fs::create_dir_all(parent);
         }
         use std::io::Write as W;
-        if let Ok(mut f) = fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)
-        {
+        if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&path) {
             let _ = writeln!(f, "{}", line);
         }
     }
@@ -462,8 +462,7 @@ impl App {
         }
     }
 
-    fn reload_sources(&mut self) {
-        let cfg = storage::load_config().unwrap_or_default();
+    fn reload_sources(&mut self, cfg: &crate::trace::types::TraceConfig) {
         let count = cfg.sources.len();
         self.sources_state = ListState::default();
         if count > 0 {
@@ -521,7 +520,9 @@ impl App {
     }
 
     fn selected_package(&self) -> Option<&PackageRisk> {
-        self.packages_state.selected().and_then(|i| self.packages.get(i))
+        self.packages_state
+            .selected()
+            .and_then(|i| self.packages.get(i))
     }
 
     fn ok(&mut self, msg: impl Into<String>) {
@@ -639,45 +640,70 @@ fn run_inner(initial_tab: TraceTab, kg_branch: String) {
         let prev_tab = app.tab;
         let quit = match &app.mode {
             AppMode::Browse | AppMode::ViewDetail | AppMode::PackageDetail => {
-                handle_browse(&mut app, key.code)
+                if key.kind != KeyEventKind::Press {
+                    false
+                } else {
+                    handle_browse(&mut app, &mut cfg, key.code)
+                }
             }
             AppMode::EditForm(_) => {
-                handle_form(&mut app, key.code);
+                if key.kind == KeyEventKind::Press {
+                    handle_form(&mut app, key.code);
+                }
                 false
             }
             AppMode::DeleteConfirm(_) => {
-                handle_delete_confirm(&mut app, key.code);
+                if key.kind == KeyEventKind::Press {
+                    handle_delete_confirm(&mut app, key.code);
+                }
                 false
             }
             AppMode::SourceDeleteConfirm(_) => {
-                handle_source_delete_confirm(&mut app, key.code);
+                if key.kind == KeyEventKind::Press {
+                    handle_source_delete_confirm(&mut app, &mut cfg, key.code);
+                }
                 false
             }
             AppMode::KgEntityForm(_) => {
-                handle_kg_entity_form(&mut app, key.code);
+                if key.kind == KeyEventKind::Press {
+                    handle_kg_entity_form(&mut app, key.code);
+                }
                 false
             }
             AppMode::KgEdgeForm(_) => {
-                handle_kg_edge_form(&mut app, key.code);
+                if key.kind == KeyEventKind::Press {
+                    handle_kg_edge_form(&mut app, key.code);
+                }
                 false
             }
             AppMode::KgEntityDelete(_) => {
-                handle_kg_entity_delete(&mut app, key.code);
+                if key.kind == KeyEventKind::Press {
+                    handle_kg_entity_delete(&mut app, key.code);
+                }
                 false
             }
             AppMode::KgEdgeDelete(_) => {
-                handle_kg_edge_delete(&mut app, key.code);
+                if key.kind == KeyEventKind::Press {
+                    handle_kg_edge_delete(&mut app, key.code);
+                }
                 false
             }
             AppMode::KgBranchPicker => {
-                handle_kg_branch_picker(&mut app, key.code);
+                if key.kind == KeyEventKind::Press {
+                    handle_kg_branch_picker(&mut app, key.code);
+                }
                 false
             }
         };
         if quit {
             break;
         }
-        if app.tab != prev_tab || key.code == KeyCode::Char('r') {
+        if app.tab != prev_tab
+            || (key.kind == KeyEventKind::Press
+                && (key.code == KeyCode::Char('r')
+                    || (app.tab == TraceTab::Sources
+                        && matches!(key.code, KeyCode::Char('s') | KeyCode::Char('d')))))
+        {
             cfg = storage::load_config().unwrap_or_default();
         }
     }
@@ -689,7 +715,7 @@ fn run_inner(initial_tab: TraceTab, kg_branch: String) {
 
 // ─── Key handlers ─────────────────────────────────────────────────────────────
 
-fn handle_browse(app: &mut App, code: KeyCode) -> bool {
+fn handle_browse(app: &mut App, cfg: &mut crate::trace::types::TraceConfig, code: KeyCode) -> bool {
     app.status = None; // clear previous status on any key
 
     match code {
@@ -702,10 +728,22 @@ fn handle_browse(app: &mut App, code: KeyCode) -> bool {
         KeyCode::Char('q') => return true,
 
         // ── Tab switching ────────────────────────────────────────────────────
-        KeyCode::Char('1') => { app.tab = TraceTab::Overview; app.mode = AppMode::Browse; }
-        KeyCode::Char('2') => { app.tab = TraceTab::Sources; app.mode = AppMode::Browse; }
-        KeyCode::Char('3') => { app.tab = TraceTab::Notes; app.mode = AppMode::Browse; }
-        KeyCode::Char('4') => { app.tab = TraceTab::Packages; app.mode = AppMode::Browse; }
+        KeyCode::Char('1') => {
+            app.tab = TraceTab::Overview;
+            app.mode = AppMode::Browse;
+        }
+        KeyCode::Char('2') => {
+            app.tab = TraceTab::Sources;
+            app.mode = AppMode::Browse;
+        }
+        KeyCode::Char('3') => {
+            app.tab = TraceTab::Notes;
+            app.mode = AppMode::Browse;
+        }
+        KeyCode::Char('4') => {
+            app.tab = TraceTab::Packages;
+            app.mode = AppMode::Browse;
+        }
         KeyCode::Char('5') => {
             app.tab = TraceTab::EditLog;
             app.mode = AppMode::Browse;
@@ -789,15 +827,17 @@ fn handle_browse(app: &mut App, code: KeyCode) -> bool {
 
         // ── Sources tab ──────────────────────────────────────────────────────
         KeyCode::Down | KeyCode::Char('j') if app.tab == TraceTab::Sources => {
-            let cfg = storage::load_config().unwrap_or_default();
             let len = cfg.sources.len();
             if len > 0 {
-                let next = app.sources_state.selected().map(|i| (i + 1) % len).unwrap_or(0);
+                let next = app
+                    .sources_state
+                    .selected()
+                    .map(|i| (i + 1) % len)
+                    .unwrap_or(0);
                 app.sources_state.select(Some(next));
             }
         }
         KeyCode::Up | KeyCode::Char('k') if app.tab == TraceTab::Sources => {
-            let cfg = storage::load_config().unwrap_or_default();
             let len = cfg.sources.len();
             if len > 0 {
                 let prev = app
@@ -809,7 +849,6 @@ fn handle_browse(app: &mut App, code: KeyCode) -> bool {
             }
         }
         KeyCode::Char('d') if app.tab == TraceTab::Sources => {
-            let cfg = storage::load_config().unwrap_or_default();
             if let Some(idx) = app.sources_state.selected() {
                 if let Some(src) = cfg.sources.get(idx) {
                     app.mode = AppMode::SourceDeleteConfirm(src.id.clone());
@@ -817,19 +856,28 @@ fn handle_browse(app: &mut App, code: KeyCode) -> bool {
             }
         }
         KeyCode::Char('s') if app.tab == TraceTab::Sources => {
-            let cfg = storage::load_config().unwrap_or_default();
             if let Some(idx) = app.sources_state.selected() {
                 if let Some(src) = cfg.sources.get(idx) {
                     let id = src.id.clone();
                     match storage::set_default_source(&id) {
-                        Ok(()) => app.ok(format!("Default source set to '{}'", id)),
+                        Ok(()) => {
+                            *cfg = storage::load_config().unwrap_or_default();
+                            app.reload_sources(cfg);
+                            if let Some(selected_idx) =
+                                cfg.sources.iter().position(|source| source.id == id)
+                            {
+                                app.sources_state.select(Some(selected_idx));
+                            }
+                            app.ok(format!("Default source set to '{}'", id));
+                        }
                         Err(e) => app.err(e),
                     }
                 }
             }
         }
         KeyCode::Char('r') if app.tab == TraceTab::Sources => {
-            app.reload_sources();
+            *cfg = storage::load_config().unwrap_or_default();
+            app.reload_sources(cfg);
             app.ok("Sources reloaded");
         }
 
@@ -837,7 +885,11 @@ fn handle_browse(app: &mut App, code: KeyCode) -> bool {
         KeyCode::Down | KeyCode::Char('j') if app.tab == TraceTab::Packages => {
             let len = app.packages.len();
             if len > 0 {
-                let next = app.packages_state.selected().map(|i| (i + 1) % len).unwrap_or(0);
+                let next = app
+                    .packages_state
+                    .selected()
+                    .map(|i| (i + 1) % len)
+                    .unwrap_or(0);
                 app.packages_state.select(Some(next));
             }
         }
@@ -948,48 +1000,56 @@ fn handle_browse(app: &mut App, code: KeyCode) -> bool {
                 Err(e) => app.err(e),
             }
         }
-        KeyCode::Down | KeyCode::Char('j') if app.tab == TraceTab::Graph => {
-            match app.kg_view {
-                KgView::Entities => {
-                    let len = app.kg_entities.len();
-                    if len > 0 {
-                        let next = app.kg_entity_state.selected().map(|i| (i + 1) % len).unwrap_or(0);
-                        app.kg_entity_state.select(Some(next));
-                        app.kg_selected_entity = Some(next);
-                    }
-                }
-                KgView::Edges | KgView::Visual => {
-                    let len = app.kg_edges.len();
-                    if len > 0 {
-                        let next = app.kg_entity_state.selected().map(|i| (i + 1) % len).unwrap_or(0);
-                        app.kg_entity_state.select(Some(next));
-                    }
+        KeyCode::Down | KeyCode::Char('j') if app.tab == TraceTab::Graph => match app.kg_view {
+            KgView::Entities => {
+                let len = app.kg_entities.len();
+                if len > 0 {
+                    let next = app
+                        .kg_entity_state
+                        .selected()
+                        .map(|i| (i + 1) % len)
+                        .unwrap_or(0);
+                    app.kg_entity_state.select(Some(next));
+                    app.kg_selected_entity = Some(next);
                 }
             }
-        }
-        KeyCode::Up | KeyCode::Char('k') if app.tab == TraceTab::Graph => {
-            match app.kg_view {
-                KgView::Entities => {
-                    let len = app.kg_entities.len();
-                    if len > 0 {
-                        let prev = app.kg_entity_state.selected()
-                            .map(|i| if i == 0 { len - 1 } else { i - 1 })
-                            .unwrap_or(0);
-                        app.kg_entity_state.select(Some(prev));
-                        app.kg_selected_entity = Some(prev);
-                    }
-                }
-                KgView::Edges | KgView::Visual => {
-                    let len = app.kg_edges.len();
-                    if len > 0 {
-                        let prev = app.kg_entity_state.selected()
-                            .map(|i| if i == 0 { len - 1 } else { i - 1 })
-                            .unwrap_or(0);
-                        app.kg_entity_state.select(Some(prev));
-                    }
+            KgView::Edges | KgView::Visual => {
+                let len = app.kg_edges.len();
+                if len > 0 {
+                    let next = app
+                        .kg_entity_state
+                        .selected()
+                        .map(|i| (i + 1) % len)
+                        .unwrap_or(0);
+                    app.kg_entity_state.select(Some(next));
                 }
             }
-        }
+        },
+        KeyCode::Up | KeyCode::Char('k') if app.tab == TraceTab::Graph => match app.kg_view {
+            KgView::Entities => {
+                let len = app.kg_entities.len();
+                if len > 0 {
+                    let prev = app
+                        .kg_entity_state
+                        .selected()
+                        .map(|i| if i == 0 { len - 1 } else { i - 1 })
+                        .unwrap_or(0);
+                    app.kg_entity_state.select(Some(prev));
+                    app.kg_selected_entity = Some(prev);
+                }
+            }
+            KgView::Edges | KgView::Visual => {
+                let len = app.kg_edges.len();
+                if len > 0 {
+                    let prev = app
+                        .kg_entity_state
+                        .selected()
+                        .map(|i| if i == 0 { len - 1 } else { i - 1 })
+                        .unwrap_or(0);
+                    app.kg_entity_state.select(Some(prev));
+                }
+            }
+        },
         KeyCode::Tab if app.tab == TraceTab::Graph => {
             app.kg_view = match app.kg_view {
                 KgView::Entities => KgView::Edges,
@@ -1080,7 +1140,10 @@ fn handle_form(app: &mut App, code: KeyCode) {
             let layer: TraceLayer = match layer_s.parse() {
                 Ok(v) => v,
                 Err(e) => {
-                    app.err(format!("Invalid layer '{}'. Use canonical | team | user", layer_s));
+                    app.err(format!(
+                        "Invalid layer '{}'. Use canonical | team | user",
+                        layer_s
+                    ));
                     return;
                 }
             };
@@ -1109,10 +1172,26 @@ fn handle_form(app: &mut App, code: KeyCode) {
             };
 
             let (action, summary) = if is_edit {
-                match storage::update_note(&id, Some(&title), Some(&body), None) {
+                match storage::update_note_details(
+                    &id,
+                    Some(&title),
+                    Some(&body),
+                    None,
+                    Some(layer),
+                    Some(scope),
+                    Some(&target),
+                    Some(&author),
+                    Some(tags.clone()),
+                ) {
                     Ok(()) => (
                         "edit",
-                        format!("title={} body_len={}", title, body.len()),
+                        format!(
+                            "title={} layer={} scope={} tags={}",
+                            title,
+                            layer_s,
+                            scope_s,
+                            tags.len()
+                        ),
                     ),
                     Err(e) => {
                         app.err(e);
@@ -1137,7 +1216,10 @@ fn handle_form(app: &mut App, code: KeyCode) {
                     updated_at: String::new(),
                 };
                 match storage::create_note(note) {
-                    Ok(()) => ("create", format!("title={} layer={} scope={}", title, layer_s, scope_s)),
+                    Ok(()) => (
+                        "create",
+                        format!("title={} layer={} scope={}", title, layer_s, scope_s),
+                    ),
                     Err(e) => {
                         app.err(e);
                         return;
@@ -1158,9 +1240,9 @@ fn handle_form(app: &mut App, code: KeyCode) {
                 app.list_state.select(Some(pos));
             }
             app.ok(format!(
-                "Note '{}' {}d",
+                "Note '{}' {}",
                 id,
-                if is_edit { "update" } else { "create" }
+                if is_edit { "updated" } else { "created" }
             ));
             app.mode = AppMode::Browse;
         }
@@ -1202,7 +1284,11 @@ fn handle_delete_confirm(app: &mut App, code: KeyCode) {
     }
 }
 
-fn handle_source_delete_confirm(app: &mut App, code: KeyCode) {
+fn handle_source_delete_confirm(
+    app: &mut App,
+    cfg: &mut crate::trace::types::TraceConfig,
+    code: KeyCode,
+) {
     let id = match &app.mode {
         AppMode::SourceDeleteConfirm(id) => id.clone(),
         _ => return,
@@ -1211,8 +1297,9 @@ fn handle_source_delete_confirm(app: &mut App, code: KeyCode) {
         KeyCode::Char('y') | KeyCode::Char('Y') => {
             match storage::remove_source(&id) {
                 Ok(()) => {
+                    *cfg = storage::load_config().unwrap_or_default();
                     app.ok(format!("Source '{}' removed", id));
-                    app.reload_sources();
+                    app.reload_sources(cfg);
                 }
                 Err(e) => app.err(e),
             }
@@ -1278,7 +1365,13 @@ fn handle_kg_entity_form(app: &mut App, code: KeyCode) {
             }
             let id = name
                 .chars()
-                .map(|c| if c.is_alphanumeric() { c.to_ascii_lowercase() } else { '-' })
+                .map(|c| {
+                    if c.is_alphanumeric() {
+                        c.to_ascii_lowercase()
+                    } else {
+                        '-'
+                    }
+                })
                 .collect::<String>();
             let now = Utc::now().to_rfc3339();
             let entity = KgEntity {
@@ -1520,11 +1613,7 @@ fn handle_kg_branch_picker(app: &mut App, code: KeyCode) {
 
 // ─── Drawing ──────────────────────────────────────────────────────────────────
 
-fn draw_ui(
-    f: &mut ratatui::Frame,
-    app: &mut App,
-    cfg: &crate::trace::types::TraceConfig,
-) {
+fn draw_ui(f: &mut ratatui::Frame, app: &mut App, cfg: &crate::trace::types::TraceConfig) {
     let area = f.size();
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -1536,10 +1625,17 @@ fn draw_ui(
         .split(area);
 
     // Tab bar
-    let titles: Vec<Line> = TraceTab::all().iter().map(|t| Line::from(t.title())).collect();
+    let titles: Vec<Line> = TraceTab::all()
+        .iter()
+        .map(|t| Line::from(t.title()))
+        .collect();
     let tabs = Tabs::new(titles)
         .select(app.tab.index())
-        .block(Block::default().borders(Borders::ALL).title(" Trace Memory "))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Trace Memory "),
+        )
         .style(Style::default().fg(Color::Gray))
         .highlight_style(
             Style::default()
@@ -1552,7 +1648,7 @@ fn draw_ui(
     match &app.mode {
         AppMode::Browse => match app.tab {
             TraceTab::Overview => draw_overview(f, chunks[1], cfg, app),
-            TraceTab::Sources => draw_sources(f, chunks[1], &mut app.sources_state),
+            TraceTab::Sources => draw_sources(f, chunks[1], cfg, &mut app.sources_state),
             TraceTab::Notes => draw_notes_panel(f, chunks[1], app),
             TraceTab::Packages => draw_packages(f, chunks[1], app),
             TraceTab::EditLog => draw_edit_log(f, chunks[1], &app.audit, app.audit_scroll),
@@ -1564,7 +1660,7 @@ fn draw_ui(
             // Draw the current tab as background, then overlay the modal
             match app.tab {
                 TraceTab::Notes => draw_notes_panel(f, chunks[1], app),
-                TraceTab::Sources => draw_sources(f, chunks[1], &mut app.sources_state),
+                TraceTab::Sources => draw_sources(f, chunks[1], cfg, &mut app.sources_state),
                 _ => {}
             }
             match &app.mode {
@@ -1709,13 +1805,16 @@ fn draw_overview(
             Style::default().fg(Color::DarkGray),
         )),
     ];
-    let p = Paragraph::new(lines)
-        .block(Block::default().borders(Borders::ALL).title(" Overview "));
+    let p = Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title(" Overview "));
     f.render_widget(p, area);
 }
 
-fn draw_sources(f: &mut ratatui::Frame, area: Rect, state: &mut ListState) {
-    let cfg = storage::load_config().unwrap_or_default();
+fn draw_sources(
+    f: &mut ratatui::Frame,
+    area: Rect,
+    cfg: &crate::trace::types::TraceConfig,
+    state: &mut ListState,
+) {
     let items: Vec<ListItem> = if cfg.sources.is_empty() {
         vec![ListItem::new(
             "  No sources configured. Run: infynon trace source add-redis / add-sql",
@@ -1770,9 +1869,7 @@ fn draw_sources(f: &mut ratatui::Frame, area: Rect, state: &mut ListState) {
 
 fn draw_notes_panel(f: &mut ratatui::Frame, area: Rect, app: &mut App) {
     let items: Vec<ListItem> = if app.notes.is_empty() {
-        vec![ListItem::new(
-            "  No notes yet.  Press  n  to create one.",
-        )]
+        vec![ListItem::new("  No notes yet.  Press  n  to create one.")]
     } else {
         app.notes
             .iter()
@@ -1783,10 +1880,7 @@ fn draw_notes_panel(f: &mut ratatui::Frame, area: Rect, app: &mut App) {
                     NoteStatus::Archived => Color::DarkGray,
                 };
                 ListItem::new(Line::from(vec![
-                    Span::styled(
-                        format!("  {:<16} ", n.id),
-                        Style::default().fg(Color::Cyan),
-                    ),
+                    Span::styled(format!("  {:<16} ", n.id), Style::default().fg(Color::Cyan)),
                     Span::styled(
                         format!("[{:<9}]", n.layer.as_str()),
                         Style::default().fg(Color::Blue),
@@ -1933,10 +2027,7 @@ fn draw_package_detail(f: &mut ratatui::Frame, area: Rect, app: &mut App) {
             kv("  Package:        ", &pkg_ver),
             kv("  Ecosystem:      ", &r.ecosystem),
             Line::from(vec![
-                Span::styled(
-                    "  Severity:       ",
-                    Style::default().fg(Color::Yellow),
-                ),
+                Span::styled("  Severity:       ", Style::default().fg(Color::Yellow)),
                 Span::styled(
                     r.severity.clone(),
                     Style::default().fg(sc).add_modifier(Modifier::BOLD),
@@ -2002,10 +2093,7 @@ fn draw_edit_log(f: &mut ratatui::Frame, area: Rect, entries: &[AuditEntry], scr
                 };
                 let ts = &e.timestamp[..e.timestamp.len().min(19)];
                 ListItem::new(Line::from(vec![
-                    Span::styled(
-                        format!("  {} ", ts),
-                        Style::default().fg(Color::DarkGray),
-                    ),
+                    Span::styled(format!("  {} ", ts), Style::default().fg(Color::DarkGray)),
                     Span::styled(
                         format!("{:<7} ", e.action.to_uppercase()),
                         Style::default().fg(ac).add_modifier(Modifier::BOLD),
@@ -2120,9 +2208,7 @@ fn draw_delete_modal(f: &mut ratatui::Frame, area: Rect, id: &str) {
             Span::styled("  Delete note: ", Style::default().fg(Color::Yellow)),
             Span::styled(
                 id,
-                Style::default()
-                    .fg(Color::Red)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
             ),
         ]),
         Line::from(""),
@@ -2134,9 +2220,7 @@ fn draw_delete_modal(f: &mut ratatui::Frame, area: Rect, id: &str) {
         Line::from(vec![
             Span::styled(
                 "  [y]  confirm delete",
-                Style::default()
-                    .fg(Color::Red)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
             ),
             Span::raw("      "),
             Span::styled("[n / Esc]  cancel", Style::default().fg(Color::Green)),
@@ -2158,7 +2242,10 @@ fn draw_source_delete_modal(f: &mut ratatui::Frame, area: Rect, id: &str) {
         Line::from(""),
         Line::from(vec![
             Span::styled("  Remove source: ", Style::default().fg(Color::Yellow)),
-            Span::styled(id, Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                id,
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            ),
         ]),
         Line::from(""),
         Line::from(Span::styled(
@@ -2246,11 +2333,7 @@ fn draw_kg_entities(f: &mut ratatui::Frame, area: Rect, app: &mut App) {
             .collect()
     };
     let list = List::new(items)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(title),
-        )
+        .block(Block::default().borders(Borders::ALL).title(title))
         .highlight_style(
             Style::default()
                 .bg(Color::DarkGray)
@@ -2300,10 +2383,7 @@ fn draw_kg_edges(f: &mut ratatui::Frame, area: Rect, app: &mut App) {
                         format!("  {:<20}", e.source),
                         Style::default().fg(Color::Cyan),
                     ),
-                    Span::styled(
-                        " \u{2192} ",
-                        Style::default().fg(Color::DarkGray),
-                    ),
+                    Span::styled(" \u{2192} ", Style::default().fg(Color::DarkGray)),
                     Span::styled(
                         format!("{:<20} ", e.target),
                         Style::default().fg(Color::Cyan),
@@ -2316,20 +2396,13 @@ fn draw_kg_edges(f: &mut ratatui::Frame, area: Rect, app: &mut App) {
                         format!("[{:.1}] ", e.weight),
                         Style::default().fg(Color::Yellow),
                     ),
-                    Span::styled(
-                        evidence_short,
-                        Style::default().fg(Color::DarkGray),
-                    ),
+                    Span::styled(evidence_short, Style::default().fg(Color::DarkGray)),
                 ]))
             })
             .collect()
     };
     let list = List::new(items)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(title),
-        )
+        .block(Block::default().borders(Borders::ALL).title(title))
         .highlight_style(
             Style::default()
                 .bg(Color::DarkGray)
@@ -2394,7 +2467,9 @@ fn draw_kg_visual(f: &mut ratatui::Frame, area: Rect, app: &mut App) {
             let kc = entity_kind_color(&ent.kind);
             let is_selected = selected_id.as_deref() == Some(&ent.id);
             let name_style = if is_selected {
-                Style::default().fg(kc).add_modifier(Modifier::BOLD | Modifier::REVERSED)
+                Style::default()
+                    .fg(kc)
+                    .add_modifier(Modifier::BOLD | Modifier::REVERSED)
             } else {
                 Style::default().fg(kc)
             };
@@ -2443,7 +2518,10 @@ fn draw_kg_visual(f: &mut ratatui::Frame, area: Rect, app: &mut App) {
                         Span::styled("  \u{2502}  ", Style::default().fg(Color::DarkGray)),
                         Span::styled(format!("[{}]", ent.name), name_style),
                         Span::styled(
-                            format!(" \u{2500}\u{2500}{}\u{2500}\u{2500}\u{25b6} ", edge.relation.as_str()),
+                            format!(
+                                " \u{2500}\u{2500}{}\u{2500}\u{2500}\u{25b6} ",
+                                edge.relation.as_str()
+                            ),
                             Style::default().fg(rel_color),
                         ),
                         Span::styled(format!("[{}]", target_name), Style::default().fg(tc)),
@@ -2475,16 +2553,9 @@ fn draw_kg_visual(f: &mut ratatui::Frame, area: Rect, app: &mut App) {
     } else {
         app.kg_branch.clone()
     };
-    let title = format!(
-        " Visual Graph [{}] ",
-        vg_branch_label
-    );
+    let title = format!(" Visual Graph [{}] ", vg_branch_label);
     let p = Paragraph::new(lines)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(title),
-        )
+        .block(Block::default().borders(Borders::ALL).title(title))
         .wrap(Wrap { trim: false });
     f.render_widget(p, chunks[1]);
 }
@@ -2635,9 +2706,7 @@ fn draw_kg_delete_modal(f: &mut ratatui::Frame, area: Rect, entity_type: &str, i
             ),
             Span::styled(
                 id,
-                Style::default()
-                    .fg(Color::Red)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
             ),
         ]),
         Line::from(""),
@@ -2649,9 +2718,7 @@ fn draw_kg_delete_modal(f: &mut ratatui::Frame, area: Rect, entity_type: &str, i
         Line::from(vec![
             Span::styled(
                 "  [y]  confirm delete",
-                Style::default()
-                    .fg(Color::Red)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
             ),
             Span::raw("      "),
             Span::styled("[n / Esc]  cancel", Style::default().fg(Color::Green)),
@@ -2738,4 +2805,3 @@ fn centered_rect(pct_x: u16, pct_y: u16, r: Rect) -> Rect {
         ])
         .split(vert[1])[1]
 }
-

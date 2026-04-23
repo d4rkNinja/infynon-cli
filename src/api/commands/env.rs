@@ -52,9 +52,18 @@ fn write_env_file(entries: &[(String, Option<String>)]) -> std::io::Result<()> {
 
 pub fn looks_sensitive(key: &str) -> bool {
     let upper = key.to_uppercase();
-    ["TOKEN", "SECRET", "PASSWORD", "KEY", "PASS", "AUTH", "CREDENTIAL", "PRIVATE"]
-        .iter()
-        .any(|word| upper.contains(word))
+    [
+        "TOKEN",
+        "SECRET",
+        "PASSWORD",
+        "KEY",
+        "PASS",
+        "AUTH",
+        "CREDENTIAL",
+        "PRIVATE",
+    ]
+    .iter()
+    .any(|word| upper.contains(word))
 }
 
 pub fn mask(value: &str) -> String {
@@ -77,7 +86,10 @@ pub fn env_list() -> Vec<(String, String)> {
 
 /// Return the BASE_URL entry from .infynon/.env, if set.
 pub fn env_base_url() -> Option<String> {
-    env_list().into_iter().find(|(k, _)| k == "BASE_URL").map(|(_, v)| v)
+    env_list()
+        .into_iter()
+        .find(|(k, _)| k == "BASE_URL")
+        .map(|(_, v)| v)
 }
 
 /// Upsert a key-value pair in the .env file.
@@ -121,7 +133,13 @@ pub fn cmd_env_list() {
     if pairs.is_empty() {
         println!("  No variables set. Use: infynon weave env set KEY VALUE");
         println!();
-        println!("  File: {}", env_file_path().display().to_string().truecolor(100, 100, 140));
+        println!(
+            "  File: {}",
+            env_file_path()
+                .display()
+                .to_string()
+                .truecolor(100, 100, 140)
+        );
         println!();
         return;
     }
@@ -144,7 +162,13 @@ pub fn cmd_env_list() {
 
     println!();
     println!("  {} variable(s)", pairs.len().to_string().bright_cyan());
-    println!("  File: {}", env_file_path().display().to_string().truecolor(100, 100, 140));
+    println!(
+        "  File: {}",
+        env_file_path()
+            .display()
+            .to_string()
+            .truecolor(100, 100, 140)
+    );
     println!("  Tip: reference as {{$KEY}} in any node path, headers, or body");
     println!();
 }
@@ -160,8 +184,16 @@ pub fn cmd_env_set(key: &str, value: &str) {
     match env_upsert(key, value) {
         Ok(()) => {
             let sensitive = looks_sensitive(key);
-            let display = if sensitive { mask(value) } else { value.to_string() };
-            let label = if already_exists { "(updated)" } else { "(added)" };
+            let display = if sensitive {
+                mask(value)
+            } else {
+                value.to_string()
+            };
+            let label = if already_exists {
+                "(updated)"
+            } else {
+                "(added)"
+            };
             println!(
                 "  {}  {}={} {}",
                 "✔".bright_green(),
@@ -184,15 +216,24 @@ pub fn cmd_env_delete(key: &str) {
 
 pub fn cmd_env_get(key: &str, reveal: bool) {
     let entries = read_env_file();
-    let value = entries.iter().find_map(|(k, v)| {
-        if k == key { v.as_deref() } else { None }
-    });
+    let value = entries
+        .iter()
+        .find_map(|(k, v)| if k == key { v.as_deref() } else { None });
 
     match value {
         Some(value) => {
             let sensitive = looks_sensitive(key);
-            let display = if !reveal && sensitive { mask(value) } else { value.to_string() };
-            println!("  {}  {}={}", "→".bright_cyan(), key.bold(), display.truecolor(200, 200, 220));
+            let display = if !reveal && sensitive {
+                mask(value)
+            } else {
+                value.to_string()
+            };
+            println!(
+                "  {}  {}={}",
+                "→".bright_cyan(),
+                key.bold(),
+                display.truecolor(200, 200, 220)
+            );
             if !reveal && sensitive {
                 println!("     (use --reveal to show full value)");
             }

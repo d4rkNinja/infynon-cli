@@ -1,16 +1,16 @@
-use clap::Parser;
 use crate::cli::args::{
-    AiAction, ApiCommands, AssertionAction, EnvAction, FlowAction, NodeAction, PromptAction,
-    PkgArgs, PkgCommands, RootArgs, RootCommands,
+    AiAction, ApiCommands, AssertionAction, EnvAction, FlowAction, NodeAction, PkgArgs,
+    PkgCommands, PromptAction, RootArgs, RootCommands,
 };
-use crate::cli::scan::{self, run_scan, check_packages_before_install, OutputFormat, FixLevel};
 use crate::cli::features;
+use crate::cli::scan::{self, check_packages_before_install, run_scan, FixLevel, OutputFormat};
+use crate::ecosystems::detector;
 use crate::error::types::InfynonError;
 use crate::tui::logger::Logger;
-use crate::ecosystems::detector;
-use std::path::Path;
-use owo_colors::OwoColorize;
 use crate::utils::truncate_str;
+use clap::Parser;
+use owo_colors::OwoColorize;
+use std::path::Path;
 
 pub fn execute_pkg_mode() -> Result<(), InfynonError> {
     // When invoked as `infynon pkg ...`, strip the "pkg" arg before clap parses
@@ -32,13 +32,17 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
     // ── Route subcommands first ────────────────────────────────────────────
     if let Some(cmd) = args.command {
         match cmd {
-            PkgCommands::Scan { output, fix, pkg_file } => {
+            PkgCommands::Scan {
+                output,
+                fix,
+                pkg_file,
+            } => {
                 let fmt = output.as_deref().map(|o| match o.to_lowercase().as_str() {
-                    "pdf"  => OutputFormat::Pdf,
+                    "pdf" => OutputFormat::Pdf,
                     "both" => OutputFormat::Both,
-                    _      => OutputFormat::Markdown,
+                    _ => OutputFormat::Markdown,
                 });
-                let fl   = fix.map(|f| FixLevel::from_str(&f));
+                let fl = fix.map(|f| FixLevel::from_str(&f));
                 let file = pkg_file.or(args.pkg_file);
                 run_scan(fmt, fl, file.as_deref(), args.agent);
                 return Ok(());
@@ -58,7 +62,12 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
                 features::cmd_outdated(file.as_deref());
                 return Ok(());
             }
-            PkgCommands::Diff { package, v1, v2, ecosystem } => {
+            PkgCommands::Diff {
+                package,
+                v1,
+                v2,
+                ecosystem,
+            } => {
                 features::cmd_diff(&package, &v1, &v2, ecosystem.as_deref());
                 return Ok(());
             }
@@ -67,7 +76,10 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
                 features::cmd_doctor(file.as_deref());
                 return Ok(());
             }
-            PkgCommands::Size { packages, ecosystem } => {
+            PkgCommands::Size {
+                packages,
+                ecosystem,
+            } => {
                 if packages.is_empty() {
                     Logger::error("Please specify at least one package name.");
                     return Ok(());
@@ -112,9 +124,11 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
         return Ok(());
     }
 
-
     let first_arg = &args.passthrough_args[0];
-    let known_ecosystems = vec!["npm", "yarn", "pnpm", "bun", "pip", "uv", "poetry", "cargo", "go", "gem", "composer", "nuget", "hex", "pub"];
+    let known_ecosystems = vec![
+        "npm", "yarn", "pnpm", "bun", "pip", "uv", "poetry", "cargo", "go", "gem", "composer",
+        "nuget", "hex", "pub",
+    ];
 
     let mut ecosystem = "auto-detected";
     let mut install_packages = vec![];
@@ -129,39 +143,72 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
 
         // ── JavaScript / Node.js ─────────────────────────────────────────────
         // Combined (manifest + lock) takes priority; lock alone next; manifest last
-        if      p("package.json") && p("bun.lockb")          { ecosystem = "bun"; }
-        else if p("package.json") && p("pnpm-lock.yaml")     { ecosystem = "pnpm"; }
-        else if p("package.json") && p("yarn.lock")          { ecosystem = "yarn"; }
-        else if p("package.json") && p("package-lock.json")  { ecosystem = "npm"; }
-        else if p("bun.lockb")                               { ecosystem = "bun"; }
-        else if p("pnpm-lock.yaml")                          { ecosystem = "pnpm"; }
-        else if p("yarn.lock")                               { ecosystem = "yarn"; }
-        else if p("package.json") || p("package-lock.json")  { ecosystem = "npm"; }
+        if p("package.json") && p("bun.lockb") {
+            ecosystem = "bun";
+        } else if p("package.json") && p("pnpm-lock.yaml") {
+            ecosystem = "pnpm";
+        } else if p("package.json") && p("yarn.lock") {
+            ecosystem = "yarn";
+        } else if p("package.json") && p("package-lock.json") {
+            ecosystem = "npm";
+        } else if p("bun.lockb") {
+            ecosystem = "bun";
+        } else if p("pnpm-lock.yaml") {
+            ecosystem = "pnpm";
+        } else if p("yarn.lock") {
+            ecosystem = "yarn";
+        } else if p("package.json") || p("package-lock.json") {
+            ecosystem = "npm";
+        }
         // ── Rust ─────────────────────────────────────────────────────────────
-        else if p("Cargo.toml") && p("Cargo.lock")           { ecosystem = "cargo"; }
-        else if p("Cargo.toml")                              { ecosystem = "cargo"; }
+        else if p("Cargo.toml") && p("Cargo.lock") {
+            ecosystem = "cargo";
+        } else if p("Cargo.toml") {
+            ecosystem = "cargo";
+        }
         // ── Python ───────────────────────────────────────────────────────────
         // pyproject.toml + lock is most specific; lock alone next; manifest fallback
-        else if p("pyproject.toml") && p("uv.lock")          { ecosystem = "uv"; }
-        else if p("pyproject.toml") && p("poetry.lock")      { ecosystem = "poetry"; }
-        else if p("uv.lock")                                 { ecosystem = "uv"; }
-        else if p("poetry.lock")                             { ecosystem = "poetry"; }
-        else if p("pyproject.toml") || p("requirements.txt") || p("setup.py") || p("setup.cfg") { ecosystem = "pip"; }
+        else if p("pyproject.toml") && p("uv.lock") {
+            ecosystem = "uv";
+        } else if p("pyproject.toml") && p("poetry.lock") {
+            ecosystem = "poetry";
+        } else if p("uv.lock") {
+            ecosystem = "uv";
+        } else if p("poetry.lock") {
+            ecosystem = "poetry";
+        } else if p("pyproject.toml") || p("requirements.txt") || p("setup.py") || p("setup.cfg") {
+            ecosystem = "pip";
+        }
         // ── Go ───────────────────────────────────────────────────────────────
-        else if p("go.mod") && p("go.sum")                   { ecosystem = "go"; }
-        else if p("go.mod")                                  { ecosystem = "go"; }
+        else if p("go.mod") && p("go.sum") {
+            ecosystem = "go";
+        } else if p("go.mod") {
+            ecosystem = "go";
+        }
         // ── PHP / Composer ───────────────────────────────────────────────────
-        else if p("composer.json") && p("composer.lock")     { ecosystem = "composer"; }
-        else if p("composer.json") || p("composer.lock")     { ecosystem = "composer"; }
+        else if p("composer.json") && p("composer.lock") {
+            ecosystem = "composer";
+        } else if p("composer.json") || p("composer.lock") {
+            ecosystem = "composer";
+        }
         // ── Ruby ─────────────────────────────────────────────────────────────
-        else if p("Gemfile") && p("Gemfile.lock")            { ecosystem = "gem"; }
-        else if p("Gemfile") || p("Gemfile.lock")            { ecosystem = "gem"; }
+        else if p("Gemfile") && p("Gemfile.lock") {
+            ecosystem = "gem";
+        } else if p("Gemfile") || p("Gemfile.lock") {
+            ecosystem = "gem";
+        }
         // ── Dart / Flutter ───────────────────────────────────────────────────
-        else if p("pubspec.yaml") && p("pubspec.lock")       { ecosystem = "pub"; }
-        else if p("pubspec.yaml") || p("pubspec.lock")       { ecosystem = "pub"; }
+        else if p("pubspec.yaml") && p("pubspec.lock") {
+            ecosystem = "pub";
+        } else if p("pubspec.yaml") || p("pubspec.lock") {
+            ecosystem = "pub";
+        }
         // ── Elixir / Hex ─────────────────────────────────────────────────────
-        else if p("mix.exs") && p("mix.lock")                { ecosystem = "hex"; }
-        else if p("mix.exs") || p("mix.lock")                { ecosystem = "hex"; }
+        else if p("mix.exs") && p("mix.lock") {
+            ecosystem = "hex";
+        } else if p("mix.exs") || p("mix.lock") {
+            ecosystem = "hex";
+        }
     }
 
     if args.passthrough_args.len() > cmd_idx {
@@ -169,9 +216,9 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
         // Recognize all common "add a package" actions across ecosystems:
         // install/add/i/require/get = initial install
         // update/upgrade/up         = upgrade specific packages (also needs CVE check)
-        if matches!(action.as_str(),
-            "install" | "add" | "i" | "require" | "get" |
-            "update"  | "upgrade" | "up"
+        if matches!(
+            action.as_str(),
+            "install" | "add" | "i" | "require" | "get" | "update" | "upgrade" | "up"
         ) {
             install_action = action.clone();
             install_packages = args.passthrough_args[cmd_idx + 1..].to_vec();
@@ -185,11 +232,11 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
     // pub   → dart    (Dart SDK ships dart; Flutter also exposes it as flutter)
     let binary_to_check = match ecosystem {
         "poetry" => "poetry",
-        "uv"     => "uv",
-        "hex"    => "mix",
-        "pub"    => "dart",
-        "nuget"  => "dotnet",
-        other    => other,
+        "uv" => "uv",
+        "hex" => "mix",
+        "pub" => "dart",
+        "nuget" => "dotnet",
+        other => other,
     };
 
     if !detector::is_installed(binary_to_check) {
@@ -198,14 +245,22 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
             "  {} {}{}{}\n",
             "✘".red().bold(),
             "Package manager ".red().bold(),
-            format!("'{}'" , ecosystem).bright_red().bold(),
+            format!("'{}'", ecosystem).bright_red().bold(),
             " is not installed on this system.".red().bold()
         );
         if let Some(info) = detector::install_instructions(ecosystem) {
             println!("  {}  {}", "ℹ".bright_cyan().bold(), info.note.white());
             println!();
-            println!("  {} {}", "Install command:".bold().truecolor(255,170,50), info.install_cmd.bright_green());
-            println!("  {} {}", "Official docs:  ".bold().truecolor(255,170,50), info.install_url.truecolor(100,150,255));
+            println!(
+                "  {} {}",
+                "Install command:".bold().truecolor(255, 170, 50),
+                info.install_cmd.bright_green()
+            );
+            println!(
+                "  {} {}",
+                "Official docs:  ".bold().truecolor(255, 170, 50),
+                info.install_url.truecolor(100, 150, 255)
+            );
         }
         println!();
         return Ok(());
@@ -222,7 +277,24 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
     }
 
     if !install_packages.is_empty() {
-        let (safe, hits) = check_packages_before_install(&install_packages, ecosystem, args.agent);
+        let (safe, hits) =
+            match check_packages_before_install(&install_packages, ecosystem, args.agent) {
+                Ok(v) => v,
+                Err(e) => {
+                    if args.agent {
+                        let json = serde_json::json!({
+                            "status": "error",
+                            "error": e,
+                            "packages_checked": install_packages,
+                            "installed": false
+                        });
+                        println!("{}", serde_json::to_string_pretty(&json).unwrap());
+                        std::process::exit(2);
+                    }
+                    Logger::error(&format!("Security gate blocked install: {}", e));
+                    std::process::exit(2);
+                }
+            };
 
         let pkgs_to_install = if !safe {
             // ── --strict: block entire install if any hit matches the level ──
@@ -231,15 +303,20 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
                 let blocked = hits.iter().any(|h| level.matches(h.severity));
                 if blocked {
                     if args.agent {
-                        let vulns: Vec<serde_json::Value> = hits.iter().map(|h| serde_json::json!({
-                            "package":         h.package,
-                            "current_version": "",
-                            "cve_id":          h.cve_id,
-                            "severity":        h.severity,
-                            "summary":         h.summary,
-                            "safe_version":    h.fixed_version,
-                            "fix_cmd":         h.upgrade_cmd
-                        })).collect();
+                        let vulns: Vec<serde_json::Value> = hits
+                            .iter()
+                            .map(|h| {
+                                serde_json::json!({
+                                    "package":         h.package,
+                                    "current_version": "",
+                                    "cve_id":          h.cve_id,
+                                    "severity":        h.severity,
+                                    "summary":         h.summary,
+                                    "safe_version":    h.fixed_version,
+                                    "fix_cmd":         h.upgrade_cmd
+                                })
+                            })
+                            .collect();
                         let json = serde_json::json!({
                             "status":           "blocked",
                             "packages_checked": install_packages,
@@ -250,13 +327,17 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
                         println!("{}", serde_json::to_string_pretty(&json).unwrap());
                         std::process::exit(3);
                     }
-                    let level_label = if strict_level == "all" { "all severities".to_string() } else { format!("{}+", strict_level) };
+                    let level_label = if strict_level == "all" {
+                        "all severities".to_string()
+                    } else {
+                        format!("{}+", strict_level)
+                    };
                     println!(
                         "\n  {}  {} — {}  (blocking: {})\n",
                         "╳".bright_red().bold(),
                         "BLOCKED".bold().bright_red(),
-                        "--strict mode active".truecolor(200,80,80),
-                        level_label.truecolor(200,120,80)
+                        "--strict mode active".truecolor(200, 80, 80),
+                        level_label.truecolor(200, 120, 80)
                     );
                     std::process::exit(3);
                 }
@@ -275,7 +356,8 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
                 // Skip every vulnerable package, install only clean ones
                 let vuln_names: std::collections::HashSet<String> =
                     hits.iter().map(|h| h.package.clone()).collect();
-                let safe_specs: Vec<String> = install_packages.iter()
+                let safe_specs: Vec<String> = install_packages
+                    .iter()
                     .filter(|spec| {
                         let (name, _) = scan::parse_pkg_spec(spec);
                         !vuln_names.contains(&name)
@@ -283,10 +365,16 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
                     .cloned()
                     .collect();
                 for name in &vuln_names {
-                    println!("  {}  Skipping vulnerable: {}", "✘".bright_red(), name.bold());
+                    println!(
+                        "  {}  Skipping vulnerable: {}",
+                        "✘".bright_red(),
+                        name.bold()
+                    );
                 }
                 if safe_specs.is_empty() {
-                    Logger::raw_dim("  All packages were vulnerable and skipped. Nothing to install.");
+                    Logger::raw_dim(
+                        "  All packages were vulnerable and skipped. Nothing to install.",
+                    );
                     return Ok(());
                 }
                 safe_specs
@@ -309,11 +397,20 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
                         match fix_map.get(&name).and_then(|v| v.clone()) {
                             Some(ver) => {
                                 let new_spec = format_spec_for_ecosystem(&name, &ver, ecosystem);
-                                println!("  {}  Auto-fix: {} → {}", "✔".bright_green(), name.bold(), new_spec.bright_green().bold());
+                                println!(
+                                    "  {}  Auto-fix: {} → {}",
+                                    "✔".bright_green(),
+                                    name.bold(),
+                                    new_spec.bright_green().bold()
+                                );
                                 auto_specs.push(new_spec);
                             }
                             None => {
-                                println!("  {}  No fix available for {} — skipping", "✘".bright_red(), name.bold());
+                                println!(
+                                    "  {}  No fix available for {} — skipping",
+                                    "✘".bright_red(),
+                                    name.bold()
+                                );
                             }
                         }
                     } else {
@@ -341,30 +438,54 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
         // Build and run the real install command in the user's working directory
         let mut cmd_parts = vec![install_action.clone()];
         cmd_parts.extend(pkgs_to_install.iter().cloned());
-        let cmd = build_proxy_cmd(ecosystem, &actual_binary, &cmd_parts);
+        let (program, actual_args) =
+            crate::cli::proxy_pkg_invocation(ecosystem, &actual_binary, &cmd_parts);
+        let cmd = crate::cli::format_pkg_cmd(&program, &actual_args);
         if !args.agent {
             println!();
             Logger::step(&format!("Running: {}", cmd));
             println!();
         }
-        let install_ok = crate::cli::proxy_pkg_cmd(&cmd).is_ok();
+        let install_ok = match crate::cli::proxy_pkg_cmd(ecosystem, &actual_binary, &cmd_parts) {
+            Ok(status) => status.success(),
+            Err(_) => false,
+        };
         if !install_ok && !args.agent {
-            Logger::error(&format!("Failed to execute '{}'", actual_binary));
+            Logger::error(&format!("Command failed: {}", cmd));
         }
 
         if args.agent {
-            let vulns: Vec<serde_json::Value> = hits.iter().map(|h| serde_json::json!({
-                "package":         h.package,
-                "current_version": "",
-                "cve_id":          h.cve_id,
-                "severity":        h.severity,
-                "summary":         h.summary,
-                "safe_version":    h.fixed_version,
-                "fix_cmd":         h.upgrade_cmd
-            })).collect();
-            let has_medium_plus = hits.iter().any(|h| matches!(h.severity, "CRITICAL"|"HIGH"|"MEDIUM"));
-            let status = if hits.is_empty() { "clean" } else if has_medium_plus { "vulnerable" } else { "warnings" };
-            let exit_code: i32 = if hits.is_empty() { 0 } else if has_medium_plus { 2 } else { 1 };
+            let vulns: Vec<serde_json::Value> = hits
+                .iter()
+                .map(|h| {
+                    serde_json::json!({
+                        "package":         h.package,
+                        "current_version": "",
+                        "cve_id":          h.cve_id,
+                        "severity":        h.severity,
+                        "summary":         h.summary,
+                        "safe_version":    h.fixed_version,
+                        "fix_cmd":         h.upgrade_cmd
+                    })
+                })
+                .collect();
+            let has_medium_plus = hits
+                .iter()
+                .any(|h| matches!(h.severity, "CRITICAL" | "HIGH" | "MEDIUM"));
+            let status = if hits.is_empty() {
+                "clean"
+            } else if has_medium_plus {
+                "vulnerable"
+            } else {
+                "warnings"
+            };
+            let exit_code: i32 = if hits.is_empty() {
+                0
+            } else if has_medium_plus {
+                2
+            } else {
+                1
+            };
             let json = serde_json::json!({
                 "status":           status,
                 "packages_checked": install_packages,
@@ -378,12 +499,28 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
     } else {
         // Pass-through: forward all args directly to the real package manager binary.
         // This covers non-install commands: npm run, cargo build, pip list, etc.
-        let cmd = build_proxy_cmd(ecosystem, &actual_binary, &args.passthrough_args[cmd_idx..].to_vec());
+        let passthrough_args = &args.passthrough_args[cmd_idx..];
+        let (program, actual_args) =
+            crate::cli::proxy_pkg_invocation(ecosystem, &actual_binary, passthrough_args);
+        let cmd = crate::cli::format_pkg_cmd(&program, &actual_args);
         println!();
         Logger::step(&format!("Running: {}", cmd));
         println!();
-        if let Err(e) = crate::cli::proxy_pkg_cmd(&cmd) {
-            Logger::error(&format!("Failed to execute '{}': {}", actual_binary, e));
+        match crate::cli::proxy_pkg_cmd(ecosystem, &actual_binary, passthrough_args) {
+            Ok(status) if status.success() => {}
+            Ok(status) => {
+                Logger::error(&format!(
+                    "Command failed with exit code {}: {}",
+                    status
+                        .code()
+                        .map(|c| c.to_string())
+                        .unwrap_or_else(|| "unknown".to_string()),
+                    cmd
+                ));
+            }
+            Err(e) => {
+                Logger::error(&format!("Failed to execute '{}': {}", actual_binary, e));
+            }
         }
     }
 
@@ -401,14 +538,6 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
 /// Ecosystem-specific command shapes:
 /// - `pub` → `<dart|flutter> pub <args>`  (pub is a sub-tool of the Dart SDK)
 /// - all others → `<actual_binary> <args>`
-fn build_proxy_cmd(ecosystem: &str, actual_binary: &str, args: &[String]) -> String {
-    let suffix = args.join(" ");
-    match ecosystem {
-        "pub" => format!("{} pub {}", actual_binary, suffix),
-        _     => format!("{} {}", actual_binary, suffix),
-    }
-}
-
 // ── Interactive vulnerability decision prompt ─────────────────────────────────
 
 #[derive(Debug, Clone)]
@@ -442,9 +571,8 @@ fn ask_vuln_decisions(
     }
 
     // Packages that hit vulnerabilities (by parsed name)
-    let vuln_names: std::collections::HashSet<String> = hits.iter()
-        .map(|h| h.package.clone())
-        .collect();
+    let vuln_names: std::collections::HashSet<String> =
+        hits.iter().map(|h| h.package.clone()).collect();
 
     // ── Summary header ────────────────────────────────────────────────────────
     println!();
@@ -455,20 +583,28 @@ fn ask_vuln_decisions(
     );
 
     for (idx, name) in vuln_names.iter().enumerate() {
-        let (fixed, is_clean) = fix_map.get(name)
+        let (fixed, is_clean) = fix_map
+            .get(name)
             .map(|(v, c)| (v.clone(), *c))
             .unwrap_or((None, true));
         let cves: Vec<_> = hits.iter().filter(|h| &h.package == name).collect();
-        let worst_sev = cves.iter().map(|h| h.severity).fold("INFORMATIONAL", scan::escalate_severity);
+        let worst_sev = cves
+            .iter()
+            .map(|h| h.severity)
+            .fold("INFORMATIONAL", scan::escalate_severity);
         let sev_colored = scan::severity_colored(worst_sev);
         let fix_hint = match fixed.as_deref() {
             Some(f) if is_clean => format!(" → safe: {}", f.bright_green()),
-            Some(f)             => format!(" → reduced risk: {} {}", f.bright_yellow(), "(still has CVEs)".truecolor(160,120,50)),
-            None                => " (no fix available)".truecolor(160,100,50).to_string(),
+            Some(f) => format!(
+                " → reduced risk: {} {}",
+                f.bright_yellow(),
+                "(still has CVEs)".truecolor(160, 120, 50)
+            ),
+            None => " (no fix available)".truecolor(160, 100, 50).to_string(),
         };
         println!(
             "  {}  {}  [{}]  {} CVE(s){}",
-            format!("{:>2}.", idx+1).truecolor(80,80,100),
+            format!("{:>2}.", idx + 1).truecolor(80, 80, 100),
             name.bold(),
             sev_colored,
             cves.len(),
@@ -478,7 +614,10 @@ fn ask_vuln_decisions(
     println!();
 
     // ── Apply-to-all shortcut ─────────────────────────────────────────────────
-    println!("  {}  Apply same action to ALL infected packages?", "→".truecolor(100,100,140));
+    println!(
+        "  {}  Apply same action to ALL infected packages?",
+        "→".truecolor(100, 100, 140)
+    );
     println!(
         "     {}  Install anyway (vulnerable)   {}  Skip all   {}  Install recommended   {}  Decide per package\n",
         "[1]".bold().bright_yellow(),
@@ -511,10 +650,11 @@ fn ask_vuln_decisions(
                     let fixed = fix_map.get(name).and_then(|(v, _)| v.clone());
                     match fixed {
                         Some(f) => PkgAction::InstallFixed(f),
-                        None    => {
+                        None => {
                             println!(
                                 "  {} No fix for {} — falling back to: install vulnerable",
-                                "⚠".bright_yellow(), name.bold()
+                                "⚠".bright_yellow(),
+                                name.bold()
                             );
                             PkgAction::InstallVulnerable
                         }
@@ -528,13 +668,11 @@ fn ask_vuln_decisions(
         // Per-package prompts
         println!();
         for name in &vuln_names {
-            let (fixed, is_clean) = fix_map.get(name)
+            let (fixed, is_clean) = fix_map
+                .get(name)
                 .map(|(v, c)| (v.clone(), *c))
                 .unwrap_or((None, true));
-            println!(
-                "\n  Package: {}",
-                name.bold().bright_white()
-            );
+            println!("\n  Package: {}", name.bold().bright_white());
             match &fixed {
                 Some(f) if is_clean => println!(
                     "  {}  Install anyway   {}  Skip   {}  Install {} {}",
@@ -550,7 +688,7 @@ fn ask_vuln_decisions(
                     "[2]".bold().bright_red(),
                     "[3]".bold().bright_yellow(),
                     f.bright_yellow().bold(),
-                    "(reduces risk, still has CVEs)".truecolor(180,140,50)
+                    "(reduces risk, still has CVEs)".truecolor(180, 140, 50)
                 ),
                 None => println!(
                     "  {}  Install anyway (no fix available)   {}  Skip",
@@ -558,15 +696,18 @@ fn ask_vuln_decisions(
                     "[2]".bold().bright_red(),
                 ),
             }
-            print!("  Choice ({}): ", if fixed.is_some() { "1/2/3" } else { "1/2" });
+            print!(
+                "  Choice ({}): ",
+                if fixed.is_some() { "1/2/3" } else { "1/2" }
+            );
             io::stdout().flush().ok();
 
             let mut line = String::new();
             io::stdin().read_line(&mut line).ok();
             let action = match (line.trim(), &fixed) {
-                ("2", _)          => PkgAction::Skip,
-                ("3", Some(f))    => PkgAction::InstallFixed(f.clone()),
-                _                 => PkgAction::InstallVulnerable,
+                ("2", _) => PkgAction::Skip,
+                ("3", Some(f)) => PkgAction::InstallFixed(f.clone()),
+                _ => PkgAction::InstallVulnerable,
             };
             decisions.insert(name.clone(), action);
         }
@@ -574,14 +715,19 @@ fn ask_vuln_decisions(
 
     // ── Print decision summary ────────────────────────────────────────────────
     println!();
-    println!("  {}  Decision summary:\n", "✦".truecolor(100,160,255));
+    println!("  {}  Decision summary:\n", "✦".truecolor(100, 160, 255));
     for (name, action) in &decisions {
         let label = match action {
-            PkgAction::InstallVulnerable   => "install vulnerable".bright_yellow().to_string(),
-            PkgAction::Skip                => "skip".bright_red().to_string(),
-            PkgAction::InstallFixed(v)     => format!("install {}", v.bright_green()),
+            PkgAction::InstallVulnerable => "install vulnerable".bright_yellow().to_string(),
+            PkgAction::Skip => "skip".bright_red().to_string(),
+            PkgAction::InstallFixed(v) => format!("install {}", v.bright_green()),
         };
-        println!("     {}  {} → {}", "·".truecolor(60,60,80), name.bold(), label);
+        println!(
+            "     {}  {} → {}",
+            "·".truecolor(60, 60, 80),
+            name.bold(),
+            label
+        );
     }
     println!();
 
@@ -594,16 +740,15 @@ fn ask_vuln_decisions(
         if let Some(action) = decisions.get(&pkg_name) {
             match action {
                 PkgAction::Skip => {
-                    println!(
-                        "  {} Skipping {}",
-                        "✘".bright_red(), pkg_name.bold()
-                    );
+                    println!("  {} Skipping {}", "✘".bright_red(), pkg_name.bold());
                 }
                 PkgAction::InstallFixed(ver) => {
                     let new_spec = format_spec_for_ecosystem(&pkg_name, ver, ecosystem);
                     println!(
                         "  {} {} → {}",
-                        "✔".bright_green(), pkg_name.bold(), new_spec.bright_green().bold()
+                        "✔".bright_green(),
+                        pkg_name.bold(),
+                        new_spec.bright_green().bold()
                     );
                     final_specs.push(new_spec);
                 }
@@ -623,13 +768,12 @@ fn ask_vuln_decisions(
 fn format_spec_for_ecosystem(name: &str, ver: &str, ecosystem: &str) -> String {
     match ecosystem {
         "pip" | "pip3" | "uv" | "poetry" => format!("{}=={}", name, ver),
-        "gem"                             => format!("{}:{}", name, ver),
-        "composer"                        => format!("{}:{}", name, ver),
-        "nuget"                           => format!("{} --version {}", name, ver),
-        _                                 => format!("{}@{}", name, ver), // npm/cargo/go/bun/pnpm/yarn/hex/pub
+        "gem" => format!("{}:{}", name, ver),
+        "composer" => format!("{}:{}", name, ver),
+        "nuget" => format!("{} --version {}", name, ver),
+        _ => format!("{}@{}", name, ver), // npm/cargo/go/bun/pnpm/yarn/hex/pub
     }
 }
-
 
 pub fn execute_root_mode() -> Result<(), InfynonError> {
     let args = RootArgs::parse();
@@ -659,61 +803,107 @@ fn execute_api_command(action: ApiCommands) {
             run_api_tui(flow_id.as_deref());
         }
 
-        ApiCommands::Node { action } => match action {
-            NodeAction::Create { ai } => node::cmd_node_create(ai.as_deref()),
-            NodeAction::Get { id } => node::cmd_node_get(&id),
-            NodeAction::List => node::cmd_node_list(),
-            NodeAction::Remove { id } => node::cmd_node_remove(&id),
-            NodeAction::Clone { id, new_id } => node::cmd_node_clone(&id, &new_id),
-            NodeAction::Run { id, base_url, set, prompt } => {
-                let url = match base_url
-                    .or_else(|| crate::api::commands::env::env_base_url())
-                {
-                    Some(u) => u,
-                    None => {
-                        crate::tui::logger::Logger::error("BASE_URL is not set. Add it to .infynon/.env or pass --base-url <url>");
-                        return;
-                    }
-                };
-                node::cmd_node_run(&id, &url, &set, prompt);
-            }
-            NodeAction::Export { id, format, base_url } => {
-                node::cmd_node_export(&id, &format, base_url.as_deref())
-            }
-            NodeAction::Assertion { node_id, action } => match action {
-                AssertionAction::List => node::cmd_node_assertion_list(&node_id),
-                AssertionAction::Enable { index } => node::cmd_node_assertion_enable(&node_id, index),
-                AssertionAction::Disable { index } => node::cmd_node_assertion_disable(&node_id, index),
-                AssertionAction::Toggle { index } => node::cmd_node_assertion_toggle(&node_id, index),
-                AssertionAction::Add { check, on_fail } => node::cmd_node_assertion_add(&node_id, &check, &on_fail),
-                AssertionAction::Remove { index } => node::cmd_node_assertion_remove(&node_id, index),
-            },
-            NodeAction::Prompt { node_id, action } => match action {
-                PromptAction::List => node::cmd_node_prompt_list(&node_id),
-                PromptAction::Add { var, label, secret, default, prompt_type, options } => {
-                    node::cmd_node_prompt_add(&node_id, &var, &label, secret, default, &prompt_type, options)
+        ApiCommands::Node { action } => {
+            match action {
+                NodeAction::Create { ai } => node::cmd_node_create(ai.as_deref()),
+                NodeAction::Get { id } => node::cmd_node_get(&id),
+                NodeAction::List => node::cmd_node_list(),
+                NodeAction::Remove { id } => node::cmd_node_remove(&id),
+                NodeAction::Clone { id, new_id } => node::cmd_node_clone(&id, &new_id),
+                NodeAction::Run {
+                    id,
+                    base_url,
+                    set,
+                    prompt,
+                } => {
+                    let url = match base_url.or_else(|| crate::api::commands::env::env_base_url()) {
+                        Some(u) => u,
+                        None => {
+                            crate::tui::logger::Logger::error("BASE_URL is not set. Add it to .infynon/.env or pass --base-url <url>");
+                            return;
+                        }
+                    };
+                    node::cmd_node_run(&id, &url, &set, prompt);
                 }
-                PromptAction::Remove { index } => node::cmd_node_prompt_remove(&node_id, index),
-            },
-        },
+                NodeAction::Export {
+                    id,
+                    format,
+                    base_url,
+                } => node::cmd_node_export(&id, &format, base_url.as_deref()),
+                NodeAction::Assertion { node_id, action } => match action {
+                    AssertionAction::List => node::cmd_node_assertion_list(&node_id),
+                    AssertionAction::Enable { index } => {
+                        node::cmd_node_assertion_enable(&node_id, index)
+                    }
+                    AssertionAction::Disable { index } => {
+                        node::cmd_node_assertion_disable(&node_id, index)
+                    }
+                    AssertionAction::Toggle { index } => {
+                        node::cmd_node_assertion_toggle(&node_id, index)
+                    }
+                    AssertionAction::Add { check, on_fail } => {
+                        node::cmd_node_assertion_add(&node_id, &check, &on_fail)
+                    }
+                    AssertionAction::Remove { index } => {
+                        node::cmd_node_assertion_remove(&node_id, index)
+                    }
+                },
+                NodeAction::Prompt { node_id, action } => match action {
+                    PromptAction::List => node::cmd_node_prompt_list(&node_id),
+                    PromptAction::Add {
+                        var,
+                        label,
+                        secret,
+                        default,
+                        prompt_type,
+                        options,
+                    } => node::cmd_node_prompt_add(
+                        &node_id,
+                        &var,
+                        &label,
+                        secret,
+                        default,
+                        &prompt_type,
+                        options,
+                    ),
+                    PromptAction::Remove { index } => node::cmd_node_prompt_remove(&node_id, index),
+                },
+            }
+        }
 
         ApiCommands::Flow { action } => match action {
             FlowAction::Create { name, ai } => flow::cmd_flow_create(&name, ai.as_deref()),
             FlowAction::List => flow::cmd_flow_list(),
             FlowAction::Show { id } => flow::cmd_flow_show(&id),
-            FlowAction::Run { id, base_url, set, output } => flow::cmd_flow_run(&id, base_url.as_deref(), &set, output.as_deref()),
-            FlowAction::RunAll { base_url, set, output } => flow::cmd_flow_run_all(base_url.as_deref(), &set, output.as_deref()),
+            FlowAction::Run {
+                id,
+                base_url,
+                set,
+                output,
+            } => flow::cmd_flow_run(&id, base_url.as_deref(), &set, output.as_deref()),
+            FlowAction::RunAll {
+                base_url,
+                set,
+                output,
+            } => flow::cmd_flow_run_all(base_url.as_deref(), &set, output.as_deref()),
             FlowAction::Remove { id } => flow::cmd_flow_remove(&id),
-            FlowAction::Merge { flow1, flow2, join_at, name } => {
-                flow::cmd_flow_merge(&flow1, &flow2, &join_at, &name)
-            }
+            FlowAction::Merge {
+                flow1,
+                flow2,
+                join_at,
+                name,
+            } => flow::cmd_flow_merge(&flow1, &flow2, &join_at, &name),
         },
 
         ApiCommands::Validate => validate::cmd_validate(),
 
-        ApiCommands::Attach { from, to, carry, condition, ai } => {
-            attach::cmd_attach(&from, &to, &carry, condition.as_deref(), ai)
-        }
+        ApiCommands::Attach {
+            from,
+            to,
+            carry,
+            condition,
+            ai,
+        } => attach::cmd_attach(&from, &to, &carry, condition.as_deref(), ai),
 
         ApiCommands::Detach { from, to } => attach::cmd_detach(&from, &to),
 
@@ -730,8 +920,20 @@ fn execute_api_command(action: ApiCommands) {
             AiAction::Branch { node_id } => ai_cmd::cmd_ai_branch(&node_id),
         },
 
-        ApiCommands::Import { spec, flow, base_url, prefix, dry_run } => {
-            import::cmd_import(&spec, flow.as_deref(), base_url.as_deref(), prefix.as_deref(), dry_run);
+        ApiCommands::Import {
+            spec,
+            flow,
+            base_url,
+            prefix,
+            dry_run,
+        } => {
+            import::cmd_import(
+                &spec,
+                flow.as_deref(),
+                base_url.as_deref(),
+                prefix.as_deref(),
+                dry_run,
+            );
         }
 
         ApiCommands::Env { action } => {
@@ -782,7 +984,9 @@ fn run_api_tui(flow_id: Option<&str>) {
                 // Only handle Press events — ignore Repeat and Release (Windows key-repeat fix)
                 if key.kind == crossterm::event::KeyEventKind::Press {
                     if key.code == KeyCode::Char('c')
-                        && key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL)
+                        && key
+                            .modifiers
+                            .contains(crossterm::event::KeyModifiers::CONTROL)
                     {
                         break;
                     }

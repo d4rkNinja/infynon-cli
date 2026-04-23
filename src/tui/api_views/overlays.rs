@@ -1,9 +1,9 @@
 use ratatui::{
-    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap},
+    Frame,
 };
 
 use crate::tui::api_app::{ApiApp, AttachMode, NodeField};
@@ -28,7 +28,12 @@ pub(super) fn render_node_detail_overlay(f: &mut Frame, app: &ApiApp, area: Rect
     let h = (area.height * 3 / 4).max(16).min(28);
     let x = area.x + (area.width.saturating_sub(w)) / 2;
     let y = area.y + (area.height.saturating_sub(h)) / 2;
-    let overlay_area = Rect { x, y, width: w, height: h };
+    let overlay_area = Rect {
+        x,
+        y,
+        width: w,
+        height: h,
+    };
 
     f.render_widget(Clear, overlay_area);
 
@@ -38,9 +43,15 @@ pub(super) fn render_node_detail_overlay(f: &mut Frame, app: &ApiApp, area: Rect
     // ── Title line: method badge + path ────────────────────────────────────
     lines.push(Line::from(vec![
         Span::styled("  [", Style::default().fg(DIMMER)),
-        Span::styled(&node.method, Style::default().fg(mc).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            &node.method,
+            Style::default().fg(mc).add_modifier(Modifier::BOLD),
+        ),
         Span::styled("] ", Style::default().fg(DIMMER)),
-        Span::styled(truncate(&node.path, (w as usize).saturating_sub(10)), Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            truncate(&node.path, (w as usize).saturating_sub(10)),
+            Style::default().fg(CYAN).add_modifier(Modifier::BOLD),
+        ),
     ]));
 
     // ── Description (if present) ───────────────────────────────────────────
@@ -48,7 +59,10 @@ pub(super) fn render_node_detail_overlay(f: &mut Frame, app: &ApiApp, area: Rect
         if !desc.is_empty() {
             lines.push(Line::from(vec![
                 Span::styled("  ", Style::default()),
-                Span::styled(truncate(desc, (w as usize).saturating_sub(6)), Style::default().fg(TEXT_DIM)),
+                Span::styled(
+                    truncate(desc, (w as usize).saturating_sub(6)),
+                    Style::default().fg(TEXT_DIM),
+                ),
             ]));
         }
     }
@@ -62,7 +76,10 @@ pub(super) fn render_node_detail_overlay(f: &mut Frame, app: &ApiApp, area: Rect
             lines.push(Line::from(vec![
                 Span::styled("    ", Style::default()),
                 Span::styled(format!("{}: ", k), Style::default().fg(TEXT_DIM)),
-                Span::styled(truncate(v, (w as usize).saturating_sub(20)), Style::default().fg(DIM)),
+                Span::styled(
+                    truncate(v, (w as usize).saturating_sub(20)),
+                    Style::default().fg(DIM),
+                ),
             ]));
         }
         lines.push(blank_line());
@@ -78,7 +95,10 @@ pub(super) fn render_node_detail_overlay(f: &mut Frame, app: &ApiApp, area: Rect
             for line in pretty.lines().take(8) {
                 lines.push(Line::from(vec![
                     Span::styled("    ", Style::default()),
-                    Span::styled(truncate(line, (w as usize).saturating_sub(12)), Style::default().fg(TEXT_DIM)),
+                    Span::styled(
+                        truncate(line, (w as usize).saturating_sub(12)),
+                        Style::default().fg(TEXT_DIM),
+                    ),
                 ]));
             }
             let total = pretty.lines().count();
@@ -131,7 +151,8 @@ pub(super) fn render_node_detail_overlay(f: &mut Frame, app: &ApiApp, area: Rect
         if let Some(step) = run.steps.iter().find(|s| s.node_id == node.id) {
             lines.push(blank_line());
             lines.push(section_header("Last Run", w as usize));
-            let status_str = step.status_code
+            let status_str = step
+                .status_code
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| "ERR".to_string());
             let sc = status_code_color(step.status_code);
@@ -139,11 +160,17 @@ pub(super) fn render_node_detail_overlay(f: &mut Frame, app: &ApiApp, area: Rect
             let pass_col = if step.passed { GREEN } else { RED };
             lines.push(Line::from(vec![
                 Span::styled("    ", Style::default()),
-                Span::styled(pass_icon, Style::default().fg(pass_col).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    pass_icon,
+                    Style::default().fg(pass_col).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("  ", Style::default()),
                 Span::styled(status_str, Style::default().fg(sc)),
                 Span::styled("  ", Style::default()),
-                Span::styled(format!("{}ms", step.duration_ms), Style::default().fg(TEXT_DIM)),
+                Span::styled(
+                    format!("{}ms", step.duration_ms),
+                    Style::default().fg(TEXT_DIM),
+                ),
             ]));
         }
     }
@@ -152,7 +179,10 @@ pub(super) fn render_node_detail_overlay(f: &mut Frame, app: &ApiApp, area: Rect
     lines.push(blank_line());
     lines.push(Line::from(vec![
         Span::styled("  [", Style::default().fg(YELLOW)),
-        Span::styled("Enter", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "Enter",
+            Style::default().fg(YELLOW).add_modifier(Modifier::BOLD),
+        ),
         Span::styled("] close", Style::default().fg(DIM)),
     ]));
 
@@ -182,7 +212,12 @@ pub(super) fn render_attach_overlay(f: &mut Frame, app: &ApiApp, area: Rect) {
     let h = 7u16;
     let x = area.x + (area.width.saturating_sub(w)) / 2;
     let y = area.y + (area.height.saturating_sub(h)) / 2;
-    let overlay_area = Rect { x, y, width: w, height: h };
+    let overlay_area = Rect {
+        x,
+        y,
+        width: w,
+        height: h,
+    };
 
     f.render_widget(Clear, overlay_area);
 
@@ -190,32 +225,43 @@ pub(super) fn render_attach_overlay(f: &mut Frame, app: &ApiApp, area: Rect) {
         blank_line(),
         Line::from(vec![
             Span::styled("  From: ", Style::default().fg(DIM)),
-            Span::styled(&from_id, Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                &from_id,
+                Style::default().fg(CYAN).add_modifier(Modifier::BOLD),
+            ),
         ]),
         Line::from(vec![
             Span::styled("  To:   ", Style::default().fg(DIM)),
-            Span::styled(format!("{}▌", app.attach_input), Style::default().fg(YELLOW)),
+            Span::styled(
+                format!("{}▌", app.attach_input),
+                Style::default().fg(YELLOW),
+            ),
         ]),
         blank_line(),
         Line::from(vec![
             Span::styled("  [", Style::default().fg(YELLOW)),
-            Span::styled("Enter", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Enter",
+                Style::default().fg(YELLOW).add_modifier(Modifier::BOLD),
+            ),
             Span::styled("] attach  ", Style::default().fg(DIM)),
             Span::styled("[", Style::default().fg(YELLOW)),
-            Span::styled("Esc", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Esc",
+                Style::default().fg(YELLOW).add_modifier(Modifier::BOLD),
+            ),
             Span::styled("] cancel", Style::default().fg(DIM)),
         ]),
     ];
 
-    let p = Paragraph::new(lines)
-        .block(
-            Block::default()
-                .title(Span::styled(" Attach Node ", title_style()))
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(CYAN))
-                .style(Style::default().bg(BG)),
-        );
+    let p = Paragraph::new(lines).block(
+        Block::default()
+            .title(Span::styled(" Attach Node ", title_style()))
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(CYAN))
+            .style(Style::default().bg(BG)),
+    );
 
     f.render_widget(p, overlay_area);
 }
@@ -227,7 +273,12 @@ pub(super) fn render_help_overlay(f: &mut Frame, area: Rect) {
     let h = (area.height * 4 / 5).max(22).min(30);
     let x = area.x + (area.width.saturating_sub(w)) / 2;
     let y = area.y + (area.height.saturating_sub(h)) / 2;
-    let overlay_area = Rect { x, y, width: w, height: h };
+    let overlay_area = Rect {
+        x,
+        y,
+        width: w,
+        height: h,
+    };
 
     f.render_widget(Clear, overlay_area);
 
@@ -348,12 +399,18 @@ fn shortcut_line(key: &str, desc: &str) -> Line<'static> {
 
 pub(super) fn render_settings(f: &mut Frame, app: &ApiApp, area: Rect) {
     let md_check = if app.config_output_markdown {
-        Span::styled("[x]", Style::default().fg(GREEN).add_modifier(Modifier::BOLD))
+        Span::styled(
+            "[x]",
+            Style::default().fg(GREEN).add_modifier(Modifier::BOLD),
+        )
     } else {
         Span::styled("[ ]", Style::default().fg(TEXT_DIM))
     };
     let pdf_check = if app.config_output_pdf {
-        Span::styled("[x]", Style::default().fg(GREEN).add_modifier(Modifier::BOLD))
+        Span::styled(
+            "[x]",
+            Style::default().fg(GREEN).add_modifier(Modifier::BOLD),
+        )
     } else {
         Span::styled("[ ]", Style::default().fg(TEXT_DIM))
     };
@@ -362,7 +419,10 @@ pub(super) fn render_settings(f: &mut Frame, app: &ApiApp, area: Rect) {
         blank_line(),
         Line::from(vec![
             Span::styled("  ", Style::default()),
-            Span::styled("Weave Configuration", Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Weave Configuration",
+                Style::default().fg(CYAN).add_modifier(Modifier::BOLD),
+            ),
         ]),
         blank_line(),
         section_header("Run Output", area.width as usize),
@@ -419,11 +479,18 @@ pub(super) fn render_node_field_editor_modal(f: &mut Frame, app: &ApiApp, area: 
         NodeField::Method => "Method",
     };
 
-    let w = (area.width * 55 / 100).max(50).min(area.width.saturating_sub(4));
+    let w = (area.width * 55 / 100)
+        .max(50)
+        .min(area.width.saturating_sub(4));
     let h = 9u16;
     let x = area.x + (area.width.saturating_sub(w)) / 2;
     let y = area.y + (area.height.saturating_sub(h)) / 2;
-    let overlay = Rect { x, y, width: w, height: h };
+    let overlay = Rect {
+        x,
+        y,
+        width: w,
+        height: h,
+    };
 
     f.render_widget(Clear, overlay);
 
@@ -444,25 +511,30 @@ pub(super) fn render_node_field_editor_modal(f: &mut Frame, app: &ApiApp, area: 
         blank_line(),
         Line::from(vec![
             Span::styled("  [", Style::default().fg(YELLOW)),
-            Span::styled("Enter", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Enter",
+                Style::default().fg(YELLOW).add_modifier(Modifier::BOLD),
+            ),
             Span::styled("] save  ", Style::default().fg(DIM)),
             Span::styled("[", Style::default().fg(YELLOW)),
-            Span::styled("Esc", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Esc",
+                Style::default().fg(YELLOW).add_modifier(Modifier::BOLD),
+            ),
             Span::styled("] cancel", Style::default().fg(DIM)),
         ]),
         blank_line(),
     ];
 
     let title = format!(" Edit {} ", label);
-    let p = Paragraph::new(lines)
-        .block(
-            Block::default()
-                .title(Span::styled(title, title_style()))
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(CYAN))
-                .style(Style::default().bg(BG)),
-        );
+    let p = Paragraph::new(lines).block(
+        Block::default()
+            .title(Span::styled(title, title_style()))
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(CYAN))
+            .style(Style::default().bg(BG)),
+    );
 
     f.render_widget(p, overlay);
 }

@@ -1,15 +1,15 @@
 use serde_json::Value;
-use std::path::Path;
-use std::fs;
 use std::collections::HashSet;
+use std::fs;
+use std::path::Path;
 
 /// A resolved package entry from a lock file or manifest.
 #[derive(Debug, Clone)]
 pub struct LockedPackage {
-    pub name:      String,
-    pub version:   String,
+    pub name: String,
+    pub version: String,
     pub ecosystem: String,
-    pub source:    String, // which file it came from
+    pub source: String, // which file it came from
 }
 
 /// Detect all lock/manifest files and parse pinned packages.
@@ -32,7 +32,9 @@ pub fn detect_locked_packages(custom_file: Option<&str>) -> Vec<LockedPackage> {
         packages.extend(parse_pnpm_lock("pnpm-lock.yaml"));
     }
     // bun.lockb is binary — fall back to package.json for bun
-    if Path::new("bun.lockb").exists() || (Path::new("package.json").exists() && !Path::new("package-lock.json").exists()) {
+    if Path::new("bun.lockb").exists()
+        || (Path::new("package.json").exists() && !Path::new("package-lock.json").exists())
+    {
         packages.extend(parse_package_json("package.json"));
     }
 
@@ -96,24 +98,27 @@ pub fn detect_locked_packages(custom_file: Option<&str>) -> Vec<LockedPackage> {
 
 /// If user passed `--pkg-file`, detect type by extension/name and parse.
 fn parse_custom_file(path: &str) -> Vec<LockedPackage> {
-    let name = Path::new(path).file_name().and_then(|n| n.to_str()).unwrap_or("");
+    let name = Path::new(path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("");
     match name {
-        "package-lock.json"      => parse_npm_lock(path),
-        "yarn.lock"              => parse_yarn_lock(path),
-        "pnpm-lock.yaml"         => parse_pnpm_lock(path),
-        "package.json"           => parse_package_json(path),
-        "requirements.txt"       => parse_requirements_txt(path),
-        "pyproject.toml"         => parse_pyproject_toml(path),
-        "poetry.lock"            => parse_poetry_lock(path),
-        "uv.lock"                => parse_uv_lock(path),
-        "Cargo.lock"             => parse_cargo_lock(path),
-        "go.sum"                 => parse_go_sum(path),
-        "go.mod"                 => parse_go_mod(path),
-        "Gemfile.lock"           => parse_gemfile_lock(path),
-        "composer.lock"          => parse_composer_lock(path),
-        "packages.lock.json"     => parse_nuget_lock(path),
-        "mix.lock"               => parse_mix_lock(path),
-        "pubspec.lock"           => parse_pubspec_lock(path),
+        "package-lock.json" => parse_npm_lock(path),
+        "yarn.lock" => parse_yarn_lock(path),
+        "pnpm-lock.yaml" => parse_pnpm_lock(path),
+        "package.json" => parse_package_json(path),
+        "requirements.txt" => parse_requirements_txt(path),
+        "pyproject.toml" => parse_pyproject_toml(path),
+        "poetry.lock" => parse_poetry_lock(path),
+        "uv.lock" => parse_uv_lock(path),
+        "Cargo.lock" => parse_cargo_lock(path),
+        "go.sum" => parse_go_sum(path),
+        "go.mod" => parse_go_mod(path),
+        "Gemfile.lock" => parse_gemfile_lock(path),
+        "composer.lock" => parse_composer_lock(path),
+        "packages.lock.json" => parse_nuget_lock(path),
+        "mix.lock" => parse_mix_lock(path),
+        "pubspec.lock" => parse_pubspec_lock(path),
         _ => {
             eprintln!("Unsupported file type: {}", path);
             vec![]
@@ -125,20 +130,36 @@ fn parse_custom_file(path: &str) -> Vec<LockedPackage> {
 
 fn parse_npm_lock(path: &str) -> Vec<LockedPackage> {
     let mut out = Vec::new();
-    let Ok(content) = fs::read_to_string(path) else { return out; };
-    let Ok(json): Result<Value, _> = serde_json::from_str(&content) else { return out; };
+    let Ok(content) = fs::read_to_string(path) else {
+        return out;
+    };
+    let Ok(json): Result<Value, _> = serde_json::from_str(&content) else {
+        return out;
+    };
     if let Some(packages) = json.get("packages").and_then(|p| p.as_object()) {
         for (key, val) in packages {
             let name = key.trim_start_matches("node_modules/");
-            if name.is_empty() { continue; }
+            if name.is_empty() {
+                continue;
+            }
             if let Some(version) = val.get("version").and_then(|v| v.as_str()) {
-                out.push(LockedPackage { name: name.to_string(), version: version.to_string(), ecosystem: "npm".to_string(), source: path.to_string() });
+                out.push(LockedPackage {
+                    name: name.to_string(),
+                    version: version.to_string(),
+                    ecosystem: "npm".to_string(),
+                    source: path.to_string(),
+                });
             }
         }
     } else if let Some(deps) = json.get("dependencies").and_then(|d| d.as_object()) {
         for (name, val) in deps {
             if let Some(version) = val.get("version").and_then(|v| v.as_str()) {
-                out.push(LockedPackage { name: name.clone(), version: version.to_string(), ecosystem: "npm".to_string(), source: path.to_string() });
+                out.push(LockedPackage {
+                    name: name.clone(),
+                    version: version.to_string(),
+                    ecosystem: "npm".to_string(),
+                    source: path.to_string(),
+                });
             }
         }
     }
@@ -147,14 +168,28 @@ fn parse_npm_lock(path: &str) -> Vec<LockedPackage> {
 
 fn parse_package_json(path: &str) -> Vec<LockedPackage> {
     let mut out = Vec::new();
-    let Ok(content) = fs::read_to_string(path) else { return out; };
-    let Ok(json): Result<Value, _> = serde_json::from_str(&content) else { return out; };
+    let Ok(content) = fs::read_to_string(path) else {
+        return out;
+    };
+    let Ok(json): Result<Value, _> = serde_json::from_str(&content) else {
+        return out;
+    };
     for key in &["dependencies", "devDependencies", "peerDependencies"] {
         if let Some(deps) = json.get(key).and_then(|d| d.as_object()) {
             for (name, version) in deps {
-                let ver = version.as_str().unwrap_or("").trim_start_matches('^').trim_start_matches('~').to_string();
+                let ver = version
+                    .as_str()
+                    .unwrap_or("")
+                    .trim_start_matches('^')
+                    .trim_start_matches('~')
+                    .to_string();
                 if !ver.is_empty() && ver != "*" {
-                    out.push(LockedPackage { name: name.clone(), version: ver, ecosystem: "npm".to_string(), source: path.to_string() });
+                    out.push(LockedPackage {
+                        name: name.clone(),
+                        version: ver,
+                        ecosystem: "npm".to_string(),
+                        source: path.to_string(),
+                    });
                 }
             }
         }
@@ -164,7 +199,9 @@ fn parse_package_json(path: &str) -> Vec<LockedPackage> {
 
 fn parse_yarn_lock(path: &str) -> Vec<LockedPackage> {
     let mut out = Vec::new();
-    let Ok(content) = fs::read_to_string(path) else { return out; };
+    let Ok(content) = fs::read_to_string(path) else {
+        return out;
+    };
     let mut current_name: Option<String> = None;
     for line in content.lines() {
         let line = line.trim();
@@ -185,12 +222,23 @@ fn parse_yarn_lock(path: &str) -> Vec<LockedPackage> {
             } else {
                 entry.to_string()
             };
-            if !name.is_empty() { current_name = Some(name); }
+            if !name.is_empty() {
+                current_name = Some(name);
+            }
         } else if line.starts_with("version") {
             if let Some(ref name) = current_name {
-                let version = line.trim_start_matches("version").trim().trim_matches('"').to_string();
+                let version = line
+                    .trim_start_matches("version")
+                    .trim()
+                    .trim_matches('"')
+                    .to_string();
                 if !version.is_empty() {
-                    out.push(LockedPackage { name: name.clone(), version, ecosystem: "npm".to_string(), source: path.to_string() });
+                    out.push(LockedPackage {
+                        name: name.clone(),
+                        version,
+                        ecosystem: "npm".to_string(),
+                        source: path.to_string(),
+                    });
                 }
             }
         }
@@ -200,19 +248,31 @@ fn parse_yarn_lock(path: &str) -> Vec<LockedPackage> {
 
 fn parse_pnpm_lock(path: &str) -> Vec<LockedPackage> {
     let mut out = Vec::new();
-    let Ok(content) = fs::read_to_string(path) else { return out; };
+    let Ok(content) = fs::read_to_string(path) else {
+        return out;
+    };
     // YAML: look for `    /name@version:` patterns under `packages:`
     let mut in_packages = false;
     for line in content.lines() {
-        if line.starts_with("packages:") { in_packages = true; continue; }
-        if in_packages && !line.starts_with(' ') { in_packages = false; }
+        if line.starts_with("packages:") {
+            in_packages = true;
+            continue;
+        }
+        if in_packages && !line.starts_with(' ') {
+            in_packages = false;
+        }
         if in_packages && line.trim().ends_with(':') {
             let entry = line.trim().trim_end_matches(':').trim_start_matches('/');
             if let Some(at_pos) = entry.rfind('@') {
                 let name = &entry[..at_pos];
-                let version = &entry[at_pos+1..];
+                let version = &entry[at_pos + 1..];
                 if !name.is_empty() && !version.is_empty() {
-                    out.push(LockedPackage { name: name.to_string(), version: version.to_string(), ecosystem: "npm".to_string(), source: path.to_string() });
+                    out.push(LockedPackage {
+                        name: name.to_string(),
+                        version: version.to_string(),
+                        ecosystem: "npm".to_string(),
+                        source: path.to_string(),
+                    });
                 }
             }
         }
@@ -222,12 +282,21 @@ fn parse_pnpm_lock(path: &str) -> Vec<LockedPackage> {
 
 fn parse_requirements_txt(path: &str) -> Vec<LockedPackage> {
     let mut out = Vec::new();
-    let Ok(content) = fs::read_to_string(path) else { return out; };
+    let Ok(content) = fs::read_to_string(path) else {
+        return out;
+    };
     for line in content.lines() {
         let line = line.trim();
-        if line.is_empty() || line.starts_with('#') || line.starts_with('-') { continue; }
+        if line.is_empty() || line.starts_with('#') || line.starts_with('-') {
+            continue;
+        }
         if let Some((name, version)) = line.split_once("==") {
-            out.push(LockedPackage { name: name.trim().to_string(), version: version.trim().to_string(), ecosystem: "PyPI".to_string(), source: path.to_string() });
+            out.push(LockedPackage {
+                name: name.trim().to_string(),
+                version: version.trim().to_string(),
+                ecosystem: "PyPI".to_string(),
+                source: path.to_string(),
+            });
         }
     }
     out
@@ -235,7 +304,9 @@ fn parse_requirements_txt(path: &str) -> Vec<LockedPackage> {
 
 fn parse_pyproject_toml(path: &str) -> Vec<LockedPackage> {
     let mut out = Vec::new();
-    let Ok(content) = fs::read_to_string(path) else { return out; };
+    let Ok(content) = fs::read_to_string(path) else {
+        return out;
+    };
     let src = path.to_string();
     let lines: Vec<&str> = content.lines().collect();
 
@@ -265,14 +336,21 @@ fn parse_pyproject_toml(path: &str) -> Vec<LockedPackage> {
                         // Could be single-line or start of multi-line array
                         let array_content = if rest.contains(']') {
                             // Single-line: dependencies = ["a>=1", "b>=2"]
-                            rest.trim_start_matches('[').trim_end_matches(']').to_string()
+                            rest.trim_start_matches('[')
+                                .trim_end_matches(']')
+                                .to_string()
                         } else {
                             // Start of multi-line array
                             in_array = true;
                             rest.trim_start_matches('[').to_string()
                         };
                         for dep in parse_pep621_dep_list(&array_content) {
-                            out.push(LockedPackage { name: dep.0, version: dep.1, ecosystem: "PyPI".to_string(), source: src.clone() });
+                            out.push(LockedPackage {
+                                name: dep.0,
+                                version: dep.1,
+                                ecosystem: "PyPI".to_string(),
+                                source: src.clone(),
+                            });
                         }
                         continue;
                     }
@@ -288,13 +366,20 @@ fn parse_pyproject_toml(path: &str) -> Vec<LockedPackage> {
                 let val = val.trim();
                 if val.starts_with('[') {
                     let array_content = if val.contains(']') {
-                        val.trim_start_matches('[').trim_end_matches(']').to_string()
+                        val.trim_start_matches('[')
+                            .trim_end_matches(']')
+                            .to_string()
                     } else {
                         in_array = true;
                         val.trim_start_matches('[').to_string()
                     };
                     for dep in parse_pep621_dep_list(&array_content) {
-                        out.push(LockedPackage { name: dep.0, version: dep.1, ecosystem: "PyPI".to_string(), source: src.clone() });
+                        out.push(LockedPackage {
+                            name: dep.0,
+                            version: dep.1,
+                            ecosystem: "PyPI".to_string(),
+                            source: src.clone(),
+                        });
                     }
                     continue;
                 }
@@ -306,24 +391,38 @@ fn parse_pyproject_toml(path: &str) -> Vec<LockedPackage> {
             if trimmed.contains(']') {
                 let part = trimmed.trim_end_matches(']').trim_end_matches(',');
                 for dep in parse_pep621_dep_list(part) {
-                    out.push(LockedPackage { name: dep.0, version: dep.1, ecosystem: "PyPI".to_string(), source: src.clone() });
+                    out.push(LockedPackage {
+                        name: dep.0,
+                        version: dep.1,
+                        ecosystem: "PyPI".to_string(),
+                        source: src.clone(),
+                    });
                 }
                 in_array = false;
                 continue;
             }
             for dep in parse_pep621_dep_list(trimmed) {
-                out.push(LockedPackage { name: dep.0, version: dep.1, ecosystem: "PyPI".to_string(), source: src.clone() });
+                out.push(LockedPackage {
+                    name: dep.0,
+                    version: dep.1,
+                    ecosystem: "PyPI".to_string(),
+                    source: src.clone(),
+                });
             }
             continue;
         }
 
         // ── Poetry: [tool.poetry.dependencies] key = "version" ──
-        if current_section == "tool.poetry.dependencies" || current_section == "tool.poetry.dev-dependencies" {
+        if current_section == "tool.poetry.dependencies"
+            || current_section == "tool.poetry.dev-dependencies"
+        {
             if trimmed.contains('=') && !trimmed.starts_with('#') {
                 let parts: Vec<&str> = trimmed.splitn(2, '=').collect();
                 if parts.len() == 2 {
                     let name = parts[0].trim().to_string();
-                    if name == "python" { continue; }
+                    if name == "python" {
+                        continue;
+                    }
                     let raw = parts[1].trim().trim_matches('"').trim_matches('\'');
                     // Handle table syntax like {version = "^1.0", ...}
                     let ver_str = if raw.starts_with('{') {
@@ -336,7 +435,12 @@ fn parse_pyproject_toml(path: &str) -> Vec<LockedPackage> {
                     };
                     let version = strip_version_prefix(ver_str);
                     if !name.is_empty() && !version.is_empty() && version != "*" {
-                        out.push(LockedPackage { name, version, ecosystem: "PyPI".to_string(), source: src.clone() });
+                        out.push(LockedPackage {
+                            name,
+                            version,
+                            ecosystem: "PyPI".to_string(),
+                            source: src.clone(),
+                        });
                     }
                 }
             }
@@ -351,11 +455,19 @@ fn parse_pyproject_toml(path: &str) -> Vec<LockedPackage> {
 /// Strip leading version specifier characters and return only the version string.
 /// Handles `>=`, `==`, `~=`, `!=`, `>`, `<`, `^`, `~` and takes the first segment before any comma.
 fn strip_version_prefix(s: &str) -> String {
-    s.trim_start_matches(">=").trim_start_matches("==")
-        .trim_start_matches("~=").trim_start_matches("!=")
-        .trim_start_matches('>').trim_start_matches('<')
-        .trim_start_matches('^').trim_start_matches('~')
-        .split(',').next().unwrap_or("").trim().to_string()
+    s.trim_start_matches(">=")
+        .trim_start_matches("==")
+        .trim_start_matches("~=")
+        .trim_start_matches("!=")
+        .trim_start_matches('>')
+        .trim_start_matches('<')
+        .trim_start_matches('^')
+        .trim_start_matches('~')
+        .split(',')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_string()
 }
 
 /// Parse PEP 621 dependency strings from a comma-separated or newline-separated
@@ -365,14 +477,18 @@ fn parse_pep621_dep_list(input: &str) -> Vec<(String, String)> {
     // Split by comma, then process each quoted entry
     for entry in input.split(',') {
         let entry = entry.trim().trim_matches('"').trim_matches('\'').trim();
-        if entry.is_empty() { continue; }
+        if entry.is_empty() {
+            continue;
+        }
         // Strip extras like [security] → "requests[security]>=2.28" → "requests"
         let (name_part, rest) = if let Some(bracket) = entry.find('[') {
             let close = entry.find(']').unwrap_or(bracket + 1);
             (&entry[..bracket], &entry[close + 1..])
         } else {
             // Find where version constraint starts
-            let delim = entry.find(|c: char| c == '>' || c == '<' || c == '=' || c == '~' || c == '!' || c == '^');
+            let delim = entry.find(|c: char| {
+                c == '>' || c == '<' || c == '=' || c == '~' || c == '!' || c == '^'
+            });
             match delim {
                 Some(pos) => (&entry[..pos], &entry[pos..]),
                 None => (entry, ""),
@@ -389,14 +505,21 @@ fn parse_pep621_dep_list(input: &str) -> Vec<(String, String)> {
 
 fn parse_poetry_lock(path: &str) -> Vec<LockedPackage> {
     let mut out = Vec::new();
-    let Ok(content) = fs::read_to_string(path) else { return out; };
+    let Ok(content) = fs::read_to_string(path) else {
+        return out;
+    };
     let mut name: Option<String> = None;
     let mut version: Option<String> = None;
     for line in content.lines() {
         let line = line.trim();
         if line == "[[package]]" {
             if let (Some(n), Some(v)) = (name.take(), version.take()) {
-                out.push(LockedPackage { name: n, version: v, ecosystem: "PyPI".to_string(), source: path.to_string() });
+                out.push(LockedPackage {
+                    name: n,
+                    version: v,
+                    ecosystem: "PyPI".to_string(),
+                    source: path.to_string(),
+                });
             }
         } else if let Some(val) = line.strip_prefix("name = ") {
             name = Some(val.trim_matches('"').to_string());
@@ -405,7 +528,12 @@ fn parse_poetry_lock(path: &str) -> Vec<LockedPackage> {
         }
     }
     if let (Some(n), Some(v)) = (name, version) {
-        out.push(LockedPackage { name: n, version: v, ecosystem: "PyPI".to_string(), source: path.to_string() });
+        out.push(LockedPackage {
+            name: n,
+            version: v,
+            ecosystem: "PyPI".to_string(),
+            source: path.to_string(),
+        });
     }
     out
 }
@@ -417,14 +545,21 @@ fn parse_uv_lock(path: &str) -> Vec<LockedPackage> {
 
 fn parse_cargo_lock(path: &str) -> Vec<LockedPackage> {
     let mut out = Vec::new();
-    let Ok(content) = fs::read_to_string(path) else { return out; };
+    let Ok(content) = fs::read_to_string(path) else {
+        return out;
+    };
     let mut name: Option<String> = None;
     let mut version: Option<String> = None;
     for line in content.lines() {
         let line = line.trim();
         if line == "[[package]]" {
             if let (Some(n), Some(v)) = (name.take(), version.take()) {
-                out.push(LockedPackage { name: n, version: v, ecosystem: "crates.io".to_string(), source: path.to_string() });
+                out.push(LockedPackage {
+                    name: n,
+                    version: v,
+                    ecosystem: "crates.io".to_string(),
+                    source: path.to_string(),
+                });
             }
         } else if let Some(val) = line.strip_prefix("name = ") {
             name = Some(val.trim_matches('"').to_string());
@@ -433,7 +568,12 @@ fn parse_cargo_lock(path: &str) -> Vec<LockedPackage> {
         }
     }
     if let (Some(n), Some(v)) = (name, version) {
-        out.push(LockedPackage { name: n, version: v, ecosystem: "crates.io".to_string(), source: path.to_string() });
+        out.push(LockedPackage {
+            name: n,
+            version: v,
+            ecosystem: "crates.io".to_string(),
+            source: path.to_string(),
+        });
     }
     out
 }
@@ -441,15 +581,26 @@ fn parse_cargo_lock(path: &str) -> Vec<LockedPackage> {
 fn parse_go_sum(path: &str) -> Vec<LockedPackage> {
     let mut out = Vec::new();
     let mut seen = HashSet::new();
-    let Ok(content) = fs::read_to_string(path) else { return out; };
+    let Ok(content) = fs::read_to_string(path) else {
+        return out;
+    };
     for line in content.lines() {
         let parts: Vec<&str> = line.split_whitespace().collect();
         if parts.len() >= 2 {
             let name = parts[0];
-            let version = parts[1].trim_start_matches('v').split('/').next().unwrap_or(parts[1]);
+            let version = parts[1]
+                .trim_start_matches('v')
+                .split('/')
+                .next()
+                .unwrap_or(parts[1]);
             let key = format!("{name}@{version}");
             if seen.insert(key) {
-                out.push(LockedPackage { name: name.to_string(), version: version.to_string(), ecosystem: "Go".to_string(), source: path.to_string() });
+                out.push(LockedPackage {
+                    name: name.to_string(),
+                    version: version.to_string(),
+                    ecosystem: "Go".to_string(),
+                    source: path.to_string(),
+                });
             }
         }
     }
@@ -458,17 +609,30 @@ fn parse_go_sum(path: &str) -> Vec<LockedPackage> {
 
 fn parse_go_mod(path: &str) -> Vec<LockedPackage> {
     let mut out = Vec::new();
-    let Ok(content) = fs::read_to_string(path) else { return out; };
+    let Ok(content) = fs::read_to_string(path) else {
+        return out;
+    };
     let mut in_require = false;
     for line in content.lines() {
         let line = line.trim();
-        if line.starts_with("require (") || line == "require (" { in_require = true; continue; }
-        if in_require && line == ")" { in_require = false; continue; }
+        if line.starts_with("require (") || line == "require (" {
+            in_require = true;
+            continue;
+        }
+        if in_require && line == ")" {
+            in_require = false;
+            continue;
+        }
         if in_require || line.starts_with("require ") {
             let entry = line.trim_start_matches("require").trim();
             let parts: Vec<&str> = entry.split_whitespace().collect();
             if parts.len() >= 2 {
-                out.push(LockedPackage { name: parts[0].to_string(), version: parts[1].trim_start_matches('v').to_string(), ecosystem: "Go".to_string(), source: path.to_string() });
+                out.push(LockedPackage {
+                    name: parts[0].to_string(),
+                    version: parts[1].trim_start_matches('v').to_string(),
+                    ecosystem: "Go".to_string(),
+                    source: path.to_string(),
+                });
             }
         }
     }
@@ -477,17 +641,31 @@ fn parse_go_mod(path: &str) -> Vec<LockedPackage> {
 
 fn parse_gemfile_lock(path: &str) -> Vec<LockedPackage> {
     let mut out = Vec::new();
-    let Ok(content) = fs::read_to_string(path) else { return out; };
+    let Ok(content) = fs::read_to_string(path) else {
+        return out;
+    };
     let mut in_gems = false;
     for line in content.lines() {
-        if line.trim() == "GEM" || line.trim() == "specs:" { in_gems = true; continue; }
-        if in_gems && (line.trim().is_empty() || (!line.starts_with("    ") && !line.starts_with("  "))) { in_gems = false; }
+        if line.trim() == "GEM" || line.trim() == "specs:" {
+            in_gems = true;
+            continue;
+        }
+        if in_gems
+            && (line.trim().is_empty() || (!line.starts_with("    ") && !line.starts_with("  ")))
+        {
+            in_gems = false;
+        }
         if in_gems && line.starts_with("    ") && !line.starts_with("      ") {
             let entry = line.trim();
             if let Some(start) = entry.find('(') {
                 let name = entry[..start].trim().to_string();
-                let version = entry[start+1..].trim_end_matches(')').to_string();
-                out.push(LockedPackage { name, version, ecosystem: "RubyGems".to_string(), source: path.to_string() });
+                let version = entry[start + 1..].trim_end_matches(')').to_string();
+                out.push(LockedPackage {
+                    name,
+                    version,
+                    ecosystem: "RubyGems".to_string(),
+                    source: path.to_string(),
+                });
             }
         }
     }
@@ -496,15 +674,33 @@ fn parse_gemfile_lock(path: &str) -> Vec<LockedPackage> {
 
 fn parse_composer_lock(path: &str) -> Vec<LockedPackage> {
     let mut out = Vec::new();
-    let Ok(content) = fs::read_to_string(path) else { return out; };
-    let Ok(json): Result<Value, _> = serde_json::from_str(&content) else { return out; };
+    let Ok(content) = fs::read_to_string(path) else {
+        return out;
+    };
+    let Ok(json): Result<Value, _> = serde_json::from_str(&content) else {
+        return out;
+    };
     for key in &["packages", "packages-dev"] {
         if let Some(pkgs) = json.get(key).and_then(|p| p.as_array()) {
             for pkg in pkgs {
-                let name    = pkg.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
-                let version = pkg.get("version").and_then(|v| v.as_str()).unwrap_or("").trim_start_matches('v').to_string();
+                let name = pkg
+                    .get("name")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let version = pkg
+                    .get("version")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim_start_matches('v')
+                    .to_string();
                 if !name.is_empty() {
-                    out.push(LockedPackage { name, version, ecosystem: "Packagist".to_string(), source: path.to_string() });
+                    out.push(LockedPackage {
+                        name,
+                        version,
+                        ecosystem: "Packagist".to_string(),
+                        source: path.to_string(),
+                    });
                 }
             }
         }
@@ -514,14 +710,27 @@ fn parse_composer_lock(path: &str) -> Vec<LockedPackage> {
 
 fn parse_nuget_lock(path: &str) -> Vec<LockedPackage> {
     let mut out = Vec::new();
-    let Ok(content) = fs::read_to_string(path) else { return out; };
-    let Ok(json): Result<Value, _> = serde_json::from_str(&content) else { return out; };
+    let Ok(content) = fs::read_to_string(path) else {
+        return out;
+    };
+    let Ok(json): Result<Value, _> = serde_json::from_str(&content) else {
+        return out;
+    };
     if let Some(deps) = json.get("dependencies").and_then(|d| d.as_object()) {
         for (_framework, packages) in deps {
             if let Some(pkgs) = packages.as_object() {
                 for (name, meta) in pkgs {
-                    let version = meta.get("resolved").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                    out.push(LockedPackage { name: name.clone(), version, ecosystem: "NuGet".to_string(), source: path.to_string() });
+                    let version = meta
+                        .get("resolved")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    out.push(LockedPackage {
+                        name: name.clone(),
+                        version,
+                        ecosystem: "NuGet".to_string(),
+                        source: path.to_string(),
+                    });
                 }
             }
         }
@@ -531,7 +740,9 @@ fn parse_nuget_lock(path: &str) -> Vec<LockedPackage> {
 
 fn parse_mix_lock(path: &str) -> Vec<LockedPackage> {
     let mut out = Vec::new();
-    let Ok(content) = fs::read_to_string(path) else { return out; };
+    let Ok(content) = fs::read_to_string(path) else {
+        return out;
+    };
     // mix.lock format: `  "package": {:hex, :name, "version", ...}`
     for line in content.lines() {
         let line = line.trim();
@@ -543,7 +754,12 @@ fn parse_mix_lock(path: &str) -> Vec<LockedPackage> {
                 if parts.len() >= 6 {
                     let version = parts[5].to_string();
                     if !name.is_empty() && !version.is_empty() {
-                        out.push(LockedPackage { name, version, ecosystem: "Hex".to_string(), source: path.to_string() });
+                        out.push(LockedPackage {
+                            name,
+                            version,
+                            ecosystem: "Hex".to_string(),
+                            source: path.to_string(),
+                        });
                     }
                 }
             }
@@ -554,12 +770,19 @@ fn parse_mix_lock(path: &str) -> Vec<LockedPackage> {
 
 fn parse_pubspec_lock(path: &str) -> Vec<LockedPackage> {
     let mut out = Vec::new();
-    let Ok(content) = fs::read_to_string(path) else { return out; };
+    let Ok(content) = fs::read_to_string(path) else {
+        return out;
+    };
     let mut in_packages = false;
     let mut current_name: Option<String> = None;
     for line in content.lines() {
-        if line.trim() == "packages:" { in_packages = true; continue; }
-        if in_packages && !line.starts_with(' ') { in_packages = false; }
+        if line.trim() == "packages:" {
+            in_packages = true;
+            continue;
+        }
+        if in_packages && !line.starts_with(' ') {
+            in_packages = false;
+        }
         if in_packages {
             // Package name line has exactly 2 spaces indent + name + ":"
             if line.starts_with("  ") && !line.starts_with("   ") && line.trim().ends_with(':') {
@@ -567,8 +790,18 @@ fn parse_pubspec_lock(path: &str) -> Vec<LockedPackage> {
             }
             if let Some(ref name) = current_name {
                 if line.trim().starts_with("version:") {
-                    let version = line.trim().trim_start_matches("version:").trim().trim_matches('"').to_string();
-                    out.push(LockedPackage { name: name.clone(), version, ecosystem: "pub.dev".to_string(), source: path.to_string() });
+                    let version = line
+                        .trim()
+                        .trim_start_matches("version:")
+                        .trim()
+                        .trim_matches('"')
+                        .to_string();
+                    out.push(LockedPackage {
+                        name: name.clone(),
+                        version,
+                        ecosystem: "pub.dev".to_string(),
+                        source: path.to_string(),
+                    });
                 }
             }
         }
@@ -581,24 +814,25 @@ fn parse_pubspec_lock(path: &str) -> Vec<LockedPackage> {
 pub fn detect_lock_files() -> Vec<(&'static str, &'static str)> {
     let candidates: Vec<(&str, &str)> = vec![
         ("package-lock.json", "npm"),
-        ("yarn.lock",         "yarn"),
-        ("pnpm-lock.yaml",   "pnpm"),
-        ("bun.lockb",        "bun"),
-        ("package.json",     "npm (manifest)"),
+        ("yarn.lock", "yarn"),
+        ("pnpm-lock.yaml", "pnpm"),
+        ("bun.lockb", "bun"),
+        ("package.json", "npm (manifest)"),
         ("requirements.txt", "pip"),
-        ("pyproject.toml",   "pip/uv/poetry"),
-        ("poetry.lock",      "poetry"),
-        ("uv.lock",          "uv"),
-        ("Cargo.lock",       "cargo"),
-        ("go.sum",           "go"),
-        ("go.mod",           "go (manifest)"),
-        ("Gemfile.lock",     "gem"),
-        ("composer.lock",    "composer"),
+        ("pyproject.toml", "pip/uv/poetry"),
+        ("poetry.lock", "poetry"),
+        ("uv.lock", "uv"),
+        ("Cargo.lock", "cargo"),
+        ("go.sum", "go"),
+        ("go.mod", "go (manifest)"),
+        ("Gemfile.lock", "gem"),
+        ("composer.lock", "composer"),
         ("packages.lock.json", "nuget"),
-        ("mix.lock",         "hex"),
-        ("pubspec.lock",     "pub"),
+        ("mix.lock", "hex"),
+        ("pubspec.lock", "pub"),
     ];
-    candidates.into_iter()
+    candidates
+        .into_iter()
         .filter(|(path, _)| Path::new(path).exists())
         .collect()
 }
@@ -615,19 +849,19 @@ pub fn parse_selected_files(files: &[&str]) -> Vec<LockedPackage> {
 /// Return human-readable list of all supported lock/manifest files.
 pub fn supported_files() -> Vec<(&'static str, &'static str, &'static str)> {
     vec![
-        ("JavaScript", "npm",      "package-lock.json, package.json"),
-        ("JavaScript", "yarn",     "yarn.lock"),
-        ("JavaScript", "pnpm",     "pnpm-lock.yaml"),
-        ("JavaScript", "bun",      "bun.lockb (package.json fallback)"),
-        ("Python",     "pip",      "requirements.txt"),
-        ("Python",     "poetry",   "poetry.lock, pyproject.toml"),
-        ("Python",     "uv",       "uv.lock, pyproject.toml"),
-        ("Rust",       "cargo",    "Cargo.lock"),
-        ("Go",         "go mod",   "go.sum, go.mod"),
-        ("Ruby",       "gem",      "Gemfile.lock"),
-        ("PHP",        "composer", "composer.lock"),
-        (".NET",       "nuget",    "packages.lock.json"),
-        ("Elixir",     "hex/mix",  "mix.lock"),
-        ("Dart",       "pub",      "pubspec.lock"),
+        ("JavaScript", "npm", "package-lock.json, package.json"),
+        ("JavaScript", "yarn", "yarn.lock"),
+        ("JavaScript", "pnpm", "pnpm-lock.yaml"),
+        ("JavaScript", "bun", "bun.lockb (package.json fallback)"),
+        ("Python", "pip", "requirements.txt"),
+        ("Python", "poetry", "poetry.lock, pyproject.toml"),
+        ("Python", "uv", "uv.lock, pyproject.toml"),
+        ("Rust", "cargo", "Cargo.lock"),
+        ("Go", "go mod", "go.sum, go.mod"),
+        ("Ruby", "gem", "Gemfile.lock"),
+        ("PHP", "composer", "composer.lock"),
+        (".NET", "nuget", "packages.lock.json"),
+        ("Elixir", "hex/mix", "mix.lock"),
+        ("Dart", "pub", "pubspec.lock"),
     ]
 }

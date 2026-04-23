@@ -1,20 +1,21 @@
 use ratatui::{
-    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Wrap},
+    Frame,
 };
 
 use crate::tui::api_app::ApiApp;
 use crate::tui::theme::*;
 
-use super::{truncate, dashboard::render_no_flows_hint};
+use super::{dashboard::render_no_flows_hint, truncate};
 
 // ── Nodes view (redesigned Node Library + Node Inspector) ─────────────────────
 
 pub(super) fn render_nodes_view(f: &mut Frame, app: &ApiApp, area: Rect) {
-    let flow_node_ids: std::collections::HashSet<String> = app.active_flow()
+    let flow_node_ids: std::collections::HashSet<String> = app
+        .active_flow()
         .map(|f| f.all_node_ids().into_iter().collect())
         .unwrap_or_default();
 
@@ -24,7 +25,8 @@ pub(super) fn render_nodes_view(f: &mut Frame, app: &ApiApp, area: Rect) {
     // Apply search filter
     let filtered: Vec<_> = if app.search_active || !app.search_input.is_empty() {
         let q = app.search_input.to_lowercase();
-        node_list.iter()
+        node_list
+            .iter()
             .filter(|(id, n)| {
                 id.to_lowercase().contains(&q)
                     || n.path.to_lowercase().contains(&q)
@@ -118,21 +120,34 @@ pub(super) fn render_nodes_view(f: &mut Frame, app: &ApiApp, area: Rect) {
         } else {
             let mut parts = Vec::new();
             if ext_count > 0 {
-                parts.push(format!("{} extraction{}", ext_count, if ext_count == 1 { "" } else { "s" }));
+                parts.push(format!(
+                    "{} extraction{}",
+                    ext_count,
+                    if ext_count == 1 { "" } else { "s" }
+                ));
             }
             if assert_count > 0 {
-                parts.push(format!("{} assertion{}", assert_count, if assert_count == 1 { "" } else { "s" }));
+                parts.push(format!(
+                    "{} assertion{}",
+                    assert_count,
+                    if assert_count == 1 { "" } else { "s" }
+                ));
             }
             format!("    {}", parts.join(" \u{00b7} "))
         };
-        lines.push(Line::from(vec![
-            Span::styled(summary, Style::default().fg(DIMMER)),
-        ]));
+        lines.push(Line::from(vec![Span::styled(
+            summary,
+            Style::default().fg(DIMMER),
+        )]));
     }
 
     // Build the bottom hints bar
     let filter_label = app.nodes_filter.label();
-    let search_indicator = if app.search_active { "  \u{25b8} SEARCH" } else { "" };
+    let search_indicator = if app.search_active {
+        "  \u{25b8} SEARCH"
+    } else {
+        ""
+    };
     let bottom_title = format!(
         " Enter:run  r:run-node  n:name  p:path  m:method  b:body  d:desc  f:{}  /:search{} ",
         filter_label, search_indicator,
@@ -145,7 +160,12 @@ pub(super) fn render_nodes_view(f: &mut Frame, app: &ApiApp, area: Rect) {
     };
 
     let node_count = app.nodes.len();
-    let title = format!(" Node Library ({} node{}){} ", node_count, if node_count == 1 { "" } else { "s" }, search_suffix);
+    let title = format!(
+        " Node Library ({} node{}){} ",
+        node_count,
+        if node_count == 1 { "" } else { "s" },
+        search_suffix
+    );
 
     let paragraph = Paragraph::new(lines)
         .block(
@@ -153,7 +173,7 @@ pub(super) fn render_nodes_view(f: &mut Frame, app: &ApiApp, area: Rect) {
                 .title(Span::styled(title, title_style()))
                 .title_bottom(Span::styled(bottom_title, Style::default().fg(DIMMER)))
                 .borders(Borders::ALL)
-                .border_style(border_style())
+                .border_style(border_style()),
         )
         .scroll((calc_library_scroll(selected_clamped, filtered.len()), 0))
         .wrap(Wrap { trim: false });
@@ -162,7 +182,9 @@ pub(super) fn render_nodes_view(f: &mut Frame, app: &ApiApp, area: Rect) {
 
     // ── Right Panel: Node Inspector ────────────────────────────────────────
 
-    let selected_node = filtered.get(selected_clamped).map(|(id, node)| (*id, *node));
+    let selected_node = filtered
+        .get(selected_clamped)
+        .map(|(id, node)| (*id, *node));
     render_node_library_detail(f, app, selected_node, panes[1]);
 }
 
@@ -193,38 +215,51 @@ fn render_empty_library(f: &mut Frame, app: &ApiApp, search: &str, area: Rect) {
             Line::raw(""),
             Line::from(vec![
                 Span::styled("  No nodes match: ", dim_style()),
-                Span::styled(search, Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    search,
+                    Style::default().fg(YELLOW).add_modifier(Modifier::BOLD),
+                ),
             ]),
             Line::raw(""),
             Line::from(vec![
                 Span::styled("  Press ", dim_style()),
-                Span::styled("Esc", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "Esc",
+                    Style::default().fg(YELLOW).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(" to clear search.", dim_style()),
             ]),
         ]
     } else {
         vec![
             Line::raw(""),
-            Line::from(vec![
-                Span::styled("  No nodes yet.", Style::default().fg(WHITE).add_modifier(Modifier::BOLD)),
-            ]),
+            Line::from(vec![Span::styled(
+                "  No nodes yet.",
+                Style::default().fg(WHITE).add_modifier(Modifier::BOLD),
+            )]),
             Line::raw(""),
             Line::from(vec![Span::styled("  Create nodes with:", dim_style())]),
             Line::raw(""),
-            Line::from(vec![
-                Span::styled("    infynon weave node create", Style::default().fg(CYAN)),
-            ]),
-            Line::from(vec![
-                Span::styled("    infynon weave node create --ai \"POST /auth/login extracts token\"", Style::default().fg(CYAN)),
-            ]),
+            Line::from(vec![Span::styled(
+                "    infynon weave node create",
+                Style::default().fg(CYAN),
+            )]),
+            Line::from(vec![Span::styled(
+                "    infynon weave node create --ai \"POST /auth/login extracts token\"",
+                Style::default().fg(CYAN),
+            )]),
             Line::raw(""),
-            Line::from(vec![
-                Span::styled("  Nodes are stored in .infynon/api/nodes/", dim_style()),
-            ]),
+            Line::from(vec![Span::styled(
+                "  Nodes are stored in .infynon/api/nodes/",
+                dim_style(),
+            )]),
             Line::raw(""),
             Line::from(vec![
                 Span::styled("  Press ", dim_style()),
-                Span::styled("R", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "R",
+                    Style::default().fg(YELLOW).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(" to refresh after creating nodes.", dim_style()),
             ]),
         ]
@@ -235,7 +270,7 @@ fn render_empty_library(f: &mut Frame, app: &ApiApp, search: &str, area: Rect) {
             Block::default()
                 .title(Span::styled(" Node Library \u{2014} empty ", title_style()))
                 .borders(Borders::ALL)
-                .border_style(border_style())
+                .border_style(border_style()),
         )
         .wrap(Wrap { trim: false });
     f.render_widget(p, area);
@@ -254,16 +289,21 @@ fn render_node_library_detail(
         None => {
             let lines = vec![
                 Line::raw(""),
-                Line::from(vec![
-                    Span::styled("  Select a node from the library", Style::default().fg(DIM)),
-                ]),
-                Line::from(vec![
-                    Span::styled("  to inspect its details here.", Style::default().fg(DIM)),
-                ]),
+                Line::from(vec![Span::styled(
+                    "  Select a node from the library",
+                    Style::default().fg(DIM),
+                )]),
+                Line::from(vec![Span::styled(
+                    "  to inspect its details here.",
+                    Style::default().fg(DIM),
+                )]),
                 Line::raw(""),
                 Line::from(vec![
                     Span::styled("  Use ", Style::default().fg(DIMMER)),
-                    Span::styled("\u{2191}\u{2193}", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+                    Span::styled(
+                        "\u{2191}\u{2193}",
+                        Style::default().fg(YELLOW).add_modifier(Modifier::BOLD),
+                    ),
                     Span::styled(" to navigate the list.", Style::default().fg(DIMMER)),
                 ]),
             ];
@@ -272,7 +312,7 @@ fn render_node_library_detail(
                     Block::default()
                         .title(Span::styled(" Node Inspector ", title_style()))
                         .borders(Borders::ALL)
-                        .border_style(border_style())
+                        .border_style(border_style()),
                 )
                 .wrap(Wrap { trim: false });
             f.render_widget(p, area);
@@ -289,15 +329,24 @@ fn render_node_library_detail(
     let mc = method_color(&node.method);
     let method_badge = format!("[{}]", node.method);
     lines.push(Line::from(vec![
-        Span::styled(format!("  {} ", method_badge), Style::default().fg(mc).add_modifier(Modifier::BOLD)),
-        Span::styled(&node.path, Style::default().fg(WHITE).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            format!("  {} ", method_badge),
+            Style::default().fg(mc).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            &node.path,
+            Style::default().fg(WHITE).add_modifier(Modifier::BOLD),
+        ),
     ]));
 
     // Node name (secondary header line)
     lines.push(Line::from(vec![
         Span::styled("  ", Style::default()),
         Span::styled(&node.name, Style::default().fg(TEXT)),
-        Span::styled(format!("  id:{}", truncate(node_id, 20)), Style::default().fg(DIMMER)),
+        Span::styled(
+            format!("  id:{}", truncate(node_id, 20)),
+            Style::default().fg(DIMMER),
+        ),
     ]));
 
     // ── Description ────────────────────────────────────────────────────────
@@ -319,7 +368,10 @@ fn render_node_library_detail(
             let max_val = inner_width.saturating_sub(24).max(10);
             let v_display = truncate(v, max_val);
             lines.push(Line::from(vec![
-                Span::styled(format!("  {:<18}", truncate(k, 18)), Style::default().fg(TEXT_DIM)),
+                Span::styled(
+                    format!("  {:<18}", truncate(k, 18)),
+                    Style::default().fg(TEXT_DIM),
+                ),
                 Span::styled("  ", Style::default()),
                 Span::styled(v_display, Style::default().fg(DIM)),
             ]));
@@ -344,12 +396,10 @@ fn render_node_library_detail(
             }
             let total = pretty.lines().count();
             if total > max_body_lines {
-                lines.push(Line::from(vec![
-                    Span::styled(
-                        format!("  ... {} more lines", total - max_body_lines),
-                        Style::default().fg(DIMMER),
-                    ),
-                ]));
+                lines.push(Line::from(vec![Span::styled(
+                    format!("  ... {} more lines", total - max_body_lines),
+                    Style::default().fg(DIMMER),
+                )]));
             }
         }
     }
@@ -357,9 +407,17 @@ fn render_node_library_detail(
     // ── Assertions section ─────────────────────────────────────────────────
     if !node.assertions.is_empty() {
         lines.push(Line::raw(""));
-        lines.push(section_header("Assertions", node.assertions.len(), inner_width));
+        lines.push(section_header(
+            "Assertions",
+            node.assertions.len(),
+            inner_width,
+        ));
         for a in &node.assertions {
-            let (icon, icon_col) = if a.enabled { ("\u{2714}", GREEN) } else { ("\u{2718}", DIM) };
+            let (icon, icon_col) = if a.enabled {
+                ("\u{2714}", GREEN)
+            } else {
+                ("\u{2718}", DIM)
+            };
             let on_fail_label = match &a.on_fail {
                 crate::api::types::OnFail::Stop => "stop",
                 crate::api::types::OnFail::Warn => "warn",
@@ -367,12 +425,18 @@ fn render_node_library_detail(
             let check_display = truncate(&a.check, inner_width.saturating_sub(22).max(10));
             lines.push(Line::from(vec![
                 Span::styled(format!("  {} ", icon), Style::default().fg(icon_col)),
-                Span::styled(check_display, if a.enabled {
-                    Style::default().fg(TEXT)
-                } else {
-                    Style::default().fg(DIMMER)
-                }),
-                Span::styled(format!("  \u{2192} {}", on_fail_label), Style::default().fg(DIMMER)),
+                Span::styled(
+                    check_display,
+                    if a.enabled {
+                        Style::default().fg(TEXT)
+                    } else {
+                        Style::default().fg(DIMMER)
+                    },
+                ),
+                Span::styled(
+                    format!("  \u{2192} {}", on_fail_label),
+                    Style::default().fg(DIMMER),
+                ),
             ]));
         }
     }
@@ -380,11 +444,18 @@ fn render_node_library_detail(
     // ── Extractions section ────────────────────────────────────────────────
     if !node.extractions.is_empty() {
         lines.push(Line::raw(""));
-        lines.push(section_header("Extractions", node.extractions.len(), inner_width));
+        lines.push(section_header(
+            "Extractions",
+            node.extractions.len(),
+            inner_width,
+        ));
         for e in &node.extractions {
             let max_from = inner_width.saturating_sub(22).max(10);
             lines.push(Line::from(vec![
-                Span::styled(format!("  {:<16}", truncate(&e.name, 16)), Style::default().fg(CYAN)),
+                Span::styled(
+                    format!("  {:<16}", truncate(&e.name, 16)),
+                    Style::default().fg(CYAN),
+                ),
                 Span::styled(" \u{2190} ", Style::default().fg(DIMMER)),
                 Span::styled(truncate(&e.from, max_from), Style::default().fg(TEXT_DIM)),
             ]));
@@ -394,7 +465,11 @@ fn render_node_library_detail(
     // ── Prompt Inputs section ──────────────────────────────────────────────
     if !node.prompt_inputs.is_empty() {
         lines.push(Line::raw(""));
-        lines.push(section_header("Prompt Inputs", node.prompt_inputs.len(), inner_width));
+        lines.push(section_header(
+            "Prompt Inputs",
+            node.prompt_inputs.len(),
+            inner_width,
+        ));
         for pi in &node.prompt_inputs {
             let secret_badge = if pi.secret {
                 Span::styled(" secret", Style::default().fg(ORANGE))
@@ -413,8 +488,14 @@ fn render_node_library_detail(
                 Span::styled(type_label, Style::default().fg(PURPLE))
             };
             lines.push(Line::from(vec![
-                Span::styled(format!("  {:<14}", truncate(&pi.var, 14)), Style::default().fg(CYAN)),
-                Span::styled(format!("\"{}\"", truncate(&pi.label, 16)), Style::default().fg(TEXT_DIM)),
+                Span::styled(
+                    format!("  {:<14}", truncate(&pi.var, 14)),
+                    Style::default().fg(CYAN),
+                ),
+                Span::styled(
+                    format!("\"{}\"", truncate(&pi.label, 16)),
+                    Style::default().fg(TEXT_DIM),
+                ),
                 type_badge,
                 secret_badge,
             ]));
@@ -448,7 +529,7 @@ fn render_node_library_detail(
             Block::default()
                 .title(Span::styled(" Node Inspector ", title_style()))
                 .borders(Borders::ALL)
-                .border_style(border_style())
+                .border_style(border_style()),
         )
         .wrap(Wrap { trim: false });
 
@@ -465,9 +546,11 @@ fn section_header(name: &str, count: usize, width: usize) -> Line<'static> {
         format!("\u{2500}\u{2500} {} ", name)
     };
     let label_len = label.chars().count();
-    let dash_count = if width > label_len + 2 { width - label_len - 2 } else { 0 };
+    let dash_count = if width > label_len + 2 {
+        width - label_len - 2
+    } else {
+        0
+    };
     let full = format!("  {}{}", label, "\u{2500}".repeat(dash_count));
-    Line::from(vec![
-        Span::styled(full, Style::default().fg(DIMMER)),
-    ])
+    Line::from(vec![Span::styled(full, Style::default().fg(DIMMER))])
 }

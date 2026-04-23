@@ -16,7 +16,10 @@ pub fn cmd_migrate(from: &str, to: &str) {
     let is_py = valid_py.contains(&from) && valid_py.contains(&to);
 
     if !is_js && !is_py {
-        Logger::error(&format!("Migration from '{}' to '{}' is not supported.", from, to));
+        Logger::error(&format!(
+            "Migration from '{}' to '{}' is not supported.",
+            from, to
+        ));
         println!();
         println!("  {}  Supported migrations:", "ℹ".bright_cyan());
         println!("     JavaScript: npm, yarn, pnpm, bun");
@@ -36,9 +39,16 @@ pub fn cmd_migrate(from: &str, to: &str) {
         Run { desc: String, cmd: String },
     }
     impl MigrateStep {
-        fn desc(&self) -> &str { match self { Self::Delete { desc, .. } | Self::Run { desc, .. } => desc } }
+        fn desc(&self) -> &str {
+            match self {
+                Self::Delete { desc, .. } | Self::Run { desc, .. } => desc,
+            }
+        }
         fn display_cmd(&self) -> String {
-            match self { Self::Delete { path, .. } => format!("delete {}", path), Self::Run { cmd, .. } => cmd.clone() }
+            match self {
+                Self::Delete { path, .. } => format!("delete {}", path),
+                Self::Run { cmd, .. } => cmd.clone(),
+            }
         }
     }
 
@@ -46,34 +56,47 @@ pub fn cmd_migrate(from: &str, to: &str) {
 
     if is_js {
         let old_lock = match from {
-            "npm"  => "package-lock.json",
+            "npm" => "package-lock.json",
             "yarn" => "yarn.lock",
             "pnpm" => "pnpm-lock.yaml",
-            "bun"  => "bun.lockb",
+            "bun" => "bun.lockb",
             _ => "",
         };
         if !old_lock.is_empty() && Path::new(old_lock).exists() {
-            steps.push(MigrateStep::Delete { desc: format!("Remove {}", old_lock), path: old_lock.to_string() });
+            steps.push(MigrateStep::Delete {
+                desc: format!("Remove {}", old_lock),
+                path: old_lock.to_string(),
+            });
         }
         if Path::new("node_modules").is_dir() {
-            steps.push(MigrateStep::Delete { desc: "Remove node_modules".into(), path: "node_modules".into() });
+            steps.push(MigrateStep::Delete {
+                desc: "Remove node_modules".into(),
+                path: "node_modules".into(),
+            });
         }
         let install_cmd = match to {
-            "npm"  => "npm install",
+            "npm" => "npm install",
             "yarn" => "yarn install",
             "pnpm" => "pnpm install",
-            "bun"  => "bun install",
+            "bun" => "bun install",
             _ => "",
         };
         if !install_cmd.is_empty() {
-            steps.push(MigrateStep::Run { desc: format!("Install with {}", to), cmd: install_cmd.to_string() });
+            steps.push(MigrateStep::Run {
+                desc: format!("Install with {}", to),
+                cmd: install_cmd.to_string(),
+            });
         }
     }
 
     if is_py {
-        let dep_file = if Path::new("requirements.txt").exists() { Some("requirements.txt") }
-            else if Path::new("pyproject.toml").exists() { Some("pyproject.toml") }
-            else { None };
+        let dep_file = if Path::new("requirements.txt").exists() {
+            Some("requirements.txt")
+        } else if Path::new("pyproject.toml").exists() {
+            Some("pyproject.toml")
+        } else {
+            None
+        };
 
         let Some(dep_file) = dep_file else {
             Logger::error("No requirements.txt or pyproject.toml found.");
@@ -83,18 +106,38 @@ pub fn cmd_migrate(from: &str, to: &str) {
 
         match to {
             "uv" => {
-                let cmd = if dep_file == "requirements.txt" { "uv pip install -r requirements.txt" } else { "uv pip install ." };
-                steps.push(MigrateStep::Run { desc: "Install with uv".into(), cmd: cmd.into() });
+                let cmd = if dep_file == "requirements.txt" {
+                    "uv pip install -r requirements.txt"
+                } else {
+                    "uv pip install ."
+                };
+                steps.push(MigrateStep::Run {
+                    desc: "Install with uv".into(),
+                    cmd: cmd.into(),
+                });
             }
             "poetry" => {
                 if !Path::new("pyproject.toml").exists() {
-                    steps.push(MigrateStep::Run { desc: "Initialize poetry".into(), cmd: "poetry init --no-interaction".into() });
+                    steps.push(MigrateStep::Run {
+                        desc: "Initialize poetry".into(),
+                        cmd: "poetry init --no-interaction".into(),
+                    });
                 }
-                steps.push(MigrateStep::Run { desc: "Install with poetry".into(), cmd: "poetry install".into() });
+                steps.push(MigrateStep::Run {
+                    desc: "Install with poetry".into(),
+                    cmd: "poetry install".into(),
+                });
             }
             "pip" => {
-                let cmd = if dep_file == "requirements.txt" { "pip install -r requirements.txt" } else { "pip install ." };
-                steps.push(MigrateStep::Run { desc: "Install with pip".into(), cmd: cmd.into() });
+                let cmd = if dep_file == "requirements.txt" {
+                    "pip install -r requirements.txt"
+                } else {
+                    "pip install ."
+                };
+                steps.push(MigrateStep::Run {
+                    desc: "Install with pip".into(),
+                    cmd: cmd.into(),
+                });
             }
             _ => {}
         }
@@ -130,7 +173,11 @@ pub fn cmd_migrate(from: &str, to: &str) {
         match step {
             MigrateStep::Delete { desc, path } => {
                 let p = Path::new(path);
-                let result = if p.is_dir() { fs::remove_dir_all(p) } else { fs::remove_file(p) };
+                let result = if p.is_dir() {
+                    fs::remove_dir_all(p)
+                } else {
+                    fs::remove_file(p)
+                };
                 match result {
                     Ok(_) => println!("  {}  {}", "✔".bright_green(), desc.bold()),
                     Err(e) => println!("  {}  {} — {}", "✘".bright_red(), desc.bold(), e),
@@ -142,12 +189,23 @@ pub fn cmd_migrate(from: &str, to: &str) {
                 let result = crate::cli::run_pkg_cmd(cmd);
                 sp.finish_and_clear();
                 match result {
-                    Ok(out) if out.status.success() => println!("  {}  {}", "✔".bright_green(), desc.bold()),
+                    Ok(out) if out.status.success() => {
+                        println!("  {}  {}", "✔".bright_green(), desc.bold())
+                    }
                     Ok(out) => {
-                        println!("  {}  {} — exit {}", "✘".bright_red(), desc.bold(), out.status.code().unwrap_or(-1));
+                        println!(
+                            "  {}  {} — exit {}",
+                            "✘".bright_red(),
+                            desc.bold(),
+                            out.status.code().unwrap_or(-1)
+                        );
                         let stderr = String::from_utf8_lossy(&out.stderr);
                         for line in stderr.lines().take(4) {
-                            println!("       {} {}", "│".truecolor(80, 80, 100), line.truecolor(200, 80, 80));
+                            println!(
+                                "       {} {}",
+                                "│".truecolor(80, 80, 100),
+                                line.truecolor(200, 80, 80)
+                            );
                         }
                     }
                     Err(e) => println!("  {}  {} — {}", "✘".bright_red(), desc.bold(), e),

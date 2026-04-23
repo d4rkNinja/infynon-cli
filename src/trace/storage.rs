@@ -1,6 +1,6 @@
 use crate::trace::types::{
-    EntityKind, KgEdge, KgEntity, KgGraph, RelationType, TraceConfig, TraceLayer, TraceNote,
-    TraceScope, TraceSource, NoteStatus, PackageRisk, SyncDirection, SyncRun, SyncState,
+    EntityKind, KgEdge, KgEntity, KgGraph, NoteStatus, PackageRisk, RelationType, SyncDirection,
+    SyncRun, SyncState, TraceConfig, TraceLayer, TraceNote, TraceScope, TraceSource,
 };
 use crate::{engine, trace::types::SourceKind};
 use chrono::Utc;
@@ -11,7 +11,11 @@ use std::path::{Path, PathBuf};
 
 fn normalize_user(s: &str) -> Option<String> {
     let t = s.trim();
-    if t.is_empty() { None } else { Some(t.to_string()) }
+    if t.is_empty() {
+        None
+    } else {
+        Some(t.to_string())
+    }
 }
 
 pub fn trace_dir() -> PathBuf {
@@ -27,7 +31,8 @@ pub fn ensure_layout() -> Result<(), String> {
         trace_dir().join("notes").join("user"),
         trace_dir().join("state"),
     ] {
-        fs::create_dir_all(&dir).map_err(|e| format!("failed to create {}: {}", dir.display(), e))?;
+        fs::create_dir_all(&dir)
+            .map_err(|e| format!("failed to create {}: {}", dir.display(), e))?;
     }
     Ok(())
 }
@@ -79,7 +84,9 @@ pub fn add_source(source: TraceSource, make_default: bool) -> Result<(), String>
 }
 
 pub fn configured_user() -> Option<String> {
-    load_config().ok().and_then(|cfg| cfg.default_user.and_then(|v| normalize_user(&v)))
+    load_config()
+        .ok()
+        .and_then(|cfg| cfg.default_user.and_then(|v| normalize_user(&v)))
 }
 
 pub fn get_source(id: Option<&str>) -> Result<TraceSource, String> {
@@ -123,13 +130,55 @@ fn note_path(layer: TraceLayer, id: &str) -> PathBuf {
     trace_dir()
         .join("notes")
         .join(layer.as_str())
+        .join(format!("{}.json", storage_key(id)))
+}
+
+fn legacy_note_path(layer: TraceLayer, id: &str) -> PathBuf {
+    trace_dir()
+        .join("notes")
+        .join(layer.as_str())
         .join(format!("{}.json", sanitize(id)))
 }
 
+fn storage_key(input: &str) -> String {
+    let mut out = String::with_capacity(input.len() * 2 + 3);
+    out.push_str("id-");
+    for byte in input.as_bytes() {
+        out.push_str(&format!("{:02x}", byte));
+    }
+    out
+}
+
+fn stable_trace_id(prefix: &str, raw: &str) -> String {
+    format!("{}-{}", prefix, storage_key(raw))
+}
+
+fn edge_dedupe_key(source: &str, target: &str, relation: RelationType) -> String {
+    format!("{}|{}|{}", source, target, relation.as_str())
+}
+
 pub fn sanitize(input: &str) -> String {
-    input.chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+    input
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect()
+}
+
+fn remove_legacy_alias(path: &Path, legacy_path: &Path) -> Result<(), String> {
+    if path != legacy_path {
+        match fs::remove_file(legacy_path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+    Ok(())
 }
 
 pub fn create_note(mut note: TraceNote) -> Result<(), String> {
@@ -140,7 +189,9 @@ pub fn create_note(mut note: TraceNote) -> Result<(), String> {
     }
     note.updated_at = now;
     let content = serde_json::to_string_pretty(&note).map_err(|e| e.to_string())?;
-    fs::write(note_path(note.layer, &note.id), content).map_err(|e| e.to_string())
+    let path = note_path(note.layer, &note.id);
+    fs::write(&path, content).map_err(|e| e.to_string())?;
+    remove_legacy_alias(&path, &legacy_note_path(note.layer, &note.id))
 }
 
 pub fn update_note(
@@ -149,7 +200,22 @@ pub fn update_note(
     body: Option<&str>,
     status: Option<NoteStatus>,
 ) -> Result<(), String> {
+    update_note_details(id, title, body, status, None, None, None, None, None)
+}
+
+pub fn update_note_details(
+    id: &str,
+    title: Option<&str>,
+    body: Option<&str>,
+    status: Option<NoteStatus>,
+    layer: Option<TraceLayer>,
+    scope: Option<TraceScope>,
+    target: Option<&str>,
+    author: Option<&str>,
+    tags: Option<Vec<String>>,
+) -> Result<(), String> {
     let note = load_note(id)?.ok_or_else(|| format!("note '{}' not found", id))?;
+    let original_layer = note.layer;
     let mut next = note;
     if let Some(title) = title {
         next.title = title.to_string();
@@ -160,16 +226,55 @@ pub fn update_note(
     if let Some(status) = status {
         next.status = status;
     }
-    next.updated_at = Utc::now().to_rfc3339();
-    create_note(next)
+    if let Some(layer) = layer {
+        next.layer = layer;
+    }
+    if let Some(scope) = scope {
+        next.scope = scope;
+    }
+    if let Some(target) = target {
+        next.target = target.to_string();
+    }
+    if let Some(author) = author {
+        next.author = author.to_string();
+    }
+    if let Some(tags) = tags {
+        next.tags = tags;
+    }
+
+    create_note(next.clone())?;
+
+    let old_paths = if original_layer == next.layer {
+        vec![legacy_note_path(original_layer, id)]
+    } else {
+        vec![
+            note_path(original_layer, id),
+            legacy_note_path(original_layer, id),
+        ]
+    };
+    for old_path in old_paths {
+        match fs::remove_file(old_path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+
+    Ok(())
 }
 
 pub fn delete_note(id: &str) -> Result<(), String> {
     for layer in [TraceLayer::Canonical, TraceLayer::Team, TraceLayer::User] {
-        match fs::remove_file(note_path(layer, id)) {
-            Ok(()) => return Ok(()),
-            Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
-            Err(e) => return Err(e.to_string()),
+        let mut deleted = false;
+        for path in [note_path(layer, id), legacy_note_path(layer, id)] {
+            match fs::remove_file(path) {
+                Ok(()) => deleted = true,
+                Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+                Err(e) => return Err(e.to_string()),
+            }
+        }
+        if deleted {
+            return Ok(());
         }
     }
     Err(format!("note '{}' not found", id))
@@ -177,13 +282,15 @@ pub fn delete_note(id: &str) -> Result<(), String> {
 
 pub fn load_note(id: &str) -> Result<Option<TraceNote>, String> {
     for layer in [TraceLayer::Canonical, TraceLayer::Team, TraceLayer::User] {
-        match fs::read_to_string(note_path(layer, id)) {
-            Ok(content) => {
-                let note = serde_json::from_str(&content).map_err(|e| e.to_string())?;
-                return Ok(Some(note));
+        for path in [note_path(layer, id), legacy_note_path(layer, id)] {
+            match fs::read_to_string(path) {
+                Ok(content) => {
+                    let note = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+                    return Ok(Some(note));
+                }
+                Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
+                Err(e) => return Err(e.to_string()),
             }
-            Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
-            Err(e) => return Err(e.to_string()),
         }
     }
     Ok(None)
@@ -228,7 +335,9 @@ pub fn retrieve_notes(
         layer.map(|v| n.layer == v).unwrap_or(true)
             && scope.map(|v| n.scope == v).unwrap_or(true)
             && target.map(|v| n.target.contains(v)).unwrap_or(true)
-            && author.map(|v| n.author.eq_ignore_ascii_case(v)).unwrap_or(true)
+            && author
+                .map(|v| n.author.eq_ignore_ascii_case(v))
+                .unwrap_or(true)
             && file
                 .map(|v| n.files.iter().any(|f| f.contains(v)))
                 .unwrap_or(true)
@@ -251,8 +360,17 @@ pub fn append_sync_run(run: SyncRun) -> Result<(), String> {
     fs::write(sync_state_path(), content).map_err(|e| e.to_string())
 }
 
-pub fn record_sync(direction: SyncDirection, source_id: Option<&str>, summary: &str) -> Result<(), String> {
-    append_sync_run(SyncRun { timestamp: Utc::now().to_rfc3339(), direction, source_id: source_id.map(|s| s.to_string()), summary: summary.to_string() })
+pub fn record_sync(
+    direction: SyncDirection,
+    source_id: Option<&str>,
+    summary: &str,
+) -> Result<(), String> {
+    append_sync_run(SyncRun {
+        timestamp: Utc::now().to_rfc3339(),
+        direction,
+        source_id: source_id.map(|s| s.to_string()),
+        summary: summary.to_string(),
+    })
 }
 
 pub fn compact_notes() -> Result<(usize, usize), String> {
@@ -484,7 +602,8 @@ pub fn package_risks() -> Result<Vec<PackageRisk>, String> {
         .collect();
 
     let results = engine::osv::batch_query(&queries)?;
-    let notes = retrieve_notes(None, Some(TraceScope::Package), None, None, None, None).unwrap_or_default();
+    let notes =
+        retrieve_notes(None, Some(TraceScope::Package), None, None, None, None).unwrap_or_default();
 
     let mut out = Vec::new();
     for (pkg, refs) in packages.iter().zip(results.iter()) {
@@ -540,7 +659,9 @@ pub fn detect_repo_name() -> String {
 pub fn detect_user_name() -> Option<String> {
     for key in ["INFYNON_USER", "USER", "USERNAME"] {
         if let Ok(value) = std::env::var(key) {
-            if let Some(s) = normalize_user(&value) { return Some(s); }
+            if let Some(s) = normalize_user(&value) {
+                return Some(s);
+            }
         }
     }
     None
@@ -569,33 +690,55 @@ pub fn kg_dir() -> PathBuf {
 
 pub fn ensure_kg_layout() -> Result<(), String> {
     for dir in [kg_dir(), kg_dir().join("entities"), kg_dir().join("edges")] {
-        fs::create_dir_all(&dir).map_err(|e| format!("failed to create {}: {}", dir.display(), e))?;
+        fs::create_dir_all(&dir)
+            .map_err(|e| format!("failed to create {}: {}", dir.display(), e))?;
     }
     Ok(())
 }
 
 fn kg_entity_path(id: &str) -> PathBuf {
-    kg_dir().join("entities").join(format!("{}.json", sanitize(id)))
+    kg_dir()
+        .join("entities")
+        .join(format!("{}.json", storage_key(id)))
 }
 
 fn kg_edge_path(id: &str) -> PathBuf {
-    kg_dir().join("edges").join(format!("{}.json", sanitize(id)))
+    kg_dir()
+        .join("edges")
+        .join(format!("{}.json", storage_key(id)))
+}
+
+fn legacy_kg_entity_path(id: &str) -> PathBuf {
+    kg_dir()
+        .join("entities")
+        .join(format!("{}.json", sanitize(id)))
+}
+
+fn legacy_kg_edge_path(id: &str) -> PathBuf {
+    kg_dir()
+        .join("edges")
+        .join(format!("{}.json", sanitize(id)))
 }
 
 pub fn create_entity(entity: KgEntity) -> Result<(), String> {
     ensure_kg_layout()?;
     let content = serde_json::to_string_pretty(&entity).map_err(|e| e.to_string())?;
-    fs::write(kg_entity_path(&entity.id), content).map_err(|e| e.to_string())
+    let path = kg_entity_path(&entity.id);
+    fs::write(&path, content).map_err(|e| e.to_string())?;
+    remove_legacy_alias(&path, &legacy_kg_entity_path(&entity.id))
 }
 
 pub fn delete_entity(id: &str) -> Result<(), String> {
-    let path = kg_entity_path(id);
-    match fs::remove_file(&path) {
-        Ok(()) => {}
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            return Err(format!("entity '{}' not found", id));
+    let mut deleted = false;
+    for path in [kg_entity_path(id), legacy_kg_entity_path(id)] {
+        match fs::remove_file(&path) {
+            Ok(()) => deleted = true,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.to_string()),
         }
-        Err(e) => return Err(e.to_string()),
+    }
+    if !deleted {
+        return Err(format!("entity '{}' not found", id));
     }
     // Remove all edges referencing this entity
     let edges = list_edges(None, None)?;
@@ -607,7 +750,10 @@ pub fn delete_entity(id: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub fn list_entities(branch: Option<&str>, kind: Option<EntityKind>) -> Result<Vec<KgEntity>, String> {
+pub fn list_entities(
+    branch: Option<&str>,
+    kind: Option<EntityKind>,
+) -> Result<Vec<KgEntity>, String> {
     ensure_kg_layout()?;
     let dir = kg_dir().join("entities");
     let entries = match fs::read_dir(&dir) {
@@ -636,14 +782,17 @@ pub fn list_entities(branch: Option<&str>, kind: Option<EntityKind>) -> Result<V
 }
 
 pub fn load_entity(id: &str) -> Result<Option<KgEntity>, String> {
-    match fs::read_to_string(kg_entity_path(id)) {
-        Ok(content) => {
-            let entity = serde_json::from_str(&content).map_err(|e| e.to_string())?;
-            Ok(Some(entity))
+    for path in [kg_entity_path(id), legacy_kg_entity_path(id)] {
+        match fs::read_to_string(path) {
+            Ok(content) => {
+                let entity = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+                return Ok(Some(entity));
+            }
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.to_string()),
         }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(e.to_string()),
     }
+    Ok(None)
 }
 
 pub fn find_entity_by_name(name: &str, branch: &str) -> Result<Option<KgEntity>, String> {
@@ -654,19 +803,31 @@ pub fn find_entity_by_name(name: &str, branch: &str) -> Result<Option<KgEntity>,
 pub fn create_edge(edge: KgEdge) -> Result<(), String> {
     ensure_kg_layout()?;
     let content = serde_json::to_string_pretty(&edge).map_err(|e| e.to_string())?;
-    fs::write(kg_edge_path(&edge.id), content).map_err(|e| e.to_string())
+    let path = kg_edge_path(&edge.id);
+    fs::write(&path, content).map_err(|e| e.to_string())?;
+    remove_legacy_alias(&path, &legacy_kg_edge_path(&edge.id))
 }
 
 pub fn delete_edge(id: &str) -> Result<(), String> {
-    let path = kg_edge_path(id);
-    match fs::remove_file(&path) {
-        Ok(()) => Ok(()),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Err(format!("edge '{}' not found", id)),
-        Err(e) => Err(e.to_string()),
+    let mut deleted = false;
+    for path in [kg_edge_path(id), legacy_kg_edge_path(id)] {
+        match fs::remove_file(&path) {
+            Ok(()) => deleted = true,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+    if deleted {
+        Ok(())
+    } else {
+        Err(format!("edge '{}' not found", id))
     }
 }
 
-pub fn list_edges(branch: Option<&str>, relation: Option<RelationType>) -> Result<Vec<KgEdge>, String> {
+pub fn list_edges(
+    branch: Option<&str>,
+    relation: Option<RelationType>,
+) -> Result<Vec<KgEdge>, String> {
     ensure_kg_layout()?;
     let dir = kg_dir().join("edges");
     let entries = match fs::read_dir(&dir) {
@@ -695,14 +856,17 @@ pub fn list_edges(branch: Option<&str>, relation: Option<RelationType>) -> Resul
 }
 
 pub fn load_edge(id: &str) -> Result<Option<KgEdge>, String> {
-    match fs::read_to_string(kg_edge_path(id)) {
-        Ok(content) => {
-            let edge = serde_json::from_str(&content).map_err(|e| e.to_string())?;
-            Ok(Some(edge))
+    for path in [kg_edge_path(id), legacy_kg_edge_path(id)] {
+        match fs::read_to_string(path) {
+            Ok(content) => {
+                let edge = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+                return Ok(Some(edge));
+            }
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.to_string()),
         }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(e.to_string()),
     }
+    Ok(None)
 }
 
 pub fn load_graph(branch: Option<&str>) -> Result<KgGraph, String> {
@@ -717,12 +881,16 @@ pub fn export_graph_json(graph: &KgGraph) -> Result<String, String> {
 }
 
 pub fn export_graph_dot(graph: &KgGraph) -> Result<String, String> {
-    let mut dot = String::from("digraph trace_kg {\n  rankdir=LR;\n  node [fontname=\"Helvetica\"];\n\n");
+    let mut dot =
+        String::from("digraph trace_kg {\n  rankdir=LR;\n  node [fontname=\"Helvetica\"];\n\n");
 
     // Group entities by branch into subgraph clusters
     let mut branches: HashMap<String, Vec<&KgEntity>> = HashMap::new();
     for entity in &graph.entities {
-        branches.entry(entity.branch.clone()).or_default().push(entity);
+        branches
+            .entry(entity.branch.clone())
+            .or_default()
+            .push(entity);
     }
 
     for (branch, entities) in &branches {
@@ -765,7 +933,10 @@ pub fn export_graph_dot(graph: &KgGraph) -> Result<String, String> {
     Ok(dot)
 }
 
-pub fn import_graph_json(content: &str, target_branch: Option<&str>) -> Result<(usize, usize), String> {
+pub fn import_graph_json(
+    content: &str,
+    target_branch: Option<&str>,
+) -> Result<(usize, usize), String> {
     let mut graph: KgGraph = serde_json::from_str(content).map_err(|e| e.to_string())?;
     if let Some(branch) = target_branch {
         for entity in &mut graph.entities {
@@ -793,7 +964,9 @@ pub fn detect_current_branch() -> String {
         .ok()
         .and_then(|o| {
             if o.status.success() {
-                String::from_utf8(o.stdout).ok().map(|s| s.trim().to_string())
+                String::from_utf8(o.stdout)
+                    .ok()
+                    .map(|s| s.trim().to_string())
             } else {
                 None
             }
@@ -809,13 +982,24 @@ pub fn auto_build_graph(branch: &str) -> Result<(usize, usize), String> {
 
     // Pre-load all existing entities and edges into HashSets to avoid N+1 filesystem scans
     let existing = list_entities(Some(branch), None).unwrap_or_default();
-    let mut known_entities: std::collections::HashSet<String> = existing.iter().map(|e| e.name.clone()).collect();
+    let mut known_entities: std::collections::HashSet<String> =
+        existing.iter().map(|e| e.name.clone()).collect();
     let existing_edges = list_edges(Some(branch), None).unwrap_or_default();
-    let mut known_edges: std::collections::HashSet<String> = existing_edges.iter().map(|e| e.id.clone()).collect();
+    let mut known_edges: std::collections::HashSet<String> = existing_edges
+        .iter()
+        .map(|e| edge_dedupe_key(&e.source, &e.target, e.relation))
+        .collect();
 
     // Run git log to extract person->file relationships
     let output = std::process::Command::new("git")
-        .args(["log", "--name-only", "--format=%an", "--no-merges", "-100", branch])
+        .args([
+            "log",
+            "--name-only",
+            "--format=%an",
+            "--no-merges",
+            "-100",
+            branch,
+        ])
         .output()
         .map_err(|e| format!("failed to run git log: {}", e))?;
 
@@ -838,7 +1022,7 @@ pub fn auto_build_graph(branch: &str) -> Result<(usize, usize), String> {
         if !line.contains('/') && !line.contains('.') {
             current_person = Some(line.to_string());
             // Create person entity if not exists
-            let person_id = format!("person-{}", sanitize(line));
+            let person_id = stable_trace_id("person", line);
             if !known_entities.contains(line) {
                 create_entity(KgEntity {
                     id: person_id,
@@ -857,7 +1041,7 @@ pub fn auto_build_graph(branch: &str) -> Result<(usize, usize), String> {
 
         // It's a file path
         if let Some(ref person) = current_person {
-            let file_id = format!("file-{}", sanitize(line));
+            let file_id = stable_trace_id("file", line);
             if !known_entities.contains(line) {
                 create_entity(KgEntity {
                     id: file_id.clone(),
@@ -872,9 +1056,10 @@ pub fn auto_build_graph(branch: &str) -> Result<(usize, usize), String> {
                 entities_created += 1;
             }
 
-            let person_id = format!("person-{}", sanitize(person));
-            let edge_id = format!("edge-{}-{}", sanitize(line), sanitize(person));
-            if !known_edges.contains(&edge_id) {
+            let person_id = stable_trace_id("person", person);
+            let edge_id = stable_trace_id("edge", &format!("{}|{}|modified_by", line, person));
+            let edge_key = edge_dedupe_key(&file_id, &person_id, RelationType::ModifiedBy);
+            if !known_edges.contains(&edge_key) {
                 create_edge(KgEdge {
                     id: edge_id.clone(),
                     source: file_id,
@@ -885,7 +1070,7 @@ pub fn auto_build_graph(branch: &str) -> Result<(usize, usize), String> {
                     evidence: format!("git log on {}", branch),
                     created_at: now.clone(),
                 })?;
-                known_edges.insert(edge_id);
+                known_edges.insert(edge_key);
                 edges_created += 1;
             }
         }
@@ -894,7 +1079,7 @@ pub fn auto_build_graph(branch: &str) -> Result<(usize, usize), String> {
     // Process existing trace notes
     let notes = list_notes().unwrap_or_default();
     for note in &notes {
-        let note_entity_id = format!("note-{}", sanitize(&note.id));
+        let note_entity_id = stable_trace_id("note", &note.id);
         if !known_entities.contains(&note.title) {
             create_entity(KgEntity {
                 id: note_entity_id.clone(),
@@ -916,9 +1101,24 @@ pub fn auto_build_graph(branch: &str) -> Result<(usize, usize), String> {
 
         // Create Documents edge from note to its target
         if !note.target.is_empty() {
-            let target_id = format!("file-{}", sanitize(&note.target));
-            let edge_id = format!("edge-note-{}-{}", sanitize(&note.id), sanitize(&note.target));
-            if !known_edges.contains(&edge_id) {
+            let target_id = stable_trace_id("file", &note.target);
+            if load_entity(&target_id)?.is_none() {
+                create_entity(KgEntity {
+                    id: target_id.clone(),
+                    kind: EntityKind::File,
+                    name: note.target.clone(),
+                    metadata: HashMap::new(),
+                    branch: branch.to_string(),
+                    created_at: note.created_at.clone(),
+                    updated_at: note.updated_at.clone(),
+                })?;
+                known_entities.insert(note.target.clone());
+                entities_created += 1;
+            }
+            let edge_id =
+                stable_trace_id("edge", &format!("{}|{}|documents", note.id, note.target));
+            let edge_key = edge_dedupe_key(&note_entity_id, &target_id, RelationType::Documents);
+            if !known_edges.contains(&edge_key) {
                 create_edge(KgEdge {
                     id: edge_id.clone(),
                     source: note_entity_id,
@@ -929,11 +1129,33 @@ pub fn auto_build_graph(branch: &str) -> Result<(usize, usize), String> {
                     evidence: format!("trace note {}", note.id),
                     created_at: note.created_at.clone(),
                 })?;
-                known_edges.insert(edge_id);
+                known_edges.insert(edge_key);
                 edges_created += 1;
             }
         }
     }
 
     Ok((entities_created, edges_created))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{edge_dedupe_key, stable_trace_id, storage_key};
+    use crate::trace::types::RelationType;
+
+    #[test]
+    fn storage_keys_do_not_collapse_distinct_ids() {
+        assert_ne!(storage_key("a/b"), storage_key("a:b"));
+        assert_ne!(
+            stable_trace_id("file", "a/b"),
+            stable_trace_id("file", "a:b")
+        );
+    }
+
+    #[test]
+    fn edge_dedupe_key_includes_relation() {
+        let modified = edge_dedupe_key("file-1", "person-1", RelationType::ModifiedBy);
+        let documents = edge_dedupe_key("file-1", "person-1", RelationType::Documents);
+        assert_ne!(modified, documents);
+    }
 }

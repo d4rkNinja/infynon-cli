@@ -1,20 +1,20 @@
-mod header;
 mod dashboard;
-mod flows;
-mod runner;
-mod environment;
 mod diff;
+mod environment;
+mod flows;
+mod header;
+mod modals;
 mod nodes;
 mod overlays;
-mod modals;
+mod runner;
 mod sidebar;
 
 use ratatui::{
-    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Clear, Paragraph},
+    Frame,
 };
 
 use crate::tui::api_app::{ApiApp, ApiView, AttachMode};
@@ -30,7 +30,12 @@ pub(super) fn section_header(title: &str, width: usize) -> Line<'static> {
     Line::from(vec![
         Span::styled("  ", Style::default()),
         Span::styled(
-            format!("{} {} {}", "\u{2500}".repeat(left_d), title, "\u{2500}".repeat(right_d)),
+            format!(
+                "{} {} {}",
+                "\u{2500}".repeat(left_d),
+                title,
+                "\u{2500}".repeat(right_d)
+            ),
             Style::default().fg(DIMMER),
         ),
     ])
@@ -44,7 +49,10 @@ pub(crate) fn truncate(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
         s.to_string()
     } else {
-        format!("{}\u{2026}", s.chars().take(max.saturating_sub(1)).collect::<String>())
+        format!(
+            "{}\u{2026}",
+            s.chars().take(max.saturating_sub(1)).collect::<String>()
+        )
     }
 }
 
@@ -97,21 +105,18 @@ pub fn render(f: &mut Frame, app: &mut ApiApp) {
     // Main area: sidebar (20 col) + content (flex)
     let main = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Length(20),
-            Constraint::Min(0),
-        ])
+        .constraints([Constraint::Length(20), Constraint::Min(0)])
         .split(chunks[1]);
 
     sidebar::render_sidebar(f, app, main[0]);
 
     match app.current_view {
-        ApiView::Dashboard   => dashboard::render_dashboard(f, app, main[1]),
-        ApiView::Nodes       => nodes::render_nodes_view(f, app, main[1]),
-        ApiView::Flows       => flows::render_flows_view(f, app, main[1]),
-        ApiView::Runner      => runner::render_runner_view(f, app, main[1]),
+        ApiView::Dashboard => dashboard::render_dashboard(f, app, main[1]),
+        ApiView::Nodes => nodes::render_nodes_view(f, app, main[1]),
+        ApiView::Flows => flows::render_flows_view(f, app, main[1]),
+        ApiView::Runner => runner::render_runner_view(f, app, main[1]),
         ApiView::Environment => environment::render_env_context(f, app, main[1]),
-        ApiView::Settings    => overlays::render_settings(f, app, main[1]),
+        ApiView::Settings => overlays::render_settings(f, app, main[1]),
     }
 
     header::render_status_bar(f, app, chunks[2]);

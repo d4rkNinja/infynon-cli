@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use serde_json::Value;
+use std::collections::HashMap;
 
 use crate::api::types::AssertionResult;
 
@@ -53,7 +53,11 @@ fn eval_inner(
                 let passed = compare_numbers(status as f64, op, rhs_n as f64);
                 (passed, actual_str, None)
             } else {
-                (false, actual_str, Some(format!("Cannot parse status code '{}'", rhs)))
+                (
+                    false,
+                    actual_str,
+                    Some(format!("Cannot parse status code '{}'", rhs)),
+                )
             }
         }
 
@@ -76,7 +80,8 @@ fn eval_inner(
         [subject, "exists"] if subject.starts_with("header.") => {
             let name = &subject["header.".len()..];
             let key = name.to_lowercase();
-            let found = headers.contains_key(&key) || headers.keys().any(|k| k.to_lowercase() == key);
+            let found =
+                headers.contains_key(&key) || headers.keys().any(|k| k.to_lowercase() == key);
             (found, found.to_string(), None)
         }
 
@@ -93,7 +98,12 @@ fn eval_inner(
             let key = name.to_lowercase();
             let header_val = headers
                 .get(&key)
-                .or_else(|| headers.iter().find(|(k, _)| k.to_lowercase() == key).map(|(_, v)| v))
+                .or_else(|| {
+                    headers
+                        .iter()
+                        .find(|(k, _)| k.to_lowercase() == key)
+                        .map(|(_, v)| v)
+                })
                 .cloned()
                 .unwrap_or_default();
             let v = Value::String(header_val.clone());
@@ -108,11 +118,7 @@ fn eval_inner(
     }
 }
 
-fn eval_value_op(
-    val: Option<&Value>,
-    op: &str,
-    rhs: &str,
-) -> (bool, String, Option<String>) {
+fn eval_value_op(val: Option<&Value>, op: &str, rhs: &str) -> (bool, String, Option<String>) {
     let actual_str = match val {
         Some(v) => json_to_display(v),
         None => "<missing>".to_string(),
@@ -144,10 +150,18 @@ fn eval_value_op(
                         let passed = compare_numbers(n, op, rhs_n);
                         (passed, actual_str, None)
                     } else {
-                        (false, actual_str, Some(format!("'{}' is not a number", rhs_clean)))
+                        (
+                            false,
+                            actual_str,
+                            Some(format!("'{}' is not a number", rhs_clean)),
+                        )
                     }
                 } else {
-                    (false, actual_str.clone(), Some(format!("Value '{}' is not a number", actual_str)))
+                    (
+                        false,
+                        actual_str.clone(),
+                        Some(format!("Value '{}' is not a number", actual_str)),
+                    )
                 }
             } else {
                 (false, actual_str, Some("Field missing".to_string()))
@@ -174,11 +188,11 @@ fn compare_numbers(lhs: f64, op: &str, rhs: f64) -> bool {
     match op {
         "==" => (lhs - rhs).abs() < f64::EPSILON,
         "!=" => (lhs - rhs).abs() >= f64::EPSILON,
-        ">"  => lhs > rhs,
+        ">" => lhs > rhs,
         ">=" => lhs >= rhs,
-        "<"  => lhs < rhs,
+        "<" => lhs < rhs,
         "<=" => lhs <= rhs,
-        _    => false,
+        _ => false,
     }
 }
 
@@ -187,13 +201,21 @@ fn value_eq(val: &Value, rhs: &str) -> bool {
         Value::String(s) => s == rhs,
         Value::Number(n) => {
             if let Ok(r) = rhs.parse::<f64>() {
-                n.as_f64().map(|v| (v - r).abs() < f64::EPSILON).unwrap_or(false)
+                n.as_f64()
+                    .map(|v| (v - r).abs() < f64::EPSILON)
+                    .unwrap_or(false)
             } else {
                 false
             }
         }
         Value::Bool(b) => {
-            if rhs == "true" { *b } else if rhs == "false" { !*b } else { false }
+            if rhs == "true" {
+                *b
+            } else if rhs == "false" {
+                !*b
+            } else {
+                false
+            }
         }
         Value::Null => rhs == "null",
         _ => val.to_string() == rhs,

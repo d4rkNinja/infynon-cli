@@ -1,6 +1,6 @@
+use crate::trace::cli::TraceAction;
 use clap::builder::styling::{AnsiColor, Effects, Styles};
 use clap::{Parser, Subcommand};
-use crate::trace::cli::TraceAction;
 
 fn get_styles() -> Styles {
     Styles::styled()
@@ -31,24 +31,45 @@ pub struct PkgArgs {
     pub strict: Option<String>,
 
     /// Override lock/manifest file path (e.g. --pkg-file ./subdir/Cargo.lock)
-    #[arg(long, global = true, value_name = "FILE", help = "Path to a specific lock/manifest file to scan or install from")]
+    #[arg(
+        long,
+        global = true,
+        value_name = "FILE",
+        help = "Path to a specific lock/manifest file to scan or install from"
+    )]
     pub pkg_file: Option<String>,
 
     /// CI mode: install all packages even if vulnerable (no interactive prompts)
-    #[arg(long, global = true, help = "Non-interactive: install all packages, even vulnerable ones")]
+    #[arg(
+        long,
+        global = true,
+        help = "Non-interactive: install all packages, even vulnerable ones"
+    )]
     pub yes: bool,
 
     /// CI mode: skip vulnerable packages silently, install only clean ones (no interactive prompts)
-    #[arg(long, global = true, help = "Non-interactive: skip vulnerable packages, install only safe ones")]
+    #[arg(
+        long,
+        global = true,
+        help = "Non-interactive: skip vulnerable packages, install only safe ones"
+    )]
     pub skip_vulnerable: bool,
 
     /// CI mode: auto-upgrade vulnerable packages to their safe version; skip if no fix is available (no interactive prompts)
-    #[arg(long, global = true, help = "Non-interactive: auto-install fixed versions, skip unfixable packages")]
+    #[arg(
+        long,
+        global = true,
+        help = "Non-interactive: auto-install fixed versions, skip unfixable packages"
+    )]
     pub auto_fix: bool,
 
     /// Agent/AI mode: emit machine-readable JSON instead of human-formatted output.
     /// Exit codes - 0: clean  1: warnings (low/info)  2: vulnerabilities found  3: blocked by --strict
-    #[arg(long, global = true, help = "Output machine-readable JSON for AI agents and CI pipelines")]
+    #[arg(
+        long,
+        global = true,
+        help = "Output machine-readable JSON for AI agents and CI pipelines"
+    )]
     pub agent: bool,
 
     #[command(subcommand)]
@@ -717,6 +738,8 @@ pub enum AiAction {
 }
 
 fn parse_key_val(s: &str) -> Result<(String, String), String> {
-    let pos = s.find('=').ok_or_else(|| format!("Expected KEY=VALUE, got '{}'", s))?;
+    let pos = s
+        .find('=')
+        .ok_or_else(|| format!("Expected KEY=VALUE, got '{}'", s))?;
     Ok((s[..pos].to_string(), s[pos + 1..].to_string()))
 }

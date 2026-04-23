@@ -1,9 +1,9 @@
 use ratatui::{
-    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Wrap},
+    Frame,
 };
 
 use crate::tui::api_app::ApiApp;
@@ -35,41 +35,57 @@ pub(super) fn render_dashboard(f: &mut Frame, app: &ApiApp, area: Rect) {
 // ── Flow list (left panel) ────────────────────────────────────────────────────
 
 fn render_flow_list(f: &mut Frame, app: &ApiApp, area: Rect) {
-    let items: Vec<ListItem> = app.flows.iter().enumerate().map(|(i, flow)| {
-        let (status_icon, status_color) = match app.flow_run_statuses.get(&flow.id) {
-            Some(Some(true))  => ("\u{2714}", GREEN),   // heavy check
-            Some(Some(false)) => ("\u{2718}", RED),     // heavy cross
-            _                 => ("\u{00B7}", DIM),      // middle dot
-        };
-        let is_selected = i == app.active_flow_idx;
-        let name_style = if is_selected {
-            Style::default().fg(PURPLE).add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(TEXT)
-        };
+    let items: Vec<ListItem> = app
+        .flows
+        .iter()
+        .enumerate()
+        .map(|(i, flow)| {
+            let (status_icon, status_color) = match app.flow_run_statuses.get(&flow.id) {
+                Some(Some(true)) => ("\u{2714}", GREEN), // heavy check
+                Some(Some(false)) => ("\u{2718}", RED),  // heavy cross
+                _ => ("\u{00B7}", DIM),                  // middle dot
+            };
+            let is_selected = i == app.active_flow_idx;
+            let name_style = if is_selected {
+                Style::default().fg(PURPLE).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(TEXT)
+            };
 
-        let node_count = flow.all_node_ids().len();
-        let base = flow.base_url.as_deref().unwrap_or("\u{2014}"); // em dash
-        let node_suffix = if node_count == 1 { " node " } else { " nodes" };
+            let node_count = flow.all_node_ids().len();
+            let base = flow.base_url.as_deref().unwrap_or("\u{2014}"); // em dash
+            let node_suffix = if node_count == 1 { " node " } else { " nodes" };
 
-        // Line 1: status icon + flow name + node count
-        let w = (area.width as usize / 3).max(12).min(28);
-        let line1 = Line::from(vec![
-            Span::styled("  ", Style::default()),
-            Span::styled(status_icon.to_string(), Style::default().fg(status_color).add_modifier(Modifier::BOLD)),
-            Span::styled("  ", Style::default()),
-            Span::styled(format!("{:<w$}", truncate(&flow.name, w)), name_style),
-            Span::styled(format!("{}{}", node_count, node_suffix), Style::default().fg(DIM)),
-        ]);
+            // Line 1: status icon + flow name + node count
+            let w = (area.width as usize / 3).max(12).min(28);
+            let line1 = Line::from(vec![
+                Span::styled("  ", Style::default()),
+                Span::styled(
+                    status_icon.to_string(),
+                    Style::default()
+                        .fg(status_color)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled("  ", Style::default()),
+                Span::styled(format!("{:<w$}", truncate(&flow.name, w)), name_style),
+                Span::styled(
+                    format!("{}{}", node_count, node_suffix),
+                    Style::default().fg(DIM),
+                ),
+            ]);
 
-        // Line 2: base URL indented
-        let line2 = Line::from(vec![
-            Span::styled("      ", Style::default()),
-            Span::styled(truncate(base, area.width.saturating_sub(14) as usize), Style::default().fg(DIMMER)),
-        ]);
+            // Line 2: base URL indented
+            let line2 = Line::from(vec![
+                Span::styled("      ", Style::default()),
+                Span::styled(
+                    truncate(base, area.width.saturating_sub(14) as usize),
+                    Style::default().fg(DIMMER),
+                ),
+            ]);
 
-        ListItem::new(vec![line1, line2])
-    }).collect();
+            ListItem::new(vec![line1, line2])
+        })
+        .collect();
 
     let mut state = ListState::default();
     state.select(Some(app.active_flow_idx));
@@ -107,7 +123,11 @@ fn render_quick_stats(f: &mut Frame, app: &ApiApp, area: Rect) {
     if let Some(run) = &app.last_run {
         let total = run.steps.len();
         let passed = run.passed_count();
-        let pass_pct = if total == 0 { 0 } else { (passed * 100) / total };
+        let pass_pct = if total == 0 {
+            0
+        } else {
+            (passed * 100) / total
+        };
 
         // ── Section: Result badge ──
         lines.push(Line::raw(""));
@@ -120,7 +140,13 @@ fn render_quick_stats(f: &mut Frame, app: &ApiApp, area: Rect) {
         };
         lines.push(Line::from(vec![
             Span::styled("    ", Style::default()),
-            Span::styled(badge_text, Style::default().fg(badge_fg).bg(badge_bg).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                badge_text,
+                Style::default()
+                    .fg(badge_fg)
+                    .bg(badge_bg)
+                    .add_modifier(Modifier::BOLD),
+            ),
         ]));
 
         lines.push(Line::raw(""));
@@ -141,14 +167,23 @@ fn render_quick_stats(f: &mut Frame, app: &ApiApp, area: Rect) {
             (
                 "  Pass Rate  ",
                 format!("{}%", pass_pct),
-                if pass_pct == 100 { GREEN } else if pass_pct >= 50 { YELLOW } else { RED },
+                if pass_pct == 100 {
+                    GREEN
+                } else if pass_pct >= 50 {
+                    YELLOW
+                } else {
+                    RED
+                },
             ),
         ];
         for (label, value, color) in stats {
             lines.push(Line::from(vec![
                 Span::styled(*label, stat_label()),
                 Span::styled("  ", Style::default()),
-                Span::styled(value.clone(), Style::default().fg(*color).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    value.clone(),
+                    Style::default().fg(*color).add_modifier(Modifier::BOLD),
+                ),
             ]));
         }
 
@@ -156,15 +191,28 @@ fn render_quick_stats(f: &mut Frame, app: &ApiApp, area: Rect) {
 
         // ── Visual progress bar ──
         let bar_width = (area.width as usize).saturating_sub(12).min(36);
-        let filled = if total == 0 { 0 } else { (pass_pct as usize * bar_width) / 100 };
+        let filled = if total == 0 {
+            0
+        } else {
+            (pass_pct as usize * bar_width) / 100
+        };
         let empty = bar_width.saturating_sub(filled);
-        let bar_color = if pass_pct == 100 { GREEN } else if pass_pct >= 50 { YELLOW } else { RED };
+        let bar_color = if pass_pct == 100 {
+            GREEN
+        } else if pass_pct >= 50 {
+            YELLOW
+        } else {
+            RED
+        };
 
         lines.push(Line::from(vec![
             Span::styled("    ", Style::default()),
             Span::styled("\u{2593}".repeat(filled), Style::default().fg(bar_color)),
             Span::styled("\u{2591}".repeat(empty), Style::default().fg(DIMMER)),
-            Span::styled(format!(" {}%", pass_pct), Style::default().fg(bar_color).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                format!(" {}%", pass_pct),
+                Style::default().fg(bar_color).add_modifier(Modifier::BOLD),
+            ),
         ]));
 
         lines.push(Line::raw(""));
@@ -181,7 +229,11 @@ fn render_quick_stats(f: &mut Frame, app: &ApiApp, area: Rect) {
 
         let step_slice: Vec<_> = run.steps.iter().rev().take(5).collect();
         for step in step_slice.into_iter().rev() {
-            let (icon, color) = if step.passed { ("\u{2714}", GREEN) } else { ("\u{2718}", RED) };
+            let (icon, color) = if step.passed {
+                ("\u{2714}", GREEN)
+            } else {
+                ("\u{2718}", RED)
+            };
             let mc = method_color(&step.method);
             lines.push(Line::from(vec![
                 Span::styled("  ", Style::default()),
@@ -189,7 +241,10 @@ fn render_quick_stats(f: &mut Frame, app: &ApiApp, area: Rect) {
                 Span::styled(" ", Style::default()),
                 Span::styled(format!("[{}]", step.method), Style::default().fg(mc)),
                 Span::styled(" ", Style::default()),
-                Span::styled(truncate(&step.node_name, area.width.saturating_sub(14) as usize), Style::default().fg(TEXT)),
+                Span::styled(
+                    truncate(&step.node_name, area.width.saturating_sub(14) as usize),
+                    Style::default().fg(TEXT),
+                ),
                 Span::styled(
                     format!(" {}ms", step.duration_ms),
                     Style::default().fg(DIMMER),
@@ -219,9 +274,10 @@ fn render_quick_stats(f: &mut Frame, app: &ApiApp, area: Rect) {
             Span::styled("[Enter]", Style::default().fg(YELLOW)),
             Span::styled(" to run the", Style::default().fg(TEXT_DIM)),
         ]));
-        lines.push(Line::from(vec![
-            Span::styled("    selected flow.", Style::default().fg(TEXT_DIM)),
-        ]));
+        lines.push(Line::from(vec![Span::styled(
+            "    selected flow.",
+            Style::default().fg(TEXT_DIM),
+        )]));
     }
 
     let title = if app.flow_running {
@@ -284,7 +340,10 @@ fn render_overview_nodes_only(f: &mut Frame, app: &ApiApp, area: Rect) {
             Span::styled("  ", Style::default()),
             Span::styled(format!("[{}]", node.method), Style::default().fg(mc)),
             Span::styled(" ", Style::default()),
-            Span::styled(format!("{:<20}", truncate(id, 20)), Style::default().fg(TEXT)),
+            Span::styled(
+                format!("{:<20}", truncate(id, 20)),
+                Style::default().fg(TEXT),
+            ),
             Span::styled(truncate(&node.path, 36), Style::default().fg(TEXT_DIM)),
         ]));
     }
@@ -298,17 +357,18 @@ fn render_overview_nodes_only(f: &mut Frame, app: &ApiApp, area: Rect) {
 pub(super) fn render_no_flows_hint(f: &mut Frame, area: Rect, tab_name: &str) {
     let p = Paragraph::new(vec![
         Line::raw(""),
-        Line::from(vec![
-            Span::styled(
-                format!("  {} \u{2014} no flows yet.", tab_name),
-                Style::default().fg(WHITE).add_modifier(Modifier::BOLD),
-            ),
-        ]),
+        Line::from(vec![Span::styled(
+            format!("  {} \u{2014} no flows yet.", tab_name),
+            Style::default().fg(WHITE).add_modifier(Modifier::BOLD),
+        )]),
         Line::raw(""),
         Line::from(vec![
             Span::styled("  Press ", Style::default().fg(TEXT_DIM)),
             Span::styled("[1]", Style::default().fg(YELLOW)),
-            Span::styled(" for Overview to get started.", Style::default().fg(TEXT_DIM)),
+            Span::styled(
+                " for Overview to get started.",
+                Style::default().fg(TEXT_DIM),
+            ),
         ]),
     ])
     .block(
@@ -326,7 +386,10 @@ pub(super) fn render_no_flows_hint(f: &mut Frame, area: Rect, tab_name: &str) {
 
 fn render_welcome_screen(f: &mut Frame, area: Rect) {
     let outer = Block::default()
-        .title(Span::styled(" Weave \u{2014} API Flow Testing ", title_style()))
+        .title(Span::styled(
+            " Weave \u{2014} API Flow Testing ",
+            title_style(),
+        ))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(CYAN));
@@ -338,16 +401,31 @@ fn render_welcome_screen(f: &mut Frame, area: Rect) {
     let lines = vec![
         Line::raw(""),
         Line::from(vec![
-            Span::styled("  No flows detected. ", Style::default().fg(WHITE).add_modifier(Modifier::BOLD)),
-            Span::styled("Build an API test in 4 steps:", Style::default().fg(TEXT_DIM)),
+            Span::styled(
+                "  No flows detected. ",
+                Style::default().fg(WHITE).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "Build an API test in 4 steps:",
+                Style::default().fg(TEXT_DIM),
+            ),
         ]),
         Line::raw(""),
-        Line::from(vec![Span::styled(section_line, Style::default().fg(DIMMER))]),
+        Line::from(vec![Span::styled(
+            section_line,
+            Style::default().fg(DIMMER),
+        )]),
         Line::raw(""),
         // Step 1
         Line::from(vec![
             Span::styled("  ", Style::default()),
-            Span::styled(" 1 ", Style::default().fg(BG).bg(CYAN).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                " 1 ",
+                Style::default()
+                    .fg(BG)
+                    .bg(CYAN)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled("  Create nodes", Style::default().fg(TEXT)),
         ]),
         Line::from(vec![
@@ -361,18 +439,33 @@ fn render_welcome_screen(f: &mut Frame, area: Rect) {
         // Step 2
         Line::from(vec![
             Span::styled("  ", Style::default()),
-            Span::styled(" 2 ", Style::default().fg(BG).bg(CYAN).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                " 2 ",
+                Style::default()
+                    .fg(BG)
+                    .bg(CYAN)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled("  Create a flow", Style::default().fg(TEXT)),
         ]),
         Line::from(vec![
             Span::styled("      ", Style::default()),
-            Span::styled("infynon weave flow create my-flow", Style::default().fg(CYAN)),
+            Span::styled(
+                "infynon weave flow create my-flow",
+                Style::default().fg(CYAN),
+            ),
         ]),
         Line::raw(""),
         // Step 3
         Line::from(vec![
             Span::styled("  ", Style::default()),
-            Span::styled(" 3 ", Style::default().fg(BG).bg(CYAN).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                " 3 ",
+                Style::default()
+                    .fg(BG)
+                    .bg(CYAN)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled("  Connect nodes", Style::default().fg(TEXT)),
         ]),
         Line::from(vec![
@@ -386,7 +479,13 @@ fn render_welcome_screen(f: &mut Frame, area: Rect) {
         // Step 4
         Line::from(vec![
             Span::styled("  ", Style::default()),
-            Span::styled(" 4 ", Style::default().fg(BG).bg(GREEN).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                " 4 ",
+                Style::default()
+                    .fg(BG)
+                    .bg(GREEN)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled("  Run the flow", Style::default().fg(TEXT)),
         ]),
         Line::from(vec![
@@ -397,7 +496,10 @@ fn render_welcome_screen(f: &mut Frame, area: Rect) {
             ),
         ]),
         Line::raw(""),
-        Line::from(vec![Span::styled(section_line, Style::default().fg(DIMMER))]),
+        Line::from(vec![Span::styled(
+            section_line,
+            Style::default().fg(DIMMER),
+        )]),
         Line::raw(""),
         // Keyboard shortcuts
         Line::from(vec![

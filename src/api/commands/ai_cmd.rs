@@ -23,7 +23,11 @@ pub fn cmd_ai_suggest(after_node_id: &str) {
     };
 
     let all_nodes = storage::list_nodes();
-    let candidates: Vec<_> = all_nodes.iter().filter(|n| n.id != after_node_id).cloned().collect();
+    let candidates: Vec<_> = all_nodes
+        .iter()
+        .filter(|n| n.id != after_node_id)
+        .cloned()
+        .collect();
     let suggestions = ai::suggest_next_nodes(&current, &candidates);
 
     if suggestions.is_empty() {
@@ -43,7 +47,11 @@ pub fn cmd_ai_suggest(after_node_id: &str) {
     println!();
 
     for (i, s) in suggestions.iter().enumerate() {
-        let icon = if i == 0 { "★".bright_yellow().to_string() } else { "·".truecolor(100, 100, 140).to_string() };
+        let icon = if i == 0 {
+            "★".bright_yellow().to_string()
+        } else {
+            "·".truecolor(100, 100, 140).to_string()
+        };
         println!(
             "  {}  {} {} {}  — {}",
             icon,
@@ -52,20 +60,17 @@ pub fn cmd_ai_suggest(after_node_id: &str) {
             s.node.path.bright_cyan(),
             format!("{:.0}% confidence", s.confidence * 100.0).truecolor(140, 140, 160),
         );
-        println!(
-            "     Reason: {}",
-            s.reason.truecolor(180, 180, 200),
-        );
+        println!("     Reason: {}", s.reason.truecolor(180, 180, 200),);
         if !s.edge.carry.is_empty() {
-            println!(
-                "     Carries: {}",
-                s.edge.carry.join(", ").bright_yellow(),
-            );
+            println!("     Carries: {}", s.edge.carry.join(", ").bright_yellow(),);
         }
         println!();
     }
 
-    println!("  Attach best match: infynon weave attach {} {} --ai", after_node_id, suggestions[0].node.id);
+    println!(
+        "  Attach best match: infynon weave attach {} {} --ai",
+        after_node_id, suggestions[0].node.id
+    );
     println!();
 }
 
@@ -83,21 +88,28 @@ pub fn cmd_ai_complete(flow_id: &str) {
 
     let mut flow = match storage::load_flow(flow_id) {
         Ok(f) => f,
-        Err(e) => { Logger::error(&e); return; }
+        Err(e) => {
+            Logger::error(&e);
+            return;
+        }
     };
 
     let all_nodes = storage::list_nodes();
     let flow_node_ids = flow.all_node_ids();
 
     // Find nodes not yet in the flow
-    let orphan_nodes: Vec<_> = all_nodes.iter()
+    let orphan_nodes: Vec<_> = all_nodes
+        .iter()
         .filter(|n| !flow_node_ids.contains(&n.id))
         .cloned()
         .collect();
 
     if orphan_nodes.is_empty() {
         println!();
-        println!("  {}  Flow is already complete — all nodes are connected.", "✔".bright_green());
+        println!(
+            "  {}  Flow is already complete — all nodes are connected.",
+            "✔".bright_green()
+        );
         println!();
         return;
     }
@@ -116,7 +128,8 @@ pub fn cmd_ai_complete(flow_id: &str) {
 
     // For each orphan, find the best node in the flow to connect from
     for orphan in &orphan_nodes {
-        let flow_nodes: Vec<_> = flow_node_ids.iter()
+        let flow_nodes: Vec<_> = flow_node_ids
+            .iter()
             .filter_map(|id| node_map.get(id.as_str()).copied())
             .collect();
 
@@ -165,7 +178,11 @@ pub fn cmd_ai_complete(flow_id: &str) {
     match storage::save_flow(&flow) {
         Ok(_) => {
             println!();
-            println!("  {}  Flow updated with {} new edge(s)", "✔".bright_green(), orphan_nodes.len());
+            println!(
+                "  {}  Flow updated with {} new edge(s)",
+                "✔".bright_green(),
+                orphan_nodes.len()
+            );
             println!();
         }
         Err(e) => Logger::error(&e),
@@ -180,7 +197,10 @@ pub fn cmd_ai_probe(flow_id: &str, base_url_override: Option<&str>) {
 
     let flow = match storage::load_flow(flow_id) {
         Ok(f) => f,
-        Err(e) => { Logger::error(&e); return; }
+        Err(e) => {
+            Logger::error(&e);
+            return;
+        }
     };
 
     let nodes = storage::load_nodes_map();
@@ -213,20 +233,35 @@ pub fn cmd_ai_probe(flow_id: &str, base_url_override: Option<&str>) {
         },
     );
 
-    println!("  {}  Baseline: {}/{} steps passed",
-        if run_result.passed { "✔".bright_green().to_string() } else { "⚠".bright_yellow().to_string() },
-        run_result.passed_count(), run_result.steps.len());
+    println!(
+        "  {}  Baseline: {}/{} steps passed",
+        if run_result.passed {
+            "✔".bright_green().to_string()
+        } else {
+            "⚠".bright_yellow().to_string()
+        },
+        run_result.passed_count(),
+        run_result.steps.len()
+    );
     println!();
     println!("  {}  Running security probes...", "→".bright_cyan());
     println!();
 
     let probes = ai::run_security_probes(&flow, &nodes, &run_result, &base_url);
 
-    let critical_count = probes.iter().filter(|p| !p.passed && p.severity == crate::api::types::ProbeSeverity::Critical).count();
-    let high_count = probes.iter().filter(|p| !p.passed && p.severity == crate::api::types::ProbeSeverity::High).count();
+    let critical_count = probes
+        .iter()
+        .filter(|p| !p.passed && p.severity == crate::api::types::ProbeSeverity::Critical)
+        .count();
+    let high_count = probes
+        .iter()
+        .filter(|p| !p.passed && p.severity == crate::api::types::ProbeSeverity::High)
+        .count();
 
     for probe in &probes {
-        let icon = if probe.passed { "✔".bright_green().to_string() } else {
+        let icon = if probe.passed {
+            "✔".bright_green().to_string()
+        } else {
             match probe.severity {
                 crate::api::types::ProbeSeverity::Critical => "✘".bright_red().to_string(),
                 crate::api::types::ProbeSeverity::High => "✘".bright_red().to_string(),
@@ -251,10 +286,18 @@ pub fn cmd_ai_probe(flow_id: &str, base_url_override: Option<&str>) {
 
         if !probe.passed {
             if let Some(details) = &probe.details {
-                println!("     {}  {}", "→".truecolor(100, 100, 140), details.truecolor(220, 160, 100));
+                println!(
+                    "     {}  {}",
+                    "→".truecolor(100, 100, 140),
+                    details.truecolor(220, 160, 100)
+                );
             }
             if let Some(repro) = &probe.reproduction {
-                println!("     {}  {}", "curl:".truecolor(100, 100, 140), repro.truecolor(140, 140, 160));
+                println!(
+                    "     {}  {}",
+                    "curl:".truecolor(100, 100, 140),
+                    repro.truecolor(140, 140, 160)
+                );
             }
         }
         println!();
@@ -296,7 +339,11 @@ pub fn cmd_ai_build_flow(node_ids: &[String], name: &str) {
         match storage::load_node(id) {
             Ok(n) => nodes.push(n),
             Err(_) => {
-                println!("  {}  Node '{}' not found — skipping", "⚠".bright_yellow(), id);
+                println!(
+                    "  {}  Node '{}' not found — skipping",
+                    "⚠".bright_yellow(),
+                    id
+                );
             }
         }
     }
@@ -307,7 +354,11 @@ pub fn cmd_ai_build_flow(node_ids: &[String], name: &str) {
     }
 
     println!();
-    println!("  {}  Analyzing {} nodes...", "→".bright_cyan(), nodes.len());
+    println!(
+        "  {}  Analyzing {} nodes...",
+        "→".bright_cyan(),
+        nodes.len()
+    );
 
     let (entry, edges) = ai::build_flow_edges(&nodes);
 
@@ -320,7 +371,11 @@ pub fn cmd_ai_build_flow(node_ids: &[String], name: &str) {
             "·".truecolor(100, 100, 140),
             edge.from.bold(),
             edge.to.bright_cyan(),
-            if edge.carry.is_empty() { "all context".to_string() } else { edge.carry.join(", ") }
+            if edge.carry.is_empty() {
+                "all context".to_string()
+            } else {
+                edge.carry.join(", ")
+            }
         );
     }
 
@@ -343,7 +398,11 @@ pub fn cmd_ai_build_flow(node_ids: &[String], name: &str) {
 
     match storage::save_flow(&flow) {
         Ok(path) => {
-            println!("  {}  Flow saved: {}", "✔".bright_green(), path.display().to_string().truecolor(100, 100, 140));
+            println!(
+                "  {}  Flow saved: {}",
+                "✔".bright_green(),
+                path.display().to_string().truecolor(100, 100, 140)
+            );
         }
         Err(e) => Logger::error(&e),
     }
@@ -382,15 +441,27 @@ pub fn cmd_ai_assert(node_id: &str) {
 
     let mut node = match storage::load_node(node_id) {
         Ok(n) => n,
-        Err(e) => { Logger::error(&e); return; }
+        Err(e) => {
+            Logger::error(&e);
+            return;
+        }
     };
 
     let new_assertions = ai::generate_assertions(&node);
 
     println!();
-    println!("  {}  Generated {} assertion(s) for '{}':", "→".bright_cyan(), new_assertions.len(), node_id.bold());
+    println!(
+        "  {}  Generated {} assertion(s) for '{}':",
+        "→".bright_cyan(),
+        new_assertions.len(),
+        node_id.bold()
+    );
     for a in &new_assertions {
-        println!("     {}  {}", "·".truecolor(100, 100, 140), a.check.bright_cyan());
+        println!(
+            "     {}  {}",
+            "·".truecolor(100, 100, 140),
+            a.check.bright_cyan()
+        );
     }
 
     println!();
@@ -419,12 +490,21 @@ pub fn cmd_ai_branch(node_id: &str) {
 
     let node = match storage::load_node(node_id) {
         Ok(n) => n,
-        Err(e) => { Logger::error(&e); return; }
+        Err(e) => {
+            Logger::error(&e);
+            return;
+        }
     };
 
     // Generate conditional branches based on common status codes
     let branches = vec![
-        (format!("status == {}", if node.method == "POST" { 201 } else { 200 }), "success path"),
+        (
+            format!(
+                "status == {}",
+                if node.method == "POST" { 201 } else { 200 }
+            ),
+            "success path",
+        ),
         ("status == 400".to_string(), "validation error path"),
         ("status == 401".to_string(), "unauthorized path"),
         ("status == 404".to_string(), "not found path"),
@@ -432,7 +512,13 @@ pub fn cmd_ai_branch(node_id: &str) {
     ];
 
     println!();
-    println!("  {}  Suggested conditional branches for '{}' {} {}:", "→".bright_cyan(), node_id.bold(), node.method.bright_yellow(), node.path.bright_cyan());
+    println!(
+        "  {}  Suggested conditional branches for '{}' {} {}:",
+        "→".bright_cyan(),
+        node_id.bold(),
+        node.method.bright_yellow(),
+        node.path.bright_cyan()
+    );
     println!();
 
     for (i, (condition, label)) in branches.iter().enumerate() {
@@ -442,8 +528,14 @@ pub fn cmd_ai_branch(node_id: &str) {
             node_id.bold(),
             condition.bright_yellow(),
         );
-        println!("     ({} — connect to appropriate handler node)", label.truecolor(140, 140, 160));
-        println!("     infynon weave attach {} <handler-node> --if \"{}\"", node_id, condition);
+        println!(
+            "     ({} — connect to appropriate handler node)",
+            label.truecolor(140, 140, 160)
+        );
+        println!(
+            "     infynon weave attach {} <handler-node> --if \"{}\"",
+            node_id, condition
+        );
         println!();
     }
 

@@ -1,12 +1,12 @@
 use crate::cli::args::{
-    AiAction, ApiCommands, AssertionAction, EnvAction, FlowAction, NodeAction, PkgArgs, PkgCommands,
-    PromptAction,
+    AiAction, ApiCommands, AssertionAction, EnvAction, FlowAction, NodeAction, PkgArgs,
+    PkgCommands, PromptAction,
 };
 use std::path::Path;
 
 const KNOWN_ECOSYSTEMS: &[&str] = &[
-    "npm", "yarn", "pnpm", "bun", "pip", "uv", "poetry", "cargo", "go", "gem", "composer",
-    "nuget", "hex", "pub", "postgres", "mysql", "sqlite",
+    "npm", "yarn", "pnpm", "bun", "pip", "uv", "poetry", "cargo", "go", "gem", "composer", "nuget",
+    "hex", "pub", "postgres", "mysql", "sqlite",
 ];
 
 pub fn validate_pkg_args(args: &PkgArgs) -> Result<(), String> {
@@ -24,7 +24,12 @@ pub fn validate_pkg_args(args: &PkgArgs) -> Result<(), String> {
         validate_pkg_command(command)?;
     }
 
-    if !args.passthrough_args.is_empty() && args.passthrough_args.iter().any(|arg| arg.trim().is_empty()) {
+    if !args.passthrough_args.is_empty()
+        && args
+            .passthrough_args
+            .iter()
+            .any(|arg| arg.trim().is_empty())
+    {
         return Err("Passthrough package-manager arguments cannot be empty.".to_string());
     }
 
@@ -47,7 +52,12 @@ pub fn validate_api_command(action: &ApiCommands) -> Result<(), String> {
         ApiCommands::Ai { action } => validate_ai_action(action),
         ApiCommands::Env { action } => validate_env_action(action),
         ApiCommands::Validate => Ok(()),
-        ApiCommands::Import { spec, base_url, prefix, .. } => {
+        ApiCommands::Import {
+            spec,
+            base_url,
+            prefix,
+            ..
+        } => {
             validate_existing_file(spec, "spec path")?;
             validate_spec_extension(spec)?;
             validate_optional_url(base_url.as_deref(), "--base-url")?;
@@ -58,7 +68,11 @@ pub fn validate_api_command(action: &ApiCommands) -> Result<(), String> {
 
 fn validate_pkg_command(command: &PkgCommands) -> Result<(), String> {
     match command {
-        PkgCommands::Scan { output, fix, pkg_file } => {
+        PkgCommands::Scan {
+            output,
+            fix,
+            pkg_file,
+        } => {
             validate_optional_output_format(output.as_deref())?;
             validate_optional_severity(fix.as_deref(), "--fix")?;
             validate_optional_path(pkg_file.as_deref(), "--pkg-file")
@@ -67,18 +81,28 @@ fn validate_pkg_command(command: &PkgCommands) -> Result<(), String> {
         | PkgCommands::Outdated { pkg_file }
         | PkgCommands::Doctor { pkg_file }
         | PkgCommands::Fix { pkg_file, .. }
-        | PkgCommands::Clean { pkg_file } => validate_optional_path(pkg_file.as_deref(), "--pkg-file"),
+        | PkgCommands::Clean { pkg_file } => {
+            validate_optional_path(pkg_file.as_deref(), "--pkg-file")
+        }
         PkgCommands::Why { package, pkg_file } => {
             validate_non_empty(package, "package")?;
             validate_optional_path(pkg_file.as_deref(), "--pkg-file")
         }
-        PkgCommands::Diff { package, v1, v2, ecosystem } => {
+        PkgCommands::Diff {
+            package,
+            v1,
+            v2,
+            ecosystem,
+        } => {
             validate_non_empty(package, "package")?;
             validate_non_empty(v1, "v1")?;
             validate_non_empty(v2, "v2")?;
             validate_optional_ecosystem(ecosystem.as_deref(), "--ecosystem")
         }
-        PkgCommands::Size { packages, ecosystem } => {
+        PkgCommands::Size {
+            packages,
+            ecosystem,
+        } => {
             if packages.is_empty() {
                 return Err("Provide at least one package for `pkg size`.".to_string());
             }
@@ -138,16 +162,28 @@ fn validate_flow_action(action: &FlowAction) -> Result<(), String> {
         }
         FlowAction::List => Ok(()),
         FlowAction::Show { id } | FlowAction::Remove { id } => validate_id(id, "flow id"),
-        FlowAction::Run { id, base_url, output, .. } => {
+        FlowAction::Run {
+            id,
+            base_url,
+            output,
+            ..
+        } => {
             validate_id(id, "flow id")?;
             validate_optional_url(base_url.as_deref(), "--base-url")?;
             validate_optional_output_format(output.as_deref())
         }
-        FlowAction::RunAll { base_url, output, .. } => {
+        FlowAction::RunAll {
+            base_url, output, ..
+        } => {
             validate_optional_url(base_url.as_deref(), "--base-url")?;
             validate_optional_output_format(output.as_deref())
         }
-        FlowAction::Merge { flow1, flow2, join_at, name } => {
+        FlowAction::Merge {
+            flow1,
+            flow2,
+            join_at,
+            name,
+        } => {
             validate_id(flow1, "flow1 id")?;
             validate_id(flow2, "flow2 id")?;
             validate_id(join_at, "join-at node id")?;
@@ -162,7 +198,9 @@ fn validate_flow_action(action: &FlowAction) -> Result<(), String> {
 
 fn validate_ai_action(action: &AiAction) -> Result<(), String> {
     match action {
-        AiAction::Suggest { after } | AiAction::Attach { after, .. } => validate_id(after, "node id"),
+        AiAction::Suggest { after } | AiAction::Attach { after, .. } => {
+            validate_id(after, "node id")
+        }
         AiAction::Complete { flow_id } | AiAction::Explain { flow_id, .. } => {
             validate_id(flow_id, "flow id")
         }
@@ -179,7 +217,9 @@ fn validate_ai_action(action: &AiAction) -> Result<(), String> {
             }
             validate_non_empty(name, "flow name")
         }
-        AiAction::Assert { node_id } | AiAction::Branch { node_id } => validate_id(node_id, "node id"),
+        AiAction::Assert { node_id } | AiAction::Branch { node_id } => {
+            validate_id(node_id, "node id")
+        }
     }
 }
 
@@ -214,14 +254,24 @@ fn validate_assertion_action(action: &AssertionAction) -> Result<(), String> {
 fn validate_prompt_action(action: &PromptAction) -> Result<(), String> {
     match action {
         PromptAction::List | PromptAction::Remove { .. } => Ok(()),
-        PromptAction::Add { var, prompt_type, options, .. } => {
+        PromptAction::Add {
+            var,
+            prompt_type,
+            options,
+            ..
+        } => {
             validate_non_empty(var, "prompt variable")?;
             match prompt_type.trim().to_ascii_lowercase().as_str() {
                 "text" | "boolean" => Ok(()),
                 "select" | "multiselect" => {
                     let values = options
                         .as_deref()
-                        .map(|value| value.split(',').filter(|item| !item.trim().is_empty()).count())
+                        .map(|value| {
+                            value
+                                .split(',')
+                                .filter(|item| !item.trim().is_empty())
+                                .count()
+                        })
                         .unwrap_or(0);
                     if values == 0 {
                         Err("Select and multiselect prompt types require `--options`.".to_string())
@@ -229,7 +279,10 @@ fn validate_prompt_action(action: &PromptAction) -> Result<(), String> {
                         Ok(())
                     }
                 }
-                _ => Err("Prompt type must be one of: text | boolean | select | multiselect.".to_string()),
+                _ => Err(
+                    "Prompt type must be one of: text | boolean | select | multiselect."
+                        .to_string(),
+                ),
             }
         }
     }
@@ -239,7 +292,10 @@ fn validate_optional_severity(value: Option<&str>, flag: &str) -> Result<(), Str
     if let Some(value) = value {
         match value.trim().to_ascii_lowercase().as_str() {
             "critical" | "high" | "medium" | "low" | "informational" | "info" | "all" => Ok(()),
-            _ => Err(format!("{} must be one of: critical | high | medium | low | informational | all.", flag)),
+            _ => Err(format!(
+                "{} must be one of: critical | high | medium | low | informational | all.",
+                flag
+            )),
         }
     } else {
         Ok(())

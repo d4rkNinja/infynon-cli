@@ -8,7 +8,9 @@ use super::types::*;
 
 impl super::app_state::ApiApp {
     fn advance_prompt_field_or_submit(&mut self, field_count: usize) {
-        let should_submit = self.prompt_modal.as_ref()
+        let should_submit = self
+            .prompt_modal
+            .as_ref()
             .map(|m| m.current_field + 1 >= field_count)
             .unwrap_or(false);
         if should_submit {
@@ -24,9 +26,15 @@ impl super::app_state::ApiApp {
             None => return,
             Some(m) => {
                 let fc = m.inputs.len();
-                if fc == 0 { return; }
+                if fc == 0 {
+                    return;
+                }
                 let ci = m.current_field;
-                let pt = m.inputs.get(ci).map(|p| p.prompt_type.clone()).unwrap_or(PromptType::Text);
+                let pt = m
+                    .inputs
+                    .get(ci)
+                    .map(|p| p.prompt_type.clone())
+                    .unwrap_or(PromptType::Text);
                 (fc, ci, pt)
             }
         };
@@ -49,115 +57,144 @@ impl super::app_state::ApiApp {
         }
 
         match pt {
-            PromptType::Boolean => {
-                match key.code {
-                    KeyCode::Char('y') | KeyCode::Char('Y') => {
-                        if let Some(modal) = self.prompt_modal.as_mut() { modal.values[ci] = "true".to_string(); }
+            PromptType::Boolean => match key.code {
+                KeyCode::Char('y') | KeyCode::Char('Y') => {
+                    if let Some(modal) = self.prompt_modal.as_mut() {
+                        modal.values[ci] = "true".to_string();
                     }
-                    KeyCode::Char('n') | KeyCode::Char('N') => {
-                        if let Some(modal) = self.prompt_modal.as_mut() { modal.values[ci] = "false".to_string(); }
-                    }
-                    KeyCode::Char(' ') | KeyCode::Left | KeyCode::Right => {
-                        if let Some(modal) = self.prompt_modal.as_mut() {
-                            modal.values[ci] = if modal.values[ci] == "true" { "false".to_string() } else { "true".to_string() };
-                        }
-                    }
-                    KeyCode::Down => {
-                        if let Some(modal) = self.prompt_modal.as_mut() {
-                            if modal.current_field + 1 < field_count { modal.current_field += 1; }
-                        }
-                    }
-                    KeyCode::Up => {
-                        if let Some(modal) = self.prompt_modal.as_mut() {
-                            if modal.current_field > 0 { modal.current_field -= 1; }
-                        }
-                    }
-                    KeyCode::Enter => {
-                        self.advance_prompt_field_or_submit(field_count);
-                    }
-                    _ => {}
                 }
-            }
-            PromptType::Select => {
-                match key.code {
-                    KeyCode::Up => {
-                        if let Some(modal) = self.prompt_modal.as_mut() {
-                            if modal.option_cursors[ci] > 0 { modal.option_cursors[ci] -= 1; }
-                        }
+                KeyCode::Char('n') | KeyCode::Char('N') => {
+                    if let Some(modal) = self.prompt_modal.as_mut() {
+                        modal.values[ci] = "false".to_string();
                     }
-                    KeyCode::Down => {
-                        if let Some(modal) = self.prompt_modal.as_mut() {
-                            let max = modal.inputs[ci].options.len().saturating_sub(1);
-                            if modal.option_cursors[ci] < max { modal.option_cursors[ci] += 1; }
-                        }
-                    }
-                    KeyCode::Enter | KeyCode::Char(' ') => {
-                        if let Some(modal) = self.prompt_modal.as_mut() {
-                            let idx = modal.option_cursors[ci];
-                            let chosen = modal.inputs[ci].options.get(idx).cloned().unwrap_or_default();
-                            modal.values[ci] = chosen;
-                        }
-                        self.advance_prompt_field_or_submit(field_count);
-                    }
-                    _ => {}
                 }
-            }
-            PromptType::Multiselect => {
-                match key.code {
-                    KeyCode::Up => {
-                        if let Some(modal) = self.prompt_modal.as_mut() {
-                            if modal.option_cursors[ci] > 0 { modal.option_cursors[ci] -= 1; }
-                        }
+                KeyCode::Char(' ') | KeyCode::Left | KeyCode::Right => {
+                    if let Some(modal) = self.prompt_modal.as_mut() {
+                        modal.values[ci] = if modal.values[ci] == "true" {
+                            "false".to_string()
+                        } else {
+                            "true".to_string()
+                        };
                     }
-                    KeyCode::Down => {
-                        if let Some(modal) = self.prompt_modal.as_mut() {
-                            let max = modal.inputs[ci].options.len().saturating_sub(1);
-                            if modal.option_cursors[ci] < max { modal.option_cursors[ci] += 1; }
-                        }
-                    }
-                    KeyCode::Char(' ') => {
-                        if let Some(modal) = self.prompt_modal.as_mut() {
-                            let idx = modal.option_cursors[ci];
-                            if idx < modal.multi_checked[ci].len() {
-                                modal.multi_checked[ci][idx] = !modal.multi_checked[ci][idx];
-                            }
-                            let checked_vals: Vec<String> = modal.inputs[ci].options.iter().enumerate()
-                                .filter(|(j, _)| modal.multi_checked[ci].get(*j).copied().unwrap_or(false))
-                                .map(|(_, o)| o.clone())
-                                .collect();
-                            modal.values[ci] = checked_vals.join(",");
-                        }
-                    }
-                    KeyCode::Enter => {
-                        self.advance_prompt_field_or_submit(field_count);
-                    }
-                    _ => {}
                 }
-            }
-            PromptType::Text => {
-                match key.code {
-                    KeyCode::Char(c) => {
-                        if let Some(modal) = self.prompt_modal.as_mut() { modal.values[ci].push(c); }
-                    }
-                    KeyCode::Backspace => {
-                        if let Some(modal) = self.prompt_modal.as_mut() { modal.values[ci].pop(); }
-                    }
-                    KeyCode::Down => {
-                        if let Some(modal) = self.prompt_modal.as_mut() {
-                            if modal.current_field + 1 < field_count { modal.current_field += 1; }
+                KeyCode::Down => {
+                    if let Some(modal) = self.prompt_modal.as_mut() {
+                        if modal.current_field + 1 < field_count {
+                            modal.current_field += 1;
                         }
                     }
-                    KeyCode::Up => {
-                        if let Some(modal) = self.prompt_modal.as_mut() {
-                            if modal.current_field > 0 { modal.current_field -= 1; }
-                        }
-                    }
-                    KeyCode::Enter => {
-                        self.advance_prompt_field_or_submit(field_count);
-                    }
-                    _ => {}
                 }
-            }
+                KeyCode::Up => {
+                    if let Some(modal) = self.prompt_modal.as_mut() {
+                        if modal.current_field > 0 {
+                            modal.current_field -= 1;
+                        }
+                    }
+                }
+                KeyCode::Enter => {
+                    self.advance_prompt_field_or_submit(field_count);
+                }
+                _ => {}
+            },
+            PromptType::Select => match key.code {
+                KeyCode::Up => {
+                    if let Some(modal) = self.prompt_modal.as_mut() {
+                        if modal.option_cursors[ci] > 0 {
+                            modal.option_cursors[ci] -= 1;
+                        }
+                    }
+                }
+                KeyCode::Down => {
+                    if let Some(modal) = self.prompt_modal.as_mut() {
+                        let max = modal.inputs[ci].options.len().saturating_sub(1);
+                        if modal.option_cursors[ci] < max {
+                            modal.option_cursors[ci] += 1;
+                        }
+                    }
+                }
+                KeyCode::Enter | KeyCode::Char(' ') => {
+                    if let Some(modal) = self.prompt_modal.as_mut() {
+                        let idx = modal.option_cursors[ci];
+                        let chosen = modal.inputs[ci]
+                            .options
+                            .get(idx)
+                            .cloned()
+                            .unwrap_or_default();
+                        modal.values[ci] = chosen;
+                    }
+                    self.advance_prompt_field_or_submit(field_count);
+                }
+                _ => {}
+            },
+            PromptType::Multiselect => match key.code {
+                KeyCode::Up => {
+                    if let Some(modal) = self.prompt_modal.as_mut() {
+                        if modal.option_cursors[ci] > 0 {
+                            modal.option_cursors[ci] -= 1;
+                        }
+                    }
+                }
+                KeyCode::Down => {
+                    if let Some(modal) = self.prompt_modal.as_mut() {
+                        let max = modal.inputs[ci].options.len().saturating_sub(1);
+                        if modal.option_cursors[ci] < max {
+                            modal.option_cursors[ci] += 1;
+                        }
+                    }
+                }
+                KeyCode::Char(' ') => {
+                    if let Some(modal) = self.prompt_modal.as_mut() {
+                        let idx = modal.option_cursors[ci];
+                        if idx < modal.multi_checked[ci].len() {
+                            modal.multi_checked[ci][idx] = !modal.multi_checked[ci][idx];
+                        }
+                        let checked_vals: Vec<String> = modal.inputs[ci]
+                            .options
+                            .iter()
+                            .enumerate()
+                            .filter(|(j, _)| {
+                                modal.multi_checked[ci].get(*j).copied().unwrap_or(false)
+                            })
+                            .map(|(_, o)| o.clone())
+                            .collect();
+                        modal.values[ci] = checked_vals.join(",");
+                    }
+                }
+                KeyCode::Enter => {
+                    self.advance_prompt_field_or_submit(field_count);
+                }
+                _ => {}
+            },
+            PromptType::Text => match key.code {
+                KeyCode::Char(c) => {
+                    if let Some(modal) = self.prompt_modal.as_mut() {
+                        modal.values[ci].push(c);
+                    }
+                }
+                KeyCode::Backspace => {
+                    if let Some(modal) = self.prompt_modal.as_mut() {
+                        modal.values[ci].pop();
+                    }
+                }
+                KeyCode::Down => {
+                    if let Some(modal) = self.prompt_modal.as_mut() {
+                        if modal.current_field + 1 < field_count {
+                            modal.current_field += 1;
+                        }
+                    }
+                }
+                KeyCode::Up => {
+                    if let Some(modal) = self.prompt_modal.as_mut() {
+                        if modal.current_field > 0 {
+                            modal.current_field -= 1;
+                        }
+                    }
+                }
+                KeyCode::Enter => {
+                    self.advance_prompt_field_or_submit(field_count);
+                }
+                _ => {}
+            },
         }
     }
 
@@ -187,11 +224,15 @@ impl super::app_state::ApiApp {
     pub fn open_body_editor(&mut self) {
         let mut node_ids: Vec<String> = self.nodes.keys().cloned().collect();
         node_ids.sort();
-        let node_id = match node_ids.get(self.selected_index.min(node_ids.len().saturating_sub(1))) {
+        let node_id = match node_ids.get(self.selected_index.min(node_ids.len().saturating_sub(1)))
+        {
             Some(id) => id.clone(),
             None => return,
         };
-        let body = self.nodes.get(&node_id).and_then(|n| n.body_json.as_deref());
+        let body = self
+            .nodes
+            .get(&node_id)
+            .and_then(|n| n.body_json.as_deref());
         self.body_editor = Some(BodyEditor::new(node_id, body));
     }
 
@@ -220,9 +261,11 @@ impl super::app_state::ApiApp {
                 if let Some(node) = self.nodes.get_mut(&node_id) {
                     // Validate JSON (compact it for storage)
                     let body_val = serde_json::from_str::<serde_json::Value>(&content).ok();
-                    node.body_json = Some(body_val
-                        .map(|v| serde_json::to_string(&v).unwrap_or(content.clone()))
-                        .unwrap_or(content));
+                    node.body_json = Some(
+                        body_val
+                            .map(|v| serde_json::to_string(&v).unwrap_or(content.clone()))
+                            .unwrap_or(content),
+                    );
                     let node_clone = node.clone();
                     match crate::api::storage::save_node(&node_clone) {
                         Ok(_) => self.notify("Body saved"),
@@ -339,10 +382,20 @@ impl super::app_state::ApiApp {
         // If modal is open, handle scroll/close
         if let Some(ref mut modal) = self.step_detail {
             match key.code {
-                KeyCode::Esc | KeyCode::Char('q') => { self.step_detail = None; }
-                KeyCode::Up   => { if modal.scroll > 0 { modal.scroll -= 1; } }
-                KeyCode::Down => { modal.scroll += 1; }
-                KeyCode::Home => { modal.scroll = 0; }
+                KeyCode::Esc | KeyCode::Char('q') => {
+                    self.step_detail = None;
+                }
+                KeyCode::Up => {
+                    if modal.scroll > 0 {
+                        modal.scroll -= 1;
+                    }
+                }
+                KeyCode::Down => {
+                    modal.scroll += 1;
+                }
+                KeyCode::Home => {
+                    modal.scroll = 0;
+                }
                 _ => {}
             }
             return;
@@ -356,19 +409,29 @@ impl super::app_state::ApiApp {
 
         match key.code {
             KeyCode::Up => {
-                if self.live_selected_step > 0 { self.live_selected_step -= 1; }
+                if self.live_selected_step > 0 {
+                    self.live_selected_step -= 1;
+                }
             }
             KeyCode::Down => {
-                if self.live_selected_step + 1 < step_count { self.live_selected_step += 1; }
+                if self.live_selected_step + 1 < step_count {
+                    self.live_selected_step += 1;
+                }
             }
             KeyCode::Enter | KeyCode::Char(' ') => {
                 let steps: Vec<_> = if self.live_steps.is_empty() {
-                    self.last_run.as_ref().map(|r| r.steps.clone()).unwrap_or_default()
+                    self.last_run
+                        .as_ref()
+                        .map(|r| r.steps.clone())
+                        .unwrap_or_default()
                 } else {
                     self.live_steps.clone()
                 };
                 if let Some(step) = steps.get(self.live_selected_step) {
-                    self.step_detail = Some(StepDetailModal { step: step.clone(), scroll: 0 });
+                    self.step_detail = Some(StepDetailModal {
+                        step: step.clone(),
+                        scroll: 0,
+                    });
                 }
             }
             KeyCode::Char('r') => {
@@ -378,7 +441,10 @@ impl super::app_state::ApiApp {
             }
             KeyCode::Char('b') => {
                 let steps: Vec<_> = if self.live_steps.is_empty() {
-                    self.last_run.as_ref().map(|r| r.steps.clone()).unwrap_or_default()
+                    self.last_run
+                        .as_ref()
+                        .map(|r| r.steps.clone())
+                        .unwrap_or_default()
                 } else {
                     self.live_steps.clone()
                 };
@@ -394,29 +460,54 @@ impl super::app_state::ApiApp {
     pub fn open_node_field_editor(&mut self, field: NodeField) {
         let mut node_ids: Vec<String> = self.nodes.keys().cloned().collect();
         node_ids.sort();
-        let node_id = match node_ids.get(self.selected_index.min(node_ids.len().saturating_sub(1))) {
+        let node_id = match node_ids.get(self.selected_index.min(node_ids.len().saturating_sub(1)))
+        {
             Some(id) => id.clone(),
             None => return,
         };
         let initial = match &field {
-            NodeField::Name => self.nodes.get(&node_id).map(|n| n.name.clone()).unwrap_or_default(),
-            NodeField::Path => self.nodes.get(&node_id).map(|n| n.path.clone()).unwrap_or_default(),
-            NodeField::Description => self.nodes.get(&node_id).and_then(|n| n.description.clone()).unwrap_or_default(),
-            NodeField::Method => self.nodes.get(&node_id).map(|n| n.method.clone()).unwrap_or_default(),
+            NodeField::Name => self
+                .nodes
+                .get(&node_id)
+                .map(|n| n.name.clone())
+                .unwrap_or_default(),
+            NodeField::Path => self
+                .nodes
+                .get(&node_id)
+                .map(|n| n.path.clone())
+                .unwrap_or_default(),
+            NodeField::Description => self
+                .nodes
+                .get(&node_id)
+                .and_then(|n| n.description.clone())
+                .unwrap_or_default(),
+            NodeField::Method => self
+                .nodes
+                .get(&node_id)
+                .map(|n| n.method.clone())
+                .unwrap_or_default(),
         };
-        self.node_field_editor = Some(NodeFieldEditor { node_id, field, input: initial });
+        self.node_field_editor = Some(NodeFieldEditor {
+            node_id,
+            field,
+            input: initial,
+        });
     }
 
     pub fn cycle_node_method(&mut self) {
         let methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"];
         let mut node_ids: Vec<String> = self.nodes.keys().cloned().collect();
         node_ids.sort();
-        let node_id = match node_ids.get(self.selected_index.min(node_ids.len().saturating_sub(1))) {
+        let node_id = match node_ids.get(self.selected_index.min(node_ids.len().saturating_sub(1)))
+        {
             Some(id) => id.clone(),
             None => return,
         };
         if let Some(node) = self.nodes.get_mut(&node_id) {
-            let curr_idx = methods.iter().position(|&m| m == node.method.as_str()).unwrap_or(0);
+            let curr_idx = methods
+                .iter()
+                .position(|&m| m == node.method.as_str())
+                .unwrap_or(0);
             node.method = methods[(curr_idx + 1) % methods.len()].to_string();
             let node_clone = node.clone();
             match crate::api::storage::save_node(&node_clone) {
@@ -432,8 +523,12 @@ impl super::app_state::ApiApp {
             None => return,
         };
         match key.code {
-            KeyCode::Esc => { self.node_field_editor = None; }
-            KeyCode::Backspace => { editor.input.pop(); }
+            KeyCode::Esc => {
+                self.node_field_editor = None;
+            }
+            KeyCode::Backspace => {
+                editor.input.pop();
+            }
             KeyCode::Enter => {
                 // Save
                 let node_id = editor.node_id.clone();
@@ -445,7 +540,11 @@ impl super::app_state::ApiApp {
                     match field {
                         NodeField::Name => node.name = value,
                         NodeField::Path => {
-                            let path = if value.starts_with('/') { value } else { format!("/{}", value) };
+                            let path = if value.starts_with('/') {
+                                value
+                            } else {
+                                format!("/{}", value)
+                            };
                             node.path = path;
                         }
                         NodeField::Description => {
@@ -460,7 +559,9 @@ impl super::app_state::ApiApp {
                     }
                 }
             }
-            KeyCode::Char(c) => { editor.input.push(c); }
+            KeyCode::Char(c) => {
+                editor.input.push(c);
+            }
             _ => {}
         }
     }

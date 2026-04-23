@@ -1,21 +1,21 @@
 use ratatui::{
-    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Paragraph, Wrap},
+    Frame,
 };
 
 use crate::tui::api_app::ApiApp;
 use crate::tui::theme::*;
 
-use super::{truncate, dashboard::render_no_flows_hint};
+use super::{dashboard::render_no_flows_hint, truncate};
 
 // ── Layout constants (tuned for perfect spacing) ─────────────────────────────
 
-const NODE_H: u16 = 5;   // 3 content lines + 2 border lines
-const H_GAP: u16 = 4;    // horizontal gap between columns
-const V_GAP: u16 = 3;    // vertical gap between layers
+const NODE_H: u16 = 5; // 3 content lines + 2 border lines
+const H_GAP: u16 = 4; // horizontal gap between columns
+const V_GAP: u16 = 3; // vertical gap between layers
 
 // ── Flows view (flow graph) ──────────────────────────────────────────────────
 
@@ -30,10 +30,7 @@ pub(super) fn render_flows_view(f: &mut Frame, app: &ApiApp, area: Rect) {
 
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(70),
-            Constraint::Percentage(30),
-        ])
+        .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
         .split(area);
 
     render_graph_canvas(f, app, chunks[0]);
@@ -43,7 +40,12 @@ pub(super) fn render_flows_view(f: &mut Frame, app: &ApiApp, area: Rect) {
 // ── Helper: render single character at position ──────────────────────────────
 
 fn draw_char(f: &mut Frame, x: u16, y: u16, ch: &str, style: Style) {
-    let r = Rect { x, y, width: 1, height: 1 };
+    let r = Rect {
+        x,
+        y,
+        width: 1,
+        height: 1,
+    };
     f.render_widget(Paragraph::new(ch).style(style), r);
 }
 
@@ -61,16 +63,19 @@ fn render_graph_canvas(f: &mut Frame, app: &ApiApp, area: Rect) {
     if app.graph_layout.is_empty() {
         let lines = vec![
             Line::raw(""),
-            Line::from(vec![
-                Span::styled("  No nodes in this flow.", Style::default().fg(DIM)),
-            ]),
+            Line::from(vec![Span::styled(
+                "  No nodes in this flow.",
+                Style::default().fg(DIM),
+            )]),
             Line::raw(""),
-            Line::from(vec![
-                Span::styled("  Add nodes and connect them:", Style::default().fg(DIMMER)),
-            ]),
-            Line::from(vec![
-                Span::styled("    infynon weave attach <node> --to <flow>", Style::default().fg(CYAN)),
-            ]),
+            Line::from(vec![Span::styled(
+                "  Add nodes and connect them:",
+                Style::default().fg(DIMMER),
+            )]),
+            Line::from(vec![Span::styled(
+                "    infynon weave attach <node> --to <flow>",
+                Style::default().fg(CYAN),
+            )]),
         ];
         f.render_widget(Paragraph::new(lines), inner);
         return;
@@ -99,7 +104,9 @@ fn render_graph_canvas(f: &mut Frame, app: &ApiApp, area: Rect) {
     // node fully visible when the graph is taller than the viewport.
     let y_offset: i32 = if total_graph_h <= inner.height {
         (inner.height.saturating_sub(total_graph_h) / 2) as i32
-    } else if let Some(sel) = app.graph_selected_id.as_ref()
+    } else if let Some(sel) = app
+        .graph_selected_id
+        .as_ref()
         .and_then(|id| app.graph_layout.iter().find(|g| &g.node_id == id))
     {
         let node_stride = (NODE_H + V_GAP) as i32;
@@ -121,16 +128,25 @@ fn render_graph_canvas(f: &mut Frame, app: &ApiApp, area: Rect) {
         if raw_y < inner.y as i32 || raw_y >= inner.bottom() as i32 {
             return None;
         }
-        Some(Rect { x, y: raw_y as u16, width: node_w, height: NODE_H })
+        Some(Rect {
+            x,
+            y: raw_y as u16,
+            width: node_w,
+            height: NODE_H,
+        })
     };
 
     // ── Pass 1: draw connections (behind nodes) ──────────────────────────
     if let Some(flow) = flow {
         for gnode in &app.graph_layout {
-            let Some(src_rect) = get_node_rect(gnode.col, gnode.layer) else { continue };
+            let Some(src_rect) = get_node_rect(gnode.col, gnode.layer) else {
+                continue;
+            };
             for edge in flow.successors(&gnode.node_id) {
                 if let Some(target) = app.graph_layout.iter().find(|g| g.node_id == edge.to) {
-                    let Some(tgt_rect) = get_node_rect(target.col, target.layer) else { continue };
+                    let Some(tgt_rect) = get_node_rect(target.col, target.layer) else {
+                        continue;
+                    };
                     draw_connection(f, inner, src_rect, tgt_rect, node_w, &edge.carry);
                 }
             }
@@ -139,7 +155,9 @@ fn render_graph_canvas(f: &mut Frame, app: &ApiApp, area: Rect) {
 
     // ── Pass 2: draw node cards (on top of connections) ──────────────────
     for gnode in &app.graph_layout {
-        let Some(rect) = get_node_rect(gnode.col, gnode.layer) else { continue };
+        let Some(rect) = get_node_rect(gnode.col, gnode.layer) else {
+            continue;
+        };
         if rect.x + rect.width > inner.right() || rect.y + rect.height > inner.bottom() {
             continue;
         }
@@ -147,9 +165,10 @@ fn render_graph_canvas(f: &mut Frame, app: &ApiApp, area: Rect) {
         let node = app.nodes.get(&gnode.node_id);
         let is_selected = app.graph_selected_id.as_deref() == Some(&gnode.node_id);
 
-        let step_result = app.last_run.as_ref().and_then(|run| {
-            run.steps.iter().find(|s| s.node_id == gnode.node_id)
-        });
+        let step_result = app
+            .last_run
+            .as_ref()
+            .and_then(|run| run.steps.iter().find(|s| s.node_id == gnode.node_id));
 
         // ── Selection styling (MAJOR visual difference) ─────────────────────
         let (border_color, border_mod, bg_color) = if is_selected {
@@ -174,21 +193,37 @@ fn render_graph_canvas(f: &mut Frame, app: &ApiApp, area: Rect) {
         let name_color = if is_selected { ORANGE } else { TEXT };
 
         let line1 = Line::from(vec![
-            Span::styled(sel_marker, Style::default().fg(ORANGE).add_modifier(Modifier::BOLD)),
-            Span::styled(format!("{} ", status_icon), Style::default().fg(status_color)),
-            Span::styled(truncated_name, Style::default().fg(name_color).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                sel_marker,
+                Style::default().fg(ORANGE).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                format!("{} ", status_icon),
+                Style::default().fg(status_color),
+            ),
+            Span::styled(
+                truncated_name,
+                Style::default().fg(name_color).add_modifier(Modifier::BOLD),
+            ),
         ]);
 
         // Line 2: method + path
         let method_str = node.map(|n| n.method.as_str()).unwrap_or("?");
         let mc = method_color(method_str);
-        let path_max = (node_w as usize).saturating_sub(method_str.len() + 5).max(4);
-        let path_str = node.map(|n| truncate(&n.path, path_max)).unwrap_or_default();
+        let path_max = (node_w as usize)
+            .saturating_sub(method_str.len() + 5)
+            .max(4);
+        let path_str = node
+            .map(|n| truncate(&n.path, path_max))
+            .unwrap_or_default();
         let path_color = if is_selected { TEXT_DIM } else { DIM };
 
         let line2 = Line::from(vec![
             Span::styled("  ", Style::default()),
-            Span::styled(format!("{:>6} ", method_str), Style::default().fg(mc).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                format!("{:>6} ", method_str),
+                Style::default().fg(mc).add_modifier(Modifier::BOLD),
+            ),
             Span::styled(path_str, Style::default().fg(path_color)),
         ]);
 
@@ -201,7 +236,10 @@ fn render_graph_canvas(f: &mut Frame, app: &ApiApp, area: Rect) {
                 Span::styled("  ", Style::default()),
                 Span::styled(latency, Style::default().fg(TEXT_DIM)),
                 Span::styled(" \u{00B7} ", Style::default().fg(DIMMER)),
-                Span::styled(format!("{}", sc), Style::default().fg(sc_color).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    format!("{}", sc),
+                    Style::default().fg(sc_color).add_modifier(Modifier::BOLD),
+                ),
             ])
         } else if let Some(n) = node {
             if let Some(desc) = &n.description {
@@ -218,13 +256,12 @@ fn render_graph_canvas(f: &mut Frame, app: &ApiApp, area: Rect) {
         };
 
         // Render node with background
-        let node_block = Paragraph::new(vec![line1, line2, line3])
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(border_color).add_modifier(border_mod))
-                    .style(Style::default().bg(bg_color))
-            );
+        let node_block = Paragraph::new(vec![line1, line2, line3]).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(border_color).add_modifier(border_mod))
+                .style(Style::default().bg(bg_color)),
+        );
         f.render_widget(node_block, rect);
     }
 }
@@ -258,20 +295,35 @@ fn draw_connection(
     if src_cx == tgt_cx {
         // Same column: vertical line + arrowhead
         for y in src_by..tgt_ty {
-            if y >= inner.bottom() { break; }
-            let sym = if y == tgt_ty - 1 { "\u{25BC}" } else { "\u{2502}" };
+            if y >= inner.bottom() {
+                break;
+            }
+            let sym = if y == tgt_ty - 1 {
+                "\u{25BC}"
+            } else {
+                "\u{2502}"
+            };
             draw_char(f, src_cx, y, sym, conn_style);
         }
 
         // Carry label beside vertical line
         if !carry.is_empty() && src_by + 1 < inner.bottom() {
             let carry_str = carry.join(",");
-            let label_max = (inner.right().saturating_sub(src_cx + 2) as usize).min(12).max(4);
+            let label_max = (inner.right().saturating_sub(src_cx + 2) as usize)
+                .min(12)
+                .max(4);
             let carry_label = truncate(&carry_str, label_max);
-            let label_x = (src_cx + 2).min(inner.right().saturating_sub(carry_label.len() as u16 + 2));
-            let r = Rect { x: label_x, y: src_by + 1, width: carry_label.len() as u16 + 1, height: 1 };
+            let label_x =
+                (src_cx + 2).min(inner.right().saturating_sub(carry_label.len() as u16 + 2));
+            let r = Rect {
+                x: label_x,
+                y: src_by + 1,
+                width: carry_label.len() as u16 + 1,
+                height: 1,
+            };
             f.render_widget(
-                Paragraph::new(format!("\u{250A}{}", carry_label)).style(Style::default().fg(PURPLE)),
+                Paragraph::new(format!("\u{250A}{}", carry_label))
+                    .style(Style::default().fg(PURPLE)),
                 r,
             );
         }
@@ -281,21 +333,37 @@ fn draw_connection(
 
         // Vertical from source bottom to mid_y
         for y in src_by..mid_y {
-            if y >= inner.bottom() { break; }
+            if y >= inner.bottom() {
+                break;
+            }
             draw_char(f, src_cx, y, "\u{2502}", conn_style);
         }
 
         // Corner + horizontal + corner
         if mid_y < inner.bottom() {
-            let (left_x, right_x) = if src_cx < tgt_cx { (src_cx, tgt_cx) } else { (tgt_cx, src_cx) };
+            let (left_x, right_x) = if src_cx < tgt_cx {
+                (src_cx, tgt_cx)
+            } else {
+                (tgt_cx, src_cx)
+            };
 
-            let src_corner = if src_cx < tgt_cx { "\u{2514}" } else { "\u{2518}" };
-            let tgt_corner = if tgt_cx > src_cx { "\u{2510}" } else { "\u{250C}" };
+            let src_corner = if src_cx < tgt_cx {
+                "\u{2514}"
+            } else {
+                "\u{2518}"
+            };
+            let tgt_corner = if tgt_cx > src_cx {
+                "\u{2510}"
+            } else {
+                "\u{250C}"
+            };
 
             draw_char(f, src_cx, mid_y, src_corner, conn_style);
 
             for x in (left_x + 1)..right_x {
-                if x >= inner.right() { break; }
+                if x >= inner.right() {
+                    break;
+                }
                 draw_char(f, x, mid_y, "\u{2500}", conn_style);
             }
 
@@ -307,7 +375,12 @@ fn draw_connection(
                 let label_start = left_x + 1;
                 let label_w = carry_label.len() as u16;
                 if label_start + label_w < right_x {
-                    let r = Rect { x: label_start, y: mid_y, width: label_w, height: 1 };
+                    let r = Rect {
+                        x: label_start,
+                        y: mid_y,
+                        width: label_w,
+                        height: 1,
+                    };
                     f.render_widget(
                         Paragraph::new(carry_label).style(Style::default().fg(PURPLE)),
                         r,
@@ -320,7 +393,9 @@ fn draw_connection(
 
         // Vertical from mid_y to target top
         for y in (mid_y + 1)..tgt_ty {
-            if y >= inner.bottom() { break; }
+            if y >= inner.bottom() {
+                break;
+            }
             draw_char(f, tgt_cx, y, "\u{2502}", conn_style);
         }
 
@@ -343,67 +418,94 @@ fn render_graph_sidebar(f: &mut Frame, app: &ApiApp, flow: &crate::api::types::F
     if let (Some(id), Some(node)) = (selected_id, selected_node) {
         // ── Section 1: Node identity ─────────────────────────────────────
         lines.push(Line::raw(""));
-        lines.push(Line::from(vec![
-            Span::styled(truncate(&node.name, inner_w.saturating_sub(2)), Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
-        ]));
-        lines.push(Line::from(vec![
-            Span::styled(truncate(&node.id, inner_w.saturating_sub(2)), Style::default().fg(DIM)),
-        ]));
+        lines.push(Line::from(vec![Span::styled(
+            truncate(&node.name, inner_w.saturating_sub(2)),
+            Style::default().fg(CYAN).add_modifier(Modifier::BOLD),
+        )]));
+        lines.push(Line::from(vec![Span::styled(
+            truncate(&node.id, inner_w.saturating_sub(2)),
+            Style::default().fg(DIM),
+        )]));
         lines.push(Line::raw(""));
 
         // ── Section 2: Method badge + path ───────────────────────────────
         let mc = method_color(&node.method);
         let path_max = inner_w.saturating_sub(node.method.len() + 4).max(4);
         lines.push(Line::from(vec![
-            Span::styled(format!(" {} ", node.method), Style::default().fg(BG).bg(mc).add_modifier(Modifier::BOLD)),
-            Span::styled(format!(" {}", truncate(&node.path, path_max)), Style::default().fg(TEXT)),
+            Span::styled(
+                format!(" {} ", node.method),
+                Style::default().fg(BG).bg(mc).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                format!(" {}", truncate(&node.path, path_max)),
+                Style::default().fg(TEXT),
+            ),
         ]));
         lines.push(Line::raw(""));
 
         // ── Section 3: Run result ────────────────────────────────────────
-        let step_result = app.last_run.as_ref().and_then(|run| {
-            run.steps.iter().find(|s| s.node_id == *id)
-        });
+        let step_result = app
+            .last_run
+            .as_ref()
+            .and_then(|run| run.steps.iter().find(|s| s.node_id == *id));
 
-        lines.push(Line::from(vec![
-            Span::styled(" \u{2500}\u{2500} Last Run", Style::default().fg(DIMMER)),
-        ]));
+        lines.push(Line::from(vec![Span::styled(
+            " \u{2500}\u{2500} Last Run",
+            Style::default().fg(DIMMER),
+        )]));
 
         if let Some(step) = step_result {
-            let (icon, color) = if step.passed { ("\u{2714} PASS", GREEN) } else { ("\u{2718} FAIL", RED) };
+            let (icon, color) = if step.passed {
+                ("\u{2714} PASS", GREEN)
+            } else {
+                ("\u{2718} FAIL", RED)
+            };
             let sc = step.status_code.unwrap_or(0);
             let sc_color = status_code_color(step.status_code);
             lines.push(Line::from(vec![
-                Span::styled(format!("  {} ", icon), Style::default().fg(color).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    format!("  {} ", icon),
+                    Style::default().fg(color).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(format!("{}", sc), Style::default().fg(sc_color)),
             ]));
-            lines.push(Line::from(vec![
-                Span::styled(format!("  {}ms", step.duration_ms), Style::default().fg(TEXT_DIM)),
-            ]));
+            lines.push(Line::from(vec![Span::styled(
+                format!("  {}ms", step.duration_ms),
+                Style::default().fg(TEXT_DIM),
+            )]));
             if let Some(err) = &step.error {
                 let err_max = inner_w.saturating_sub(8).max(10);
-                lines.push(Line::from(vec![
-                    Span::styled(format!("  err: {}", truncate(err, err_max)), Style::default().fg(RED)),
-                ]));
+                lines.push(Line::from(vec![Span::styled(
+                    format!("  err: {}", truncate(err, err_max)),
+                    Style::default().fg(RED),
+                )]));
             }
         } else {
-            lines.push(Line::from(vec![
-                Span::styled("  not run yet", Style::default().fg(DIMMER)),
-            ]));
+            lines.push(Line::from(vec![Span::styled(
+                "  not run yet",
+                Style::default().fg(DIMMER),
+            )]));
         }
         lines.push(Line::raw(""));
 
         // ── Section 4: Extractions ───────────────────────────────────────
         if !node.extractions.is_empty() {
-            lines.push(Line::from(vec![
-                Span::styled(format!(" \u{2500}\u{2500} Extractions ({})", node.extractions.len()), Style::default().fg(DIMMER)),
-            ]));
+            lines.push(Line::from(vec![Span::styled(
+                format!(" \u{2500}\u{2500} Extractions ({})", node.extractions.len()),
+                Style::default().fg(DIMMER),
+            )]));
             for ext in &node.extractions {
                 let name_max = (inner_w / 3).max(6).min(14);
                 let from_max = inner_w.saturating_sub(name_max + 5).max(6);
                 lines.push(Line::from(vec![
-                    Span::styled(format!("  {} ", truncate(&ext.name, name_max)), Style::default().fg(TEAL)),
-                    Span::styled(format!("\u{2190} {}", truncate(&ext.from, from_max)), Style::default().fg(TEXT_DIM)),
+                    Span::styled(
+                        format!("  {} ", truncate(&ext.name, name_max)),
+                        Style::default().fg(TEAL),
+                    ),
+                    Span::styled(
+                        format!("\u{2190} {}", truncate(&ext.from, from_max)),
+                        Style::default().fg(TEXT_DIM),
+                    ),
                 ]));
             }
             lines.push(Line::raw(""));
@@ -412,11 +514,14 @@ fn render_graph_sidebar(f: &mut Frame, app: &ApiApp, flow: &crate::api::types::F
         // ── Section 5: Successor nodes ───────────────────────────────────
         let successors = flow.successors(id);
         if !successors.is_empty() {
-            lines.push(Line::from(vec![
-                Span::styled(" \u{2500}\u{2500} Connected To", Style::default().fg(DIMMER)),
-            ]));
+            lines.push(Line::from(vec![Span::styled(
+                " \u{2500}\u{2500} Connected To",
+                Style::default().fg(DIMMER),
+            )]));
             for edge in &successors {
-                let tgt_name = app.nodes.get(&edge.to)
+                let tgt_name = app
+                    .nodes
+                    .get(&edge.to)
                     .map(|n| truncate(&n.name, inner_w.saturating_sub(10).max(6)))
                     .unwrap_or_else(|| truncate(&edge.to, inner_w.saturating_sub(10).max(6)));
                 let carry_hint = if edge.carry.is_empty() {
@@ -428,7 +533,10 @@ fn render_graph_sidebar(f: &mut Frame, app: &ApiApp, flow: &crate::api::types::F
                 lines.push(Line::from(vec![
                     Span::styled("  \u{2192} ", Style::default().fg(CYAN)),
                     Span::styled(tgt_name, Style::default().fg(TEXT)),
-                    Span::styled(truncate(&carry_hint, carry_max), Style::default().fg(DIMMER)),
+                    Span::styled(
+                        truncate(&carry_hint, carry_max),
+                        Style::default().fg(DIMMER),
+                    ),
                 ]));
             }
             lines.push(Line::raw(""));
@@ -436,13 +544,17 @@ fn render_graph_sidebar(f: &mut Frame, app: &ApiApp, flow: &crate::api::types::F
 
         // ── Section 6: Assertions summary ────────────────────────────────
         if !node.assertions.is_empty() {
-            lines.push(Line::from(vec![
-                Span::styled(format!(" \u{2500}\u{2500} Assertions ({})", node.assertions.len()), Style::default().fg(DIMMER)),
-            ]));
+            lines.push(Line::from(vec![Span::styled(
+                format!(" \u{2500}\u{2500} Assertions ({})", node.assertions.len()),
+                Style::default().fg(DIMMER),
+            )]));
             for assertion in &node.assertions {
                 let check_max = inner_w.saturating_sub(6).max(8);
                 let passed = step_result.as_ref().and_then(|s| {
-                    s.assertion_results.iter().find(|ar| ar.check == assertion.check).map(|ar| ar.passed)
+                    s.assertion_results
+                        .iter()
+                        .find(|ar| ar.check == assertion.check)
+                        .map(|ar| ar.passed)
                 });
                 let (marker, mc) = match passed {
                     Some(true) => ("\u{2714}", GREEN),
@@ -451,7 +563,10 @@ fn render_graph_sidebar(f: &mut Frame, app: &ApiApp, flow: &crate::api::types::F
                 };
                 lines.push(Line::from(vec![
                     Span::styled(format!(" {} ", marker), Style::default().fg(mc)),
-                    Span::styled(truncate(&assertion.check, check_max), Style::default().fg(TEXT_DIM)),
+                    Span::styled(
+                        truncate(&assertion.check, check_max),
+                        Style::default().fg(TEXT_DIM),
+                    ),
                 ]));
             }
             lines.push(Line::raw(""));
@@ -459,32 +574,41 @@ fn render_graph_sidebar(f: &mut Frame, app: &ApiApp, flow: &crate::api::types::F
     } else {
         // ── No node selected ─────────────────────────────────────────────
         lines.push(Line::raw(""));
-        lines.push(Line::from(vec![
-            Span::styled(" Select a Node", Style::default().fg(TEXT).add_modifier(Modifier::BOLD)),
-        ]));
+        lines.push(Line::from(vec![Span::styled(
+            " Select a Node",
+            Style::default().fg(TEXT).add_modifier(Modifier::BOLD),
+        )]));
         lines.push(Line::raw(""));
-        lines.push(Line::from(vec![
-            Span::styled(" Navigate the flow graph", Style::default().fg(TEXT_DIM)),
-        ]));
-        lines.push(Line::from(vec![
-            Span::styled(" using arrow keys.", Style::default().fg(TEXT_DIM)),
-        ]));
+        lines.push(Line::from(vec![Span::styled(
+            " Navigate the flow graph",
+            Style::default().fg(TEXT_DIM),
+        )]));
+        lines.push(Line::from(vec![Span::styled(
+            " using arrow keys.",
+            Style::default().fg(TEXT_DIM),
+        )]));
         lines.push(Line::raw(""));
-        lines.push(Line::from(vec![
-            Span::styled(" Press Enter to inspect", Style::default().fg(TEXT_DIM)),
-        ]));
-        lines.push(Line::from(vec![
-            Span::styled(" a node in detail.", Style::default().fg(TEXT_DIM)),
-        ]));
+        lines.push(Line::from(vec![Span::styled(
+            " Press Enter to inspect",
+            Style::default().fg(TEXT_DIM),
+        )]));
+        lines.push(Line::from(vec![Span::styled(
+            " a node in detail.",
+            Style::default().fg(TEXT_DIM),
+        )]));
         lines.push(Line::raw(""));
     }
 
     // ── Controls section (always at bottom) ────────────────────────────────
+    lines.push(Line::from(vec![Span::styled(
+        " \u{2500}\u{2500} Controls ",
+        Style::default().fg(DIMMER),
+    )]));
     lines.push(Line::from(vec![
-        Span::styled(" \u{2500}\u{2500} Controls ", Style::default().fg(DIMMER)),
-    ]));
-    lines.push(Line::from(vec![
-        Span::styled(" \u{2191}\u{2193}\u{2190}\u{2192}", Style::default().fg(CYAN)),
+        Span::styled(
+            " \u{2191}\u{2193}\u{2190}\u{2192}",
+            Style::default().fg(CYAN),
+        ),
         Span::styled("  navigate", Style::default().fg(TEXT_DIM)),
     ]));
     lines.push(Line::from(vec![

@@ -9,8 +9,8 @@ mod daemon;
 mod ecosystems;
 mod engine;
 mod error;
-mod trace;
 mod models;
+mod trace;
 mod tui;
 mod utils;
 
@@ -33,8 +33,7 @@ fn main() {
     //   "infynon-pkg ..."        -> package manager (symlink/copy)
     //   "infynon pkg ..."        -> package manager (subcommand)
     //   "infynon ..."            -> root command router
-    let is_pkg_mode = exec_name.contains("infynon-pkg")
-        || (args.len() > 1 && args[1] == "pkg");
+    let is_pkg_mode = exec_name.contains("infynon-pkg") || (args.len() > 1 && args[1] == "pkg");
 
     if is_pkg_mode {
         if let Err(e) = cli::run_package_manager() {

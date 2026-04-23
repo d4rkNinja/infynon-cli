@@ -29,7 +29,10 @@ pub fn cmd_validate() {
             errors.push("id is empty".to_string());
         }
         if !valid_methods.contains(&node.method.to_uppercase().as_str()) {
-            errors.push(format!("method '{}' is not valid (must be GET POST PUT PATCH DELETE HEAD)", node.method));
+            errors.push(format!(
+                "method '{}' is not valid (must be GET POST PUT PATCH DELETE HEAD)",
+                node.method
+            ));
         }
         if !node.path.starts_with('/') {
             errors.push(format!("path '{}' does not start with /", node.path));
@@ -43,8 +46,15 @@ pub fn cmd_validate() {
             warnings.push("no assertions defined".to_string());
         }
         for ext in &node.extractions {
-            if !ext.from.starts_with("body.") && ext.from != "body" && !ext.from.starts_with("header.") && ext.from != "status" {
-                warnings.push(format!("extraction '{}': from '{}' should start with body., header., or be status", ext.name, ext.from));
+            if !ext.from.starts_with("body.")
+                && ext.from != "body"
+                && !ext.from.starts_with("header.")
+                && ext.from != "status"
+            {
+                warnings.push(format!(
+                    "extraction '{}': from '{}' should start with body., header., or be status",
+                    ext.name, ext.from
+                ));
             }
         }
 
@@ -66,11 +76,7 @@ pub fn cmd_validate() {
             );
         } else {
             node_valid += 1;
-            println!(
-                "  {}  {:<36}  valid",
-                "✔".bright_green(),
-                node.id.bold(),
-            );
+            println!("  {}  {:<36}  valid", "✔".bright_green(), node.id.bold(),);
         }
     }
 
@@ -98,7 +104,10 @@ pub fn cmd_validate() {
 
         for edge in &flow.edges {
             if !node_ids.contains(&edge.from) {
-                errors.push(format!("edge from '{}': node not found in library", edge.from));
+                errors.push(format!(
+                    "edge from '{}': node not found in library",
+                    edge.from
+                ));
             }
             if !node_ids.contains(&edge.to) {
                 errors.push(format!("edge to '{}': node not found in library", edge.to));

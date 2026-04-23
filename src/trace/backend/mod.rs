@@ -1,4 +1,6 @@
-use crate::trace::types::{TraceNote, TraceSource, PackageRisk, SourceKind, SyncDirection, SyncRun, KgEntity, KgEdge};
+use crate::trace::types::{
+    KgEdge, KgEntity, PackageRisk, SourceKind, SyncDirection, SyncRun, TraceNote, TraceSource,
+};
 
 mod redis;
 mod sql;
@@ -33,7 +35,11 @@ pub fn pull_notes(source: &TraceSource) -> Result<Vec<TraceNote>, String> {
     }
 }
 
-pub fn push_kg(source: &TraceSource, entities: &[KgEntity], edges: &[KgEdge]) -> Result<(), String> {
+pub fn push_kg(
+    source: &TraceSource,
+    entities: &[KgEntity],
+    edges: &[KgEdge],
+) -> Result<(), String> {
     match source.kind {
         SourceKind::Redis => redis::push_kg(source, entities, edges),
         SourceKind::Postgres | SourceKind::Mysql | SourceKind::Sqlite => {

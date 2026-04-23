@@ -1,9 +1,9 @@
 use ratatui::{
-    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap},
+    Frame,
 };
 
 use crate::tui::api_app::ApiApp;
@@ -39,10 +39,7 @@ fn json_highlight_line(line: &str) -> Vec<Span<'static>> {
 
         // Punctuation: { } [ ] : ,
         if c == '{' || c == '}' || c == '[' || c == ']' || c == ':' || c == ',' {
-            spans.push(Span::styled(
-                c.to_string(),
-                Style::default().fg(DIM),
-            ));
+            spans.push(Span::styled(c.to_string(), Style::default().fg(DIM)));
             i += 1;
             continue;
         }
@@ -82,7 +79,14 @@ fn json_highlight_line(line: &str) -> Vec<Span<'static>> {
             if c == '-' {
                 i += 1;
             }
-            while i < chars.len() && (chars[i].is_ascii_digit() || chars[i] == '.' || chars[i] == 'e' || chars[i] == 'E' || chars[i] == '+' || chars[i] == '-') {
+            while i < chars.len()
+                && (chars[i].is_ascii_digit()
+                    || chars[i] == '.'
+                    || chars[i] == 'e'
+                    || chars[i] == 'E'
+                    || chars[i] == '+'
+                    || chars[i] == '-')
+            {
                 i += 1;
             }
             let s: String = chars[start..i].iter().collect();
@@ -94,13 +98,25 @@ fn json_highlight_line(line: &str) -> Vec<Span<'static>> {
         if c == 't' || c == 'f' || c == 'n' {
             let keyword_len = if c == 't' && i + 3 < chars.len() {
                 let slice: String = chars[i..i + 4].iter().collect();
-                if slice == "true" { Some(4) } else { None }
+                if slice == "true" {
+                    Some(4)
+                } else {
+                    None
+                }
             } else if c == 'f' && i + 4 < chars.len() {
                 let slice: String = chars[i..i + 5].iter().collect();
-                if slice == "false" { Some(5) } else { None }
+                if slice == "false" {
+                    Some(5)
+                } else {
+                    None
+                }
             } else if c == 'n' && i + 3 < chars.len() {
                 let slice: String = chars[i..i + 4].iter().collect();
-                if slice == "null" { Some(4) } else { None }
+                if slice == "null" {
+                    Some(4)
+                } else {
+                    None
+                }
             } else {
                 None
             };
@@ -113,10 +129,7 @@ fn json_highlight_line(line: &str) -> Vec<Span<'static>> {
         }
 
         // Fallback: single character
-        spans.push(Span::styled(
-            c.to_string(),
-            Style::default().fg(TEXT_DIM),
-        ));
+        spans.push(Span::styled(c.to_string(), Style::default().fg(TEXT_DIM)));
         i += 1;
     }
 
@@ -133,16 +146,29 @@ pub(super) fn render_prompt_modal(f: &mut Frame, app: &ApiApp, area: Rect) {
     };
 
     // ── Calculate dynamic height ───────────────────────────────────────────
-    let field_heights: Vec<u16> = modal.inputs.iter().map(|pi| match pi.prompt_type {
-        PromptType::Select | PromptType::Multiselect => (2 + pi.options.len() as u16).max(3),
-        _ => 3,
-    }).collect();
+    let field_heights: Vec<u16> = modal
+        .inputs
+        .iter()
+        .map(|pi| match pi.prompt_type {
+            PromptType::Select | PromptType::Multiselect => (2 + pi.options.len() as u16).max(3),
+            _ => 3,
+        })
+        .collect();
     let total_fields_h: u16 = field_heights.iter().sum();
-    let h = (total_fields_h + 8).max(10).min(area.height.saturating_sub(4));
-    let w = (area.width * 65 / 100).max(52).min(area.width.saturating_sub(4));
+    let h = (total_fields_h + 8)
+        .max(10)
+        .min(area.height.saturating_sub(4));
+    let w = (area.width * 65 / 100)
+        .max(52)
+        .min(area.width.saturating_sub(4));
     let x = area.x + (area.width.saturating_sub(w)) / 2;
     let y = area.y + (area.height.saturating_sub(h)) / 2;
-    let overlay_area = Rect { x, y, width: w, height: h };
+    let overlay_area = Rect {
+        x,
+        y,
+        width: w,
+        height: h,
+    };
 
     f.render_widget(Clear, overlay_area);
 
@@ -172,9 +198,10 @@ pub(super) fn render_prompt_modal(f: &mut Frame, app: &ApiApp, area: Rect) {
 
     // ── Instruction text ───────────────────────────────────────────────────
     f.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled(" Provide values before the request fires:", Style::default().fg(TEXT_DIM)),
-        ])),
+        Paragraph::new(Line::from(vec![Span::styled(
+            " Provide values before the request fires:",
+            Style::default().fg(TEXT_DIM),
+        )])),
         sections[0],
     );
 
@@ -182,7 +209,11 @@ pub(super) fn render_prompt_modal(f: &mut Frame, app: &ApiApp, area: Rect) {
     for (i, pi) in modal.inputs.iter().enumerate() {
         let field_area = sections[i + 1];
         let is_current = i == modal.current_field;
-        let label = if pi.label.is_empty() { pi.var.as_str() } else { pi.label.as_str() };
+        let label = if pi.label.is_empty() {
+            pi.var.as_str()
+        } else {
+            pi.label.as_str()
+        };
 
         let border_sty = if is_current {
             Style::default().fg(CYAN)
@@ -201,7 +232,8 @@ pub(super) fn render_prompt_modal(f: &mut Frame, app: &ApiApp, area: Rect) {
                 let display_val = if pi.secret {
                     "•".repeat(raw_val.len())
                 } else if raw_val.is_empty() {
-                    pi.default.as_deref()
+                    pi.default
+                        .as_deref()
                         .map(|d| format!("{} (default)", d))
                         .unwrap_or_default()
                 } else {
@@ -243,13 +275,17 @@ pub(super) fn render_prompt_modal(f: &mut Frame, app: &ApiApp, area: Rect) {
 
                 let (yes_style, no_style) = if is_true {
                     (
-                        Style::default().fg(GREEN).add_modifier(Modifier::BOLD | Modifier::REVERSED),
+                        Style::default()
+                            .fg(GREEN)
+                            .add_modifier(Modifier::BOLD | Modifier::REVERSED),
                         Style::default().fg(DIM),
                     )
                 } else {
                     (
                         Style::default().fg(DIM),
-                        Style::default().fg(RED).add_modifier(Modifier::BOLD | Modifier::REVERSED),
+                        Style::default()
+                            .fg(RED)
+                            .add_modifier(Modifier::BOLD | Modifier::REVERSED),
                     )
                 };
                 f.render_widget(
@@ -273,20 +309,26 @@ pub(super) fn render_prompt_modal(f: &mut Frame, app: &ApiApp, area: Rect) {
                 let fi = fb.inner(field_area);
                 f.render_widget(fb, field_area);
 
-                let items: Vec<ListItem> = pi.options.iter().enumerate().map(|(j, opt)| {
-                    let is_sel = j == cursor_idx;
-                    let style = if is_sel && is_current {
-                        Style::default().fg(CYAN).add_modifier(Modifier::BOLD)
-                    } else if is_sel {
-                        Style::default().fg(WHITE)
-                    } else {
-                        Style::default().fg(DIM)
-                    };
-                    let prefix = if is_sel { "> " } else { "  " };
-                    ListItem::new(Line::from(vec![
-                        Span::styled(format!(" {}{}", prefix, opt), style),
-                    ]))
-                }).collect();
+                let items: Vec<ListItem> = pi
+                    .options
+                    .iter()
+                    .enumerate()
+                    .map(|(j, opt)| {
+                        let is_sel = j == cursor_idx;
+                        let style = if is_sel && is_current {
+                            Style::default().fg(CYAN).add_modifier(Modifier::BOLD)
+                        } else if is_sel {
+                            Style::default().fg(WHITE)
+                        } else {
+                            Style::default().fg(DIM)
+                        };
+                        let prefix = if is_sel { "> " } else { "  " };
+                        ListItem::new(Line::from(vec![Span::styled(
+                            format!(" {}{}", prefix, opt),
+                            style,
+                        )]))
+                    })
+                    .collect();
                 let mut list_state = ListState::default();
                 list_state.select(Some(cursor_idx));
                 f.render_stateful_widget(
@@ -297,7 +339,11 @@ pub(super) fn render_prompt_modal(f: &mut Frame, app: &ApiApp, area: Rect) {
             }
             PromptType::Multiselect => {
                 let cursor_idx = modal.option_cursors.get(i).copied().unwrap_or(0);
-                let checked = modal.multi_checked.get(i).map(|v| v.as_slice()).unwrap_or(&[]);
+                let checked = modal
+                    .multi_checked
+                    .get(i)
+                    .map(|v| v.as_slice())
+                    .unwrap_or(&[]);
                 let fb = Block::default()
                     .title(Span::styled(format!(" {} ", label), title_sty))
                     .title_bottom(Span::styled(
@@ -310,29 +356,34 @@ pub(super) fn render_prompt_modal(f: &mut Frame, app: &ApiApp, area: Rect) {
                 let fi = fb.inner(field_area);
                 f.render_widget(fb, field_area);
 
-                let items: Vec<ListItem> = pi.options.iter().enumerate().map(|(j, opt)| {
-                    let is_cur = j == cursor_idx && is_current;
-                    let is_checked = checked.get(j).copied().unwrap_or(false);
-                    let checkbox = if is_checked { "[+]" } else { "[ ]" };
-                    let cb_style = if is_checked {
-                        Style::default().fg(GREEN)
-                    } else {
-                        Style::default().fg(DIM)
-                    };
-                    let label_style = if is_cur {
-                        Style::default().fg(CYAN).add_modifier(Modifier::BOLD)
-                    } else if is_checked {
-                        Style::default().fg(WHITE)
-                    } else {
-                        Style::default().fg(DIM)
-                    };
-                    ListItem::new(Line::from(vec![
-                        Span::raw(" "),
-                        Span::styled(checkbox, cb_style),
-                        Span::raw(" "),
-                        Span::styled(opt.as_str(), label_style),
-                    ]))
-                }).collect();
+                let items: Vec<ListItem> = pi
+                    .options
+                    .iter()
+                    .enumerate()
+                    .map(|(j, opt)| {
+                        let is_cur = j == cursor_idx && is_current;
+                        let is_checked = checked.get(j).copied().unwrap_or(false);
+                        let checkbox = if is_checked { "[+]" } else { "[ ]" };
+                        let cb_style = if is_checked {
+                            Style::default().fg(GREEN)
+                        } else {
+                            Style::default().fg(DIM)
+                        };
+                        let label_style = if is_cur {
+                            Style::default().fg(CYAN).add_modifier(Modifier::BOLD)
+                        } else if is_checked {
+                            Style::default().fg(WHITE)
+                        } else {
+                            Style::default().fg(DIM)
+                        };
+                        ListItem::new(Line::from(vec![
+                            Span::raw(" "),
+                            Span::styled(checkbox, cb_style),
+                            Span::raw(" "),
+                            Span::styled(opt.as_str(), label_style),
+                        ]))
+                    })
+                    .collect();
                 let mut list_state = ListState::default();
                 list_state.select(Some(cursor_idx));
                 f.render_stateful_widget(
@@ -349,16 +400,28 @@ pub(super) fn render_prompt_modal(f: &mut Frame, app: &ApiApp, area: Rect) {
     f.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled(" [", Style::default().fg(YELLOW)),
-            Span::styled("Tab", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Tab",
+                Style::default().fg(YELLOW).add_modifier(Modifier::BOLD),
+            ),
             Span::styled("] next field  ", Style::default().fg(DIM)),
             Span::styled("[", Style::default().fg(YELLOW)),
-            Span::styled("Up/Dn", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Up/Dn",
+                Style::default().fg(YELLOW).add_modifier(Modifier::BOLD),
+            ),
             Span::styled("] navigate  ", Style::default().fg(DIM)),
             Span::styled("[", Style::default().fg(YELLOW)),
-            Span::styled("Enter", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Enter",
+                Style::default().fg(YELLOW).add_modifier(Modifier::BOLD),
+            ),
             Span::styled("] confirm  ", Style::default().fg(DIM)),
             Span::styled("[", Style::default().fg(YELLOW)),
-            Span::styled("Esc", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Esc",
+                Style::default().fg(YELLOW).add_modifier(Modifier::BOLD),
+            ),
             Span::styled("] cancel", Style::default().fg(DIM)),
         ])),
         footer_area,
@@ -378,7 +441,12 @@ pub(super) fn render_body_editor(f: &mut Frame, app: &ApiApp, area: Rect) {
     let h = area.height.saturating_sub(4).max(10);
     let x = area.x + (area.width.saturating_sub(w)) / 2;
     let y = area.y + (area.height.saturating_sub(h)) / 2;
-    let overlay = Rect { x, y, width: w, height: h };
+    let overlay = Rect {
+        x,
+        y,
+        width: w,
+        height: h,
+    };
 
     f.render_widget(Clear, overlay);
 
@@ -395,10 +463,7 @@ pub(super) fn render_body_editor(f: &mut Frame, app: &ApiApp, area: Rect) {
         let is_cursor_line = line_idx == editor.cursor_row;
 
         // 3-digit line number, DIM
-        let line_no = Span::styled(
-            format!("{:>3} ", line_idx + 1),
-            Style::default().fg(DIMMER),
-        );
+        let line_no = Span::styled(format!("{:>3} ", line_idx + 1), Style::default().fg(DIMMER));
 
         if is_cursor_line {
             let col = editor.cursor_col.min(line.len());
@@ -417,10 +482,7 @@ pub(super) fn render_body_editor(f: &mut Frame, app: &ApiApp, area: Rect) {
             content_lines.push(Line::from(vec![
                 line_no,
                 Span::styled(before, Style::default().fg(TEXT)),
-                Span::styled(
-                    cursor_char.to_string(),
-                    Style::default().bg(CYAN).fg(BG),
-                ),
+                Span::styled(cursor_char.to_string(), Style::default().bg(CYAN).fg(BG)),
                 Span::styled(after, Style::default().fg(TEXT)),
             ]));
         } else {
@@ -439,31 +501,42 @@ pub(super) fn render_body_editor(f: &mut Frame, app: &ApiApp, area: Rect) {
     // ── Footer with keyboard hints ─────────────────────────────────────────
     content_lines.push(Line::from(vec![
         Span::styled(" [", Style::default().fg(YELLOW)),
-        Span::styled("Ctrl+S", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "Ctrl+S",
+            Style::default().fg(YELLOW).add_modifier(Modifier::BOLD),
+        ),
         Span::styled("] save  ", Style::default().fg(DIM)),
         Span::styled("[", Style::default().fg(YELLOW)),
-        Span::styled("Esc", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "Esc",
+            Style::default().fg(YELLOW).add_modifier(Modifier::BOLD),
+        ),
         Span::styled("] cancel  ", Style::default().fg(DIM)),
         Span::styled("[", Style::default().fg(YELLOW)),
-        Span::styled("Arrows", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "Arrows",
+            Style::default().fg(YELLOW).add_modifier(Modifier::BOLD),
+        ),
         Span::styled("] move  ", Style::default().fg(DIM)),
         Span::styled("[", Style::default().fg(YELLOW)),
-        Span::styled("Enter", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "Enter",
+            Style::default().fg(YELLOW).add_modifier(Modifier::BOLD),
+        ),
         Span::styled("] newline", Style::default().fg(DIM)),
     ]));
 
     let line_count = editor.lines.len();
     let title = format!(" Edit Body - {} ({} lines) ", editor.node_id, line_count);
 
-    let p = Paragraph::new(content_lines)
-        .block(
-            Block::default()
-                .title(Span::styled(title, title_style()))
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(CYAN))
-                .style(Style::default().bg(BG)),
-        );
+    let p = Paragraph::new(content_lines).block(
+        Block::default()
+            .title(Span::styled(title, title_style()))
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(CYAN))
+            .style(Style::default().bg(BG)),
+    );
 
     f.render_widget(p, overlay);
 }
@@ -482,13 +555,19 @@ pub(super) fn render_step_detail_modal(f: &mut Frame, app: &ApiApp, area: Rect) 
     let h = area.height.saturating_sub(2).max(20);
     let x = area.x + (area.width.saturating_sub(w)) / 2;
     let y = area.y + (area.height.saturating_sub(h)) / 2;
-    let overlay = Rect { x, y, width: w, height: h };
+    let overlay = Rect {
+        x,
+        y,
+        width: w,
+        height: h,
+    };
     f.render_widget(Clear, overlay);
 
     let mut lines: Vec<Line> = vec![];
 
     // ── Header: status code + method + time ────────────────────────────────
-    let status_str = step.status_code
+    let status_str = step
+        .status_code
         .map(|s| s.to_string())
         .unwrap_or_else(|| "ERR".to_string());
     let sc = status_code_color(step.status_code);
@@ -497,19 +576,31 @@ pub(super) fn render_step_detail_modal(f: &mut Frame, app: &ApiApp, area: Rect) 
     lines.push(blank_line());
     lines.push(Line::from(vec![
         Span::styled("  ", Style::default()),
-        Span::styled(&status_str, Style::default().fg(sc).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            &status_str,
+            Style::default().fg(sc).add_modifier(Modifier::BOLD),
+        ),
         Span::styled("  ", Style::default()),
         Span::styled("[", Style::default().fg(DIMMER)),
-        Span::styled(&step.method, Style::default().fg(mc).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            &step.method,
+            Style::default().fg(mc).add_modifier(Modifier::BOLD),
+        ),
         Span::styled("]", Style::default().fg(DIMMER)),
         Span::styled("  ", Style::default()),
-        Span::styled(format!("{}ms", step.duration_ms), Style::default().fg(TEXT_DIM)),
+        Span::styled(
+            format!("{}ms", step.duration_ms),
+            Style::default().fg(TEXT_DIM),
+        ),
     ]));
 
     // ── URL ────────────────────────────────────────────────────────────────
     lines.push(Line::from(vec![
         Span::styled("  ", Style::default()),
-        Span::styled(truncate(&step.url, (w as usize).saturating_sub(4)), Style::default().fg(CYAN)),
+        Span::styled(
+            truncate(&step.url, (w as usize).saturating_sub(4)),
+            Style::default().fg(CYAN),
+        ),
     ]));
     lines.push(blank_line());
 
@@ -553,7 +644,10 @@ pub(super) fn render_step_detail_modal(f: &mut Frame, app: &ApiApp, area: Rect) 
         for (k, v) in &step.extracted {
             lines.push(Line::from(vec![
                 Span::raw("  "),
-                Span::styled(format!("{:<w$}", truncate(k, key_w), w = key_w), Style::default().fg(CYAN)),
+                Span::styled(
+                    format!("{:<w$}", truncate(k, key_w), w = key_w),
+                    Style::default().fg(CYAN),
+                ),
                 Span::styled("= ", Style::default().fg(DIMMER)),
                 Span::styled(v.to_string(), Style::default().fg(WHITE)),
             ]));
@@ -569,7 +663,12 @@ pub(super) fn render_step_detail_modal(f: &mut Frame, app: &ApiApp, area: Rect) 
             let pretty = serde_json::from_str::<serde_json::Value>(req_body)
                 .map(|v| serde_json::to_string_pretty(&v).unwrap_or_else(|_| req_body.clone()))
                 .unwrap_or_else(|_| req_body.clone());
-            for owned_line in pretty.lines().take(req_max_lines).map(|l| l.to_string()).collect::<Vec<_>>() {
+            for owned_line in pretty
+                .lines()
+                .take(req_max_lines)
+                .map(|l| l.to_string())
+                .collect::<Vec<_>>()
+            {
                 let mut spans = vec![Span::raw("  ")];
                 spans.extend(json_highlight_line(&owned_line));
                 lines.push(Line::from(spans));
@@ -596,7 +695,12 @@ pub(super) fn render_step_detail_modal(f: &mut Frame, app: &ApiApp, area: Rect) 
             let pretty = serde_json::from_str::<serde_json::Value>(resp_body)
                 .map(|v| serde_json::to_string_pretty(&v).unwrap_or_else(|_| resp_body.clone()))
                 .unwrap_or_else(|_| resp_body.clone());
-            for owned_line in pretty.lines().take(resp_max_lines).map(|l| l.to_string()).collect::<Vec<_>>() {
+            for owned_line in pretty
+                .lines()
+                .take(resp_max_lines)
+                .map(|l| l.to_string())
+                .collect::<Vec<_>>()
+            {
                 let mut spans = vec![Span::raw("  ")];
                 spans.extend(json_highlight_line(&owned_line));
                 lines.push(Line::from(spans));

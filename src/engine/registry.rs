@@ -11,13 +11,15 @@
 ///   NuGet     → api.nuget.org
 ///   Hex       → hex.pm
 ///   pub.dev   → pub.dev
-
 use reqwest::blocking::Client;
 use serde::Deserialize;
 use std::time::Duration;
 
 fn client() -> Client {
-    let ua = format!("infynon/{} (https://github.com/d4rkNinja/infynon-cli)", env!("CARGO_PKG_VERSION"));
+    let ua = format!(
+        "infynon/{} (https://github.com/d4rkNinja/infynon-cli)",
+        env!("CARGO_PKG_VERSION")
+    );
     Client::builder()
         .timeout(Duration::from_secs(10))
         .user_agent(ua)
@@ -68,7 +70,9 @@ pub fn fetch_latest_version(name: &str, ecosystem: &str) -> Option<String> {
 // { "version": "4.19.2", ... }
 
 #[derive(Deserialize)]
-struct NpmLatest { version: String }
+struct NpmLatest {
+    version: String,
+}
 
 fn npm_latest(name: &str) -> Option<String> {
     let url = format!("https://registry.npmjs.org/{}/latest", urlenc(name));
@@ -81,9 +85,13 @@ fn npm_latest(name: &str) -> Option<String> {
 // { "info": { "version": "2.31.0" } }
 
 #[derive(Deserialize)]
-struct PypiRoot { info: PypiInfo }
+struct PypiRoot {
+    info: PypiInfo,
+}
 #[derive(Deserialize)]
-struct PypiInfo { version: String }
+struct PypiInfo {
+    version: String,
+}
 
 fn pypi_latest(name: &str) -> Option<String> {
     let url = format!("https://pypi.org/pypi/{}/json", name);
@@ -96,9 +104,14 @@ fn pypi_latest(name: &str) -> Option<String> {
 // { "crate": { "newest_version": "1.0.196" } }
 
 #[derive(Deserialize)]
-struct CratesRoot { #[serde(rename = "crate")] krate: CrateInfo }
+struct CratesRoot {
+    #[serde(rename = "crate")]
+    krate: CrateInfo,
+}
 #[derive(Deserialize)]
-struct CrateInfo { newest_version: String }
+struct CrateInfo {
+    newest_version: String,
+}
 
 fn crates_latest(name: &str) -> Option<String> {
     let url = format!("https://crates.io/api/v1/crates/{}", name);
@@ -111,7 +124,10 @@ fn crates_latest(name: &str) -> Option<String> {
 // { "Version": "v0.25.0", ... }
 
 #[derive(Deserialize)]
-struct GoLatest { #[serde(rename = "Version")] version: String }
+struct GoLatest {
+    #[serde(rename = "Version")]
+    version: String,
+}
 
 fn go_latest(name: &str) -> Option<String> {
     // module paths may contain capital letters → use escaped path
@@ -125,7 +141,9 @@ fn go_latest(name: &str) -> Option<String> {
 // { "version": "7.1.2" }
 
 #[derive(Deserialize)]
-struct GemInfo { version: String }
+struct GemInfo {
+    version: String,
+}
 
 fn rubygems_latest(name: &str) -> Option<String> {
     let url = format!("https://rubygems.org/api/v1/gems/{}.json", name);
@@ -142,7 +160,9 @@ struct PackagistRoot {
     packages: std::collections::HashMap<String, Vec<PackagistVersion>>,
 }
 #[derive(Deserialize)]
-struct PackagistVersion { version: String }
+struct PackagistVersion {
+    version: String,
+}
 
 fn packagist_latest(name: &str) -> Option<String> {
     // name must be vendor/package format
@@ -151,7 +171,8 @@ fn packagist_latest(name: &str) -> Option<String> {
     let r: PackagistRoot = client().get(&url).send().ok()?.json().ok()?;
     let versions = r.packages.values().next()?;
     // First entry is latest stable
-    let ver = versions.iter()
+    let ver = versions
+        .iter()
         .map(|v| v.version.trim_start_matches('v').to_string())
         .find(|v| !v.contains("alpha") && !v.contains("beta") && !v.contains("RC"))?;
     Some(ver)
@@ -162,10 +183,15 @@ fn packagist_latest(name: &str) -> Option<String> {
 // { "versions": ["1.0.0", ..., "8.0.1"] }
 
 #[derive(Deserialize)]
-struct NugetIndex { versions: Vec<String> }
+struct NugetIndex {
+    versions: Vec<String>,
+}
 
 fn nuget_latest(name: &str) -> Option<String> {
-    let url = format!("https://api.nuget.org/v3-flatcontainer/{}/index.json", name.to_lowercase());
+    let url = format!(
+        "https://api.nuget.org/v3-flatcontainer/{}/index.json",
+        name.to_lowercase()
+    );
     let r: NugetIndex = client().get(&url).send().ok()?.json().ok()?;
     // Stable versions don't contain '-' (which marks pre-release)
     let stable: Vec<_> = r.versions.iter().filter(|v| !v.contains('-')).collect();
@@ -177,7 +203,9 @@ fn nuget_latest(name: &str) -> Option<String> {
 // { "releases": [{"version": "2.1.0"}, ...], "latest_stable_version": "2.1.0" }
 
 #[derive(Deserialize)]
-struct HexPackage { latest_stable_version: Option<String> }
+struct HexPackage {
+    latest_stable_version: Option<String>,
+}
 
 fn hex_latest(name: &str) -> Option<String> {
     let url = format!("https://hex.pm/api/packages/{}", name);
@@ -190,9 +218,13 @@ fn hex_latest(name: &str) -> Option<String> {
 // { "latest": { "version": "1.4.0" } }
 
 #[derive(Deserialize)]
-struct PubPackage { latest: PubVersion }
+struct PubPackage {
+    latest: PubVersion,
+}
 #[derive(Deserialize)]
-struct PubVersion { version: String }
+struct PubVersion {
+    version: String,
+}
 
 fn pubdev_latest(name: &str) -> Option<String> {
     let url = format!("https://pub.dev/api/packages/{}", name);

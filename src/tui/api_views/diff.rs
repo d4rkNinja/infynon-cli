@@ -1,16 +1,16 @@
 use ratatui::{
-    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Paragraph, Wrap},
+    Frame,
 };
 
 use crate::api::types::FlowRunResult;
 use crate::tui::api_app::ApiApp;
 use crate::tui::theme::*;
 
-use super::{truncate, dashboard::render_no_flows_hint};
+use super::{dashboard::render_no_flows_hint, truncate};
 
 // ── Run diff view ─────────────────────────────────────────────────────────────
 
@@ -31,7 +31,10 @@ pub(super) fn render_run_diff(f: &mut Frame, app: &ApiApp, area: Rect) {
                 Line::raw(""),
                 Line::from(vec![
                     Span::styled("  Press ", dim_style()),
-                    Span::styled("[d]", Style::default().fg(YELLOW).add_modifier(Modifier::BOLD)),
+                    Span::styled(
+                        "[d]",
+                        Style::default().fg(YELLOW).add_modifier(Modifier::BOLD),
+                    ),
                     Span::styled(" to load last 2 runs for comparison.", dim_style()),
                 ]),
             ])
@@ -48,10 +51,16 @@ pub(super) fn render_run_diff(f: &mut Frame, app: &ApiApp, area: Rect) {
     };
 
     // Collect node IDs from both runs for diff highlighting
-    let nodes_a: std::collections::HashMap<&str, &crate::api::types::StepResult> =
-        run_a.steps.iter().map(|s| (s.node_id.as_str(), s)).collect();
-    let nodes_b: std::collections::HashMap<&str, &crate::api::types::StepResult> =
-        run_b.steps.iter().map(|s| (s.node_id.as_str(), s)).collect();
+    let nodes_a: std::collections::HashMap<&str, &crate::api::types::StepResult> = run_a
+        .steps
+        .iter()
+        .map(|s| (s.node_id.as_str(), s))
+        .collect();
+    let nodes_b: std::collections::HashMap<&str, &crate::api::types::StepResult> = run_b
+        .steps
+        .iter()
+        .map(|s| (s.node_id.as_str(), s))
+        .collect();
 
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
@@ -74,13 +83,15 @@ fn render_run_column(
 
     // PASSED/FAILED badge
     let badge = if run.passed {
-        Line::from(vec![
-            Span::styled("  \u{2714} PASSED", Style::default().fg(GREEN).add_modifier(Modifier::BOLD)),
-        ])
+        Line::from(vec![Span::styled(
+            "  \u{2714} PASSED",
+            Style::default().fg(GREEN).add_modifier(Modifier::BOLD),
+        )])
     } else {
-        Line::from(vec![
-            Span::styled("  \u{2718} FAILED", Style::default().fg(RED).add_modifier(Modifier::BOLD)),
-        ])
+        Line::from(vec![Span::styled(
+            "  \u{2718} FAILED",
+            Style::default().fg(RED).add_modifier(Modifier::BOLD),
+        )])
     };
     lines.push(badge);
 
@@ -114,7 +125,10 @@ fn render_run_column(
             ("\u{2718}", RED)
         };
 
-        let status = step.status_code.map(|s| s.to_string()).unwrap_or_else(|| "ERR".to_string());
+        let status = step
+            .status_code
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "ERR".to_string());
         let sc_color = status_code_color(step.status_code);
 
         // Check if this step differs from the other run
@@ -147,11 +161,17 @@ fn render_run_column(
                 Style::default().fg(TEXT).add_modifier(Modifier::BOLD),
             ),
             Span::styled(status, Style::default().fg(sc_color)),
-            Span::styled(format!("  {}ms", step.duration_ms), Style::default().fg(DIM)),
+            Span::styled(
+                format!("  {}ms", step.duration_ms),
+                Style::default().fg(DIM),
+            ),
         ];
 
         if !diff_marker.is_empty() {
-            spans.push(Span::styled(diff_marker.to_string(), Style::default().fg(diff_color).add_modifier(Modifier::BOLD)));
+            spans.push(Span::styled(
+                diff_marker.to_string(),
+                Style::default().fg(diff_color).add_modifier(Modifier::BOLD),
+            ));
         }
 
         lines.push(Line::from(spans));
@@ -159,12 +179,10 @@ fn render_run_column(
 
     // Footer with total duration
     lines.push(Line::raw(""));
-    lines.push(Line::from(vec![
-        Span::styled(
-            format!("  Total: {}ms", run.duration_ms()),
-            Style::default().fg(DIMMER),
-        ),
-    ]));
+    lines.push(Line::from(vec![Span::styled(
+        format!("  Total: {}ms", run.duration_ms()),
+        Style::default().fg(DIMMER),
+    )]));
 
     let p = Paragraph::new(lines)
         .block(

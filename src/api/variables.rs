@@ -1,14 +1,12 @@
+use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Mutex;
-use serde_json::Value;
 
 // ── .env file loader ──────────────────────────────────────────────────────────
 
 pub fn get_placeholder_regex() -> &'static regex::Regex {
     static PLACEHOLDER_RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
-    PLACEHOLDER_RE.get_or_init(|| {
-        regex::Regex::new(r"\{([A-Za-z_][A-Za-z0-9_]*)\}").unwrap()
-    })
+    PLACEHOLDER_RE.get_or_init(|| regex::Regex::new(r"\{([A-Za-z_][A-Za-z0-9_]*)\}").unwrap())
 }
 
 /// Cached .env contents, invalidated when the file's modification time changes.
@@ -24,7 +22,11 @@ static DOTENV_CACHE: Mutex<Option<DotenvCache>> = Mutex::new(None);
 fn get_dotenv() -> HashMap<String, String> {
     let env_path = std::path::Path::new(".infynon/.env");
     let fallback = std::path::Path::new(".env");
-    let path = if env_path.exists() { env_path } else { fallback };
+    let path = if env_path.exists() {
+        env_path
+    } else {
+        fallback
+    };
 
     let current_mtime = std::fs::metadata(path).and_then(|m| m.modified()).ok();
 
@@ -40,7 +42,10 @@ fn get_dotenv() -> HashMap<String, String> {
     // File changed (or first load) — re-read and cache
     let data = parse_dotenv_file(path);
     if let Ok(mut guard) = DOTENV_CACHE.lock() {
-        *guard = Some(DotenvCache { data: data.clone(), mtime: current_mtime });
+        *guard = Some(DotenvCache {
+            data: data.clone(),
+            mtime: current_mtime,
+        });
     }
     data
 }
@@ -245,8 +250,7 @@ pub fn parse_set_vars(set_vars: &[(String, String)]) -> HashMap<String, Value> {
     set_vars
         .iter()
         .map(|(k, v)| {
-            let val = serde_json::from_str::<Value>(v)
-                .unwrap_or_else(|_| Value::String(v.clone()));
+            let val = serde_json::from_str::<Value>(v).unwrap_or_else(|_| Value::String(v.clone()));
             (k.clone(), val)
         })
         .collect()
@@ -273,14 +277,8 @@ mod tests {
         ctx.insert("token".to_string(), json!("abc123"));
         ctx.insert("user_id".to_string(), json!(42));
 
-        assert_eq!(
-            substitute_str("Bearer {token}", &ctx),
-            "Bearer abc123"
-        );
-        assert_eq!(
-            substitute_str("/users/{user_id}", &ctx),
-            "/users/42"
-        );
+        assert_eq!(substitute_str("Bearer {token}", &ctx), "Bearer abc123");
+        assert_eq!(substitute_str("/users/{user_id}", &ctx), "/users/42");
     }
 
     #[test]

@@ -143,14 +143,10 @@ pub enum SourceAction {
     List,
 
     /// Remove a configured Trace backend by ID.
-    Remove {
-        id: String,
-    },
+    Remove { id: String },
 
     /// Set the default backend by ID.
-    Default {
-        id: String,
-    },
+    Default { id: String },
 }
 
 #[derive(Subcommand, Debug)]
@@ -192,9 +188,7 @@ pub enum NoteAction {
     },
 
     /// Delete a Trace note.
-    Remove {
-        id: String,
-    },
+    Remove { id: String },
 
     /// List Trace notes.
     List,

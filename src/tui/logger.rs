@@ -8,9 +8,21 @@ const CMD_W: usize = 40;
 impl Logger {
     pub fn title(text: &str, bg: &str) {
         let final_text = match bg {
-            "blue" => format!(" {} ", text).bold().black().on_bright_cyan().to_string(),
-            "red" => format!(" {} ", text).bold().black().on_bright_red().to_string(),
-            _ => format!(" {} ", text).bold().black().on_bright_black().to_string(),
+            "blue" => format!(" {} ", text)
+                .bold()
+                .black()
+                .on_bright_cyan()
+                .to_string(),
+            "red" => format!(" {} ", text)
+                .bold()
+                .black()
+                .on_bright_red()
+                .to_string(),
+            _ => format!(" {} ", text)
+                .bold()
+                .black()
+                .on_bright_black()
+                .to_string(),
         };
         println!("\n{}\n", final_text);
     }
@@ -28,7 +40,12 @@ impl Logger {
     }
 
     pub fn subtitle(icon: &str, label: &str, value: &str) {
-        println!("\n{} {} {}", icon.cyan(), label.bold().cyan(), value.bold().green());
+        println!(
+            "\n{} {} {}",
+            icon.cyan(),
+            label.bold().cyan(),
+            value.bold().green()
+        );
     }
 
     pub fn step(msg: &str) {
@@ -94,16 +111,30 @@ impl Logger {
         Self::row("2", "weave", "API flow testing and security probes");
         Self::cont("Node graphs, context threading, run diff, prompts, and OpenAPI import.");
         Self::row("3", "trace", "Repo memory & provenance");
-        Self::cont("Redis or SQL-backed memory for teams, agents, package ownership, and retrieval.");
+        Self::cont(
+            "Redis or SQL-backed memory for teams, agents, package ownership, and retrieval.",
+        );
 
         Self::divider();
         Self::section(">", "Style Guide");
 
         Self::cmd_row("infynon pkg scan", "Scan lock files for known CVEs");
-        Self::cmd_row("infynon pkg audit", "Deep dependency audit with risk breakdown");
-        Self::cmd_row("infynon weave flow run <id>", "Run a saved API flow end-to-end");
-        Self::cmd_row("infynon weave ai probe <id>", "Run built-in flow security probes");
-        Self::cmd_row("infynon trace overview", "Show Trace commands and backend guidance");
+        Self::cmd_row(
+            "infynon pkg audit",
+            "Deep dependency audit with risk breakdown",
+        );
+        Self::cmd_row(
+            "infynon weave flow run <id>",
+            "Run a saved API flow end-to-end",
+        );
+        Self::cmd_row(
+            "infynon weave ai probe <id>",
+            "Run built-in flow security probes",
+        );
+        Self::cmd_row(
+            "infynon trace overview",
+            "Show Trace commands and backend guidance",
+        );
 
         Self::divider();
         println!();
@@ -114,7 +145,9 @@ impl Logger {
         println!(
             "  {} {}",
             "infynon trace".bold().truecolor(120, 220, 120),
-            "· repo memory & provenance".truecolor(120, 120, 140).italic()
+            "· repo memory & provenance"
+                .truecolor(120, 120, 140)
+                .italic()
         );
         println!("  {}\n", "-".repeat(52).truecolor(60, 90, 60));
 
@@ -122,11 +155,26 @@ impl Logger {
         Self::section("::", "Main Commands");
 
         Self::cmd_row("infynon trace init", "Initialize local Trace state");
-        Self::cmd_row("infynon trace source add-redis", "Add Redis for fast live retrieval");
-        Self::cmd_row("infynon trace source add-sql", "Add SQL for durable structured memory");
-        Self::cmd_row("infynon trace retrieve", "Query notes by user, file, tag, or scope");
-        Self::cmd_row("infynon trace note add", "Create notes for repo, PR, file, branch, or package");
-        Self::cmd_row("infynon trace tui", "Open Trace TUI with notes, sources, and package risk");
+        Self::cmd_row(
+            "infynon trace source add-redis",
+            "Add Redis for fast live retrieval",
+        );
+        Self::cmd_row(
+            "infynon trace source add-sql",
+            "Add SQL for durable structured memory",
+        );
+        Self::cmd_row(
+            "infynon trace retrieve",
+            "Query notes by user, file, tag, or scope",
+        );
+        Self::cmd_row(
+            "infynon trace note add",
+            "Create notes for repo, PR, file, branch, or package",
+        );
+        Self::cmd_row(
+            "infynon trace tui",
+            "Open Trace TUI with notes, sources, and package risk",
+        );
 
         Self::divider();
         println!();
@@ -146,23 +194,52 @@ impl Logger {
         Self::divider();
         Self::section("::", "What is infynon pkg?");
 
-        Self::row(">", "Purpose", "Dependency risk scanning before install and during maintenance.");
-        Self::cont("Focus: CVEs, dependency drift, install script risk, and ecosystem-wide visibility.");
-        Self::row(">", "Coverage", "npm · yarn · pnpm · bun · pip · uv · poetry · cargo · go");
+        Self::row(
+            ">",
+            "Purpose",
+            "Dependency risk scanning before install and during maintenance.",
+        );
+        Self::cont(
+            "Focus: CVEs, dependency drift, install script risk, and ecosystem-wide visibility.",
+        );
+        Self::row(
+            ">",
+            "Coverage",
+            "npm · yarn · pnpm · bun · pip · uv · poetry · cargo · go",
+        );
         Self::cont("gem · composer · nuget · hex · pub");
-        Self::row(">", "Auto-Detect", "Scans package.json / Cargo.toml / go.mod / pyproject.toml and more.");
+        Self::row(
+            ">",
+            "Auto-Detect",
+            "Scans package.json / Cargo.toml / go.mod / pyproject.toml and more.",
+        );
 
         Self::divider();
         Self::section(">", "Common Commands");
 
         Self::cmd_row("infynon pkg scan", "Scan lock files for known CVEs");
-        Self::cmd_row("infynon pkg audit", "Deep recursive dependency scan with tree");
-        Self::cmd_row("infynon pkg why <package>", "Trace why a package is in your tree");
+        Self::cmd_row(
+            "infynon pkg audit",
+            "Deep recursive dependency scan with tree",
+        );
+        Self::cmd_row(
+            "infynon pkg why <package>",
+            "Trace why a package is in your tree",
+        );
         Self::cmd_row("infynon pkg outdated", "Check for outdated dependencies");
-        Self::cmd_row("infynon pkg diff <pkg> <v1> <v2>", "Compare two versions of a package");
-        Self::cmd_row("infynon pkg doctor", "Health check: dupes, unused, phantoms");
+        Self::cmd_row(
+            "infynon pkg diff <pkg> <v1> <v2>",
+            "Compare two versions of a package",
+        );
+        Self::cmd_row(
+            "infynon pkg doctor",
+            "Health check: dupes, unused, phantoms",
+        );
         Self::cmd_row("infynon pkg fix --auto", "Auto-fix vulnerable dependencies");
-        Self::cmd_row("infynon pkg eagle-eye setup", "Configure scheduled vulnerability monitoring");
+        Self::cmd_row(
+            "infynon pkg eagle-eye setup",
+            "Configure scheduled vulnerability monitoring",
+        );
 
         Self::divider();
         println!();

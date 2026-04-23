@@ -1,10 +1,10 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::Instant;
 
+use chrono::Utc;
 use reqwest::blocking::{Client, RequestBuilder};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use serde_json::Value;
-use chrono::Utc;
 
 use crate::api::assertions;
 use crate::api::types::{
@@ -41,23 +41,41 @@ fn build_prompt_inputs(node: &Node, context: &HashMap<String, Value>) -> Vec<Pro
     let scan = |text: &str, seen: &mut HashSet<String>, extra: &mut Vec<PromptInput>| {
         for cap in re.captures_iter(text) {
             let var = cap[1].to_string();
-            if seen.contains(&var) { continue; }
+            if seen.contains(&var) {
+                continue;
+            }
             seen.insert(var.clone());
             // Skip vars already in context (e.g. from --set or prior extractions)
-            if context.contains_key(&var) { continue; }
+            if context.contains_key(&var) {
+                continue;
+            }
             // Skip vars available in .infynon/.env or process env
-            if variables::env_has_var(&var) { continue; }
-            extra.push(PromptInput { var, label: String::new(), secret: false, default: None, prompt_type: crate::api::types::PromptType::Text, options: vec![] });
+            if variables::env_has_var(&var) {
+                continue;
+            }
+            extra.push(PromptInput {
+                var,
+                label: String::new(),
+                secret: false,
+                default: None,
+                prompt_type: crate::api::types::PromptType::Text,
+                options: vec![],
+            });
         }
     };
 
     scan(&node.path, &mut seen, &mut extra);
-    for v in node.headers.values() { scan(v, &mut seen, &mut extra); }
-    if let Some(body) = &node.body_json { scan(body, &mut seen, &mut extra); }
+    for v in node.headers.values() {
+        scan(v, &mut seen, &mut extra);
+    }
+    if let Some(body) = &node.body_json {
+        scan(body, &mut seen, &mut extra);
+    }
 
     // Merge: start with declared prompt_inputs (filtered to those not already resolvable),
     // then append auto-detected extras. Substitute {$ENV} in labels for display.
-    let mut result: Vec<PromptInput> = node.prompt_inputs
+    let mut result: Vec<PromptInput> = node
+        .prompt_inputs
         .iter()
         .filter(|pi| !context.contains_key(&pi.var) && !variables::env_has_var(&pi.var))
         .map(|pi| {
@@ -67,7 +85,10 @@ fn build_prompt_inputs(node: &Node, context: &HashMap<String, Value>) -> Vec<Pro
             } else {
                 pi.label.clone()
             };
-            PromptInput { label, ..pi.clone() }
+            PromptInput {
+                label,
+                ..pi.clone()
+            }
         })
         .collect();
     result.extend(extra);
@@ -114,13 +135,13 @@ pub fn execute_node(
     // Build request
     let method = node.method.to_uppercase();
     let req = match method.as_str() {
-        "GET"    => client.get(&url),
-        "POST"   => client.post(&url),
-        "PUT"    => client.put(&url),
-        "PATCH"  => client.patch(&url),
+        "GET" => client.get(&url),
+        "POST" => client.post(&url),
+        "PUT" => client.put(&url),
+        "PATCH" => client.patch(&url),
         "DELETE" => client.delete(&url),
-        "HEAD"   => client.head(&url),
-        other    => {
+        "HEAD" => client.head(&url),
+        other => {
             return StepResult {
                 node_id: node.id.clone(),
                 node_name: node.name.clone(),
@@ -175,15 +196,12 @@ pub fn execute_node(
             let status = resp.status().as_u16();
             let resp_headers = collect_headers(resp.headers());
             let body_str = resp.text().unwrap_or_default();
-            let body_json: Value = serde_json::from_str(&body_str)
-                .unwrap_or(Value::String(body_str.clone()));
+            let body_json: Value =
+                serde_json::from_str(&body_str).unwrap_or(Value::String(body_str.clone()));
 
             // Evaluate assertions (skip disabled ones)
-            let enabled_assertions: Vec<&crate::api::types::Assertion> = node
-                .assertions
-                .iter()
-                .filter(|a| a.enabled)
-                .collect();
+            let enabled_assertions: Vec<&crate::api::types::Assertion> =
+                node.assertions.iter().filter(|a| a.enabled).collect();
             let assertion_results: Vec<_> = enabled_assertions
                 .iter()
                 .map(|a| assertions::evaluate(&a.check, status, &body_json, &resp_headers))
@@ -247,7 +265,6 @@ pub fn execute_flow(
     let mut visited: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     while let Some(node_id) = current_nodes.pop_front() {
-
         if visited.contains(&node_id) {
             continue;
         }
@@ -295,7 +312,10 @@ pub fn execute_flow(
 
         // Check if we should stop (only consider enabled assertions)
         let should_stop = !step.passed
-            && node.assertions.iter().any(|a| a.enabled && a.on_fail == OnFail::Stop);
+            && node
+                .assertions
+                .iter()
+                .any(|a| a.enabled && a.on_fail == OnFail::Stop);
 
         if !step.passed {
             overall_passed = false;
@@ -366,7 +386,9 @@ fn collect_headers(headers: &reqwest::header::HeaderMap) -> HashMap<String, Stri
     headers
         .iter()
         .filter_map(|(k, v)| {
-            v.to_str().ok().map(|s| (k.as_str().to_lowercase(), s.to_string()))
+            v.to_str()
+                .ok()
+                .map(|s| (k.as_str().to_lowercase(), s.to_string()))
         })
         .collect()
 }
@@ -380,7 +402,10 @@ fn check_passed(assertions: &[Assertion], results: &[crate::api::types::Assertio
     true
 }
 
-fn check_passed_enabled(assertions: &[&Assertion], results: &[crate::api::types::AssertionResult]) -> bool {
+fn check_passed_enabled(
+    assertions: &[&Assertion],
+    results: &[crate::api::types::AssertionResult],
+) -> bool {
     for (assertion, result) in assertions.iter().zip(results.iter()) {
         if !result.passed && assertion.on_fail == OnFail::Stop {
             return false;
@@ -421,7 +446,12 @@ fn extract_one(
         let key = name.to_lowercase();
         return headers
             .get(&key)
-            .or_else(|| headers.iter().find(|(k, _)| k.to_lowercase() == key).map(|(_, v)| v))
+            .or_else(|| {
+                headers
+                    .iter()
+                    .find(|(k, _)| k.to_lowercase() == key)
+                    .map(|(_, v)| v)
+            })
             .map(|v| Value::String(v.clone()));
     }
     // bare "body" — return entire body

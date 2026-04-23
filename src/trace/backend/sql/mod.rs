@@ -1,4 +1,6 @@
-use crate::trace::types::{TraceNote, TraceSource, PackageRisk, SourceKind, SyncRun, KgEntity, KgEdge};
+use crate::trace::types::{
+    KgEdge, KgEntity, PackageRisk, SourceKind, SyncRun, TraceNote, TraceSource,
+};
 use mysql::{prelude::Queryable, Opts, Pool};
 use postgres::{Client, NoTls};
 use rusqlite::Connection;
@@ -235,8 +237,11 @@ fn init_mysql(conn: &mut mysql::PooledConn) -> Result<(), String> {
 fn migrate_sqlite(conn: &Connection) -> Result<(), String> {
     let columns = sqlite_columns(conn)?;
     if !columns.iter().any(|column| column == "owner_user") {
-        conn.execute("ALTER TABLE trace_sources ADD COLUMN owner_user TEXT NULL", [])
-            .map_err(|e| e.to_string())?;
+        conn.execute(
+            "ALTER TABLE trace_sources ADD COLUMN owner_user TEXT NULL",
+            [],
+        )
+        .map_err(|e| e.to_string())?;
     }
     Ok(())
 }

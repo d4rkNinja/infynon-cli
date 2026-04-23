@@ -1,11 +1,11 @@
 use crate::trace::types::{
-    TraceLayer, TraceNote, TraceScope, TraceSource, NoteStatus, PackageRisk, SyncRun,
-    KgEntity, KgEdge, EntityKind, RelationType,
+    EntityKind, KgEdge, KgEntity, NoteStatus, PackageRisk, RelationType, SyncRun, TraceLayer,
+    TraceNote, TraceScope, TraceSource,
 };
-use std::str::FromStr;
 use mysql::{params, prelude::FromValue, prelude::Queryable, Row};
 use postgres::Client;
 use rusqlite::Connection;
+use std::str::FromStr;
 
 pub fn upsert_source_sqlite(conn: &Connection, source: &TraceSource) -> Result<(), String> {
     conn.execute(
@@ -246,7 +246,12 @@ pub fn refresh_package_findings_mysql(
 pub fn insert_sync_sqlite(conn: &Connection, run: &SyncRun) -> Result<(), String> {
     conn.execute(
         "INSERT INTO trace_sync_runs (timestamp,direction,source_id,summary) VALUES (?1,?2,?3,?4)",
-        rusqlite::params![run.timestamp, run.direction.as_str(), run.source_id, run.summary],
+        rusqlite::params![
+            run.timestamp,
+            run.direction.as_str(),
+            run.source_id,
+            run.summary
+        ],
     )
     .map_err(|e| e.to_string())?;
     Ok(())
@@ -285,8 +290,16 @@ pub fn pull_notes_sqlite(conn: &Connection) -> Result<Vec<TraceNote>, String> {
                 id: row.get(0)?,
                 title: row.get(1)?,
                 body: row.get(2)?,
-                layer: row.get::<_, String>(3)?.as_str().parse().map_err(to_sql_err)?,
-                scope: row.get::<_, String>(4)?.as_str().parse().map_err(to_sql_err)?,
+                layer: row
+                    .get::<_, String>(3)?
+                    .as_str()
+                    .parse()
+                    .map_err(to_sql_err)?,
+                scope: row
+                    .get::<_, String>(4)?
+                    .as_str()
+                    .parse()
+                    .map_err(to_sql_err)?,
                 target: row.get(5)?,
                 files: serde_json::from_str::<Vec<String>>(&row.get::<_, String>(6)?)
                     .map_err(to_sql_err)?,
@@ -295,7 +308,11 @@ pub fn pull_notes_sqlite(conn: &Connection) -> Result<Vec<TraceNote>, String> {
                 related_pr: row.get::<_, Option<i64>>(8)?.map(|v| v as u64),
                 author: row.get(9)?,
                 actor: row.get(10)?,
-                status: row.get::<_, String>(11)?.as_str().parse().map_err(to_sql_err)?,
+                status: row
+                    .get::<_, String>(11)?
+                    .as_str()
+                    .parse()
+                    .map_err(to_sql_err)?,
                 created_at: row.get(12)?,
                 updated_at: row.get(13)?,
             })
@@ -376,7 +393,6 @@ fn row_value<T: FromValue>(row: &Row, index: usize, field: &str) -> Result<T, St
         .ok_or_else(|| format!("missing mysql field '{}'", field))
 }
 
-
 fn to_sql_err<E: std::fmt::Display>(e: E) -> rusqlite::Error {
     rusqlite::Error::FromSqlConversionFailure(
         0,
@@ -398,8 +414,13 @@ fn kg_entity_fields(entity: &KgEntity) -> Result<(String, String), String> {
 
 /// Parses raw column values into a `KgEntity`.
 fn kg_entity_from_row(
-    id: String, kind_str: String, name: String, metadata_json: String,
-    branch: String, created_at: String, updated_at: String,
+    id: String,
+    kind_str: String,
+    name: String,
+    metadata_json: String,
+    branch: String,
+    created_at: String,
+    updated_at: String,
 ) -> Result<KgEntity, String> {
     Ok(KgEntity {
         id,
@@ -414,8 +435,14 @@ fn kg_entity_from_row(
 
 /// Parses raw column values into a `KgEdge`.
 fn kg_edge_from_row(
-    id: String, source: String, target: String, relation_str: String,
-    weight: f64, branch: String, evidence: String, created_at: String,
+    id: String,
+    source: String,
+    target: String,
+    relation_str: String,
+    weight: f64,
+    branch: String,
+    evidence: String,
+    created_at: String,
 ) -> Result<KgEdge, String> {
     Ok(KgEdge {
         id,
@@ -440,8 +467,13 @@ pub fn upsert_kg_entity_sqlite(conn: &Connection, entity: &KgEntity) -> Result<(
          metadata_json=excluded.metadata_json, branch=excluded.branch,
          created_at=excluded.created_at, updated_at=excluded.updated_at",
         rusqlite::params![
-            entity.id, kind_str, entity.name, metadata_json,
-            entity.branch, entity.created_at, entity.updated_at
+            entity.id,
+            kind_str,
+            entity.name,
+            metadata_json,
+            entity.branch,
+            entity.created_at,
+            entity.updated_at
         ],
     )
     .map_err(|e| e.to_string())?;
@@ -466,7 +498,10 @@ pub fn upsert_kg_entity_postgres(client: &mut Client, entity: &KgEntity) -> Resu
     Ok(())
 }
 
-pub fn upsert_kg_entity_mysql(conn: &mut mysql::PooledConn, entity: &KgEntity) -> Result<(), String> {
+pub fn upsert_kg_entity_mysql(
+    conn: &mut mysql::PooledConn,
+    entity: &KgEntity,
+) -> Result<(), String> {
     let (kind_str, metadata_json) = kg_entity_fields(entity)?;
     conn.exec_drop(
         "INSERT INTO trace_kg_entities (id,kind,name,metadata_json,branch,created_at,updated_at)
@@ -494,9 +529,15 @@ pub fn pull_kg_entities_sqlite(conn: &Connection) -> Result<Vec<KgEntity>, Strin
     let rows = stmt
         .query_map([], |row| {
             kg_entity_from_row(
-                row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?,
-                row.get(4)?, row.get(5)?, row.get(6)?,
-            ).map_err(to_sql_err)
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+                row.get(6)?,
+            )
+            .map_err(to_sql_err)
         })
         .map_err(|e| e.to_string())?;
     rows.map(|r| r.map_err(|e| e.to_string())).collect()
@@ -509,8 +550,13 @@ pub fn pull_kg_entities_postgres(client: &mut Client) -> Result<Vec<KgEntity>, S
     rows.into_iter()
         .map(|row| {
             kg_entity_from_row(
-                row.get(0), row.get(1), row.get(2), row.get(3),
-                row.get(4), row.get(5), row.get(6),
+                row.get(0),
+                row.get(1),
+                row.get(2),
+                row.get(3),
+                row.get(4),
+                row.get(5),
+                row.get(6),
             )
         })
         .collect()
@@ -523,9 +569,12 @@ pub fn pull_kg_entities_mysql(conn: &mut mysql::PooledConn) -> Result<Vec<KgEnti
     rows.into_iter()
         .map(|row| {
             kg_entity_from_row(
-                row_value(&row, 0, "id")?, row_value(&row, 1, "kind")?,
-                row_value(&row, 2, "name")?, row_value(&row, 3, "metadata_json")?,
-                row_value(&row, 4, "branch")?, row_value(&row, 5, "created_at")?,
+                row_value(&row, 0, "id")?,
+                row_value(&row, 1, "kind")?,
+                row_value(&row, 2, "name")?,
+                row_value(&row, 3, "metadata_json")?,
+                row_value(&row, 4, "branch")?,
+                row_value(&row, 5, "created_at")?,
                 row_value(&row, 6, "updated_at")?,
             )
         })
@@ -595,9 +644,16 @@ pub fn pull_kg_edges_sqlite(conn: &Connection) -> Result<Vec<KgEdge>, String> {
     let rows = stmt
         .query_map([], |row| {
             kg_edge_from_row(
-                row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?,
-                row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?,
-            ).map_err(to_sql_err)
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+                row.get(6)?,
+                row.get(7)?,
+            )
+            .map_err(to_sql_err)
         })
         .map_err(|e| e.to_string())?;
     rows.map(|r| r.map_err(|e| e.to_string())).collect()
@@ -610,8 +666,14 @@ pub fn pull_kg_edges_postgres(client: &mut Client) -> Result<Vec<KgEdge>, String
     rows.into_iter()
         .map(|row| {
             kg_edge_from_row(
-                row.get(0), row.get(1), row.get(2), row.get(3),
-                row.get(4), row.get(5), row.get(6), row.get(7),
+                row.get(0),
+                row.get(1),
+                row.get(2),
+                row.get(3),
+                row.get(4),
+                row.get(5),
+                row.get(6),
+                row.get(7),
             )
         })
         .collect()
@@ -624,10 +686,14 @@ pub fn pull_kg_edges_mysql(conn: &mut mysql::PooledConn) -> Result<Vec<KgEdge>, 
     rows.into_iter()
         .map(|row| {
             kg_edge_from_row(
-                row_value(&row, 0, "id")?, row_value(&row, 1, "source_entity")?,
-                row_value(&row, 2, "target_entity")?, row_value(&row, 3, "relation")?,
-                row_value(&row, 4, "weight")?, row_value(&row, 5, "branch")?,
-                row_value(&row, 6, "evidence")?, row_value(&row, 7, "created_at")?,
+                row_value(&row, 0, "id")?,
+                row_value(&row, 1, "source_entity")?,
+                row_value(&row, 2, "target_entity")?,
+                row_value(&row, 3, "relation")?,
+                row_value(&row, 4, "weight")?,
+                row_value(&row, 5, "branch")?,
+                row_value(&row, 6, "evidence")?,
+                row_value(&row, 7, "created_at")?,
             )
         })
         .collect()

@@ -184,10 +184,8 @@ pub fn cmd_import(
             .collect::<Vec<_>>()
             .join("-");
 
-        let nodes_map: HashMap<String, Node> = nodes
-            .iter()
-            .map(|n| (n.id.clone(), n.clone()))
-            .collect();
+        let nodes_map: HashMap<String, Node> =
+            nodes.iter().map(|n| (n.id.clone(), n.clone())).collect();
         let all_nodes: Vec<Node> = nodes.clone();
 
         let (entry, edges) = ai::build_flow_edges(&all_nodes);
@@ -256,7 +254,8 @@ fn build_node_from_operation(
 
     // Add Authorization unless it looks like an auth endpoint
     let path_lower = path_str.to_lowercase();
-    let is_auth = path_lower.contains("auth") || path_lower.contains("login") || path_lower.contains("token");
+    let is_auth =
+        path_lower.contains("auth") || path_lower.contains("login") || path_lower.contains("token");
     if !is_auth {
         node.headers.insert(
             "Authorization".to_string(),
@@ -278,9 +277,9 @@ fn build_node_from_operation(
                 .get("parameters")
                 .and_then(|params| params.as_sequence())
                 .and_then(|params| {
-                    params.iter().find(|p| {
-                        p.get("in").and_then(|v| v.as_str()) == Some("body")
-                    })
+                    params
+                        .iter()
+                        .find(|p| p.get("in").and_then(|v| v.as_str()) == Some("body"))
                 })
                 .and_then(|p| p.get("schema"))
         };
@@ -360,10 +359,17 @@ fn get_first_2xx_response_schema<'a>(
     None
 }
 
-fn resolve_ref<'a>(schema: &'a serde_yaml::Value, spec: &'a serde_yaml::Value) -> &'a serde_yaml::Value {
+fn resolve_ref<'a>(
+    schema: &'a serde_yaml::Value,
+    spec: &'a serde_yaml::Value,
+) -> &'a serde_yaml::Value {
     if let Some(ref_str) = schema.get("$ref").and_then(|r| r.as_str()) {
         // Handles "#/components/schemas/MyModel" and "#/definitions/MyModel"
-        let parts: Vec<&str> = ref_str.trim_start_matches('#').trim_start_matches('/').split('/').collect();
+        let parts: Vec<&str> = ref_str
+            .trim_start_matches('#')
+            .trim_start_matches('/')
+            .split('/')
+            .collect();
         let mut current = spec;
         for part in &parts {
             current = match current.get(*part) {
@@ -383,7 +389,10 @@ fn schema_to_body_template(
     let schema = resolve_ref(schema, spec);
 
     // Check schema type
-    let schema_type = schema.get("type").and_then(|t| t.as_str()).unwrap_or("object");
+    let schema_type = schema
+        .get("type")
+        .and_then(|t| t.as_str())
+        .unwrap_or("object");
 
     if schema_type != "object" && schema.get("properties").is_none() {
         return None;
@@ -415,10 +424,7 @@ fn schema_to_body_template(
     Some(serde_json::Value::Object(obj))
 }
 
-fn schema_to_extractions(
-    schema: &serde_yaml::Value,
-    spec: &serde_yaml::Value,
-) -> Vec<Extraction> {
+fn schema_to_extractions(schema: &serde_yaml::Value, spec: &serde_yaml::Value) -> Vec<Extraction> {
     let schema = resolve_ref(schema, spec);
     let properties = match schema.get("properties").and_then(|p| p.as_mapping()) {
         Some(p) => p,

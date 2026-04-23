@@ -1,9 +1,9 @@
 use ratatui::{
-    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
+    Frame,
 };
 
 use crate::tui::api_app::{ApiApp, ApiView};
@@ -26,13 +26,13 @@ pub(super) fn render_sidebar(f: &mut Frame, app: &ApiApp, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),           // Brand
-            Constraint::Length(1),           // Separator
-            Constraint::Length(nav_h),       // Nav
-            Constraint::Length(1),           // Separator
-            Constraint::Min(6),              // Flow status
-            Constraint::Length(1),           // Separator
-            Constraint::Length(4),           // Key hints
+            Constraint::Length(3),     // Brand
+            Constraint::Length(1),     // Separator
+            Constraint::Length(nav_h), // Nav
+            Constraint::Length(1),     // Separator
+            Constraint::Min(6),        // Flow status
+            Constraint::Length(1),     // Separator
+            Constraint::Length(4),     // Key hints
         ])
         .split(inner);
 
@@ -45,28 +45,33 @@ pub(super) fn render_sidebar(f: &mut Frame, app: &ApiApp, area: Rect) {
     render_hints(f, chunks[6]);
 }
 
- // ── Brand ──────────────────────────────────────────────────────────────────────
+// ── Brand ──────────────────────────────────────────────────────────────────────
 
 fn render_brand(f: &mut Frame, area: Rect) {
     let lines = vec![
         Line::raw(""),
         Line::from(vec![
             Span::styled("  ", Style::default()),
-            Span::styled("\u{25C6} ", Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
-            Span::styled("WEAVE", Style::default().fg(WHITE).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "\u{25C6} ",
+                Style::default().fg(CYAN).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "WEAVE",
+                Style::default().fg(WHITE).add_modifier(Modifier::BOLD),
+            ),
         ]),
     ];
     f.render_widget(Paragraph::new(lines), area);
 }
 
- // ── Navigation ──────────────────────────────────────────────────────────────
+// ── Navigation ──────────────────────────────────────────────────────────────
 
 fn render_nav(f: &mut Frame, app: &ApiApp, area: Rect) {
-    let mut lines: Vec<Line> = vec![
-        Line::from(vec![
-            Span::styled("  VIEWS", Style::default().fg(DIMMER).add_modifier(Modifier::BOLD)),
-        ]),
-    ];
+    let mut lines: Vec<Line> = vec![Line::from(vec![Span::styled(
+        "  VIEWS",
+        Style::default().fg(DIMMER).add_modifier(Modifier::BOLD),
+    )])];
 
     for view in ApiView::all() {
         let is_active = app.current_view == *view;
@@ -76,10 +81,16 @@ fn render_nav(f: &mut Frame, app: &ApiApp, area: Rect) {
         if is_active {
             // Active: accent bar + highlighted
             lines.push(Line::from(vec![
-                Span::styled("\u{258F} ", Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "\u{258F} ",
+                    Style::default().fg(CYAN).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(icon, Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
                 Span::styled(" ", Style::default()),
-                Span::styled(label, Style::default().fg(WHITE).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    label,
+                    Style::default().fg(WHITE).add_modifier(Modifier::BOLD),
+                ),
             ]));
             lines.push(Line::from(vec![
                 Span::styled("    ", Style::default()),
@@ -111,15 +122,22 @@ fn render_flow_status(f: &mut Frame, app: &ApiApp, area: Rect) {
     let inner_w = area.width.saturating_sub(2) as usize;
 
     // Section header
-    lines.push(Line::from(vec![
-        Span::styled("  FLOW", Style::default().fg(DIMMER).add_modifier(Modifier::BOLD)),
-    ]));
+    lines.push(Line::from(vec![Span::styled(
+        "  FLOW",
+        Style::default().fg(DIMMER).add_modifier(Modifier::BOLD),
+    )]));
     lines.push(Line::raw(""));
 
     if app.flow_running || app.live_running {
         lines.push(Line::from(vec![
-            Span::styled("  \u{25CF} ", Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
-            Span::styled("RUNNING", Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "  \u{25CF} ",
+                Style::default().fg(CYAN).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "RUNNING",
+                Style::default().fg(CYAN).add_modifier(Modifier::BOLD),
+            ),
         ]));
         lines.push(Line::raw(""));
         if let Some(last) = app.live_steps.last() {
@@ -131,24 +149,32 @@ fn render_flow_status(f: &mut Frame, app: &ApiApp, area: Rect) {
         }
     } else if let Some(flow) = app.active_flow() {
         let (status_icon, status_col) = match app.flow_run_statuses.get(&flow.id) {
-            Some(Some(true))  => ("\u{2713}", GREEN),
+            Some(Some(true)) => ("\u{2713}", GREEN),
             Some(Some(false)) => ("\u{2717}", RED),
-            _                 => ("\u{25CB}", DIM),
+            _ => ("\u{25CB}", DIM),
         };
 
         let flow_name = truncate(&flow.name, inner_w.saturating_sub(6));
         lines.push(Line::from(vec![
-            Span::styled(format!("  {} ", status_icon), Style::default().fg(status_col)),
-            Span::styled(flow_name, Style::default().fg(WHITE).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                format!("  {} ", status_icon),
+                Style::default().fg(status_col),
+            ),
+            Span::styled(
+                flow_name,
+                Style::default().fg(WHITE).add_modifier(Modifier::BOLD),
+            ),
         ]));
 
         let node_count = flow.all_node_ids().len();
-        lines.push(Line::from(vec![
-            Span::styled(
-                format!("   {} node{}", node_count, if node_count == 1 { "" } else { "s" }),
-                Style::default().fg(TEXT_DIM),
+        lines.push(Line::from(vec![Span::styled(
+            format!(
+                "   {} node{}",
+                node_count,
+                if node_count == 1 { "" } else { "s" }
             ),
-        ]));
+            Style::default().fg(TEXT_DIM),
+        )]));
 
         // Last run with progress bar
         if let Some(run) = &app.last_run {
@@ -156,23 +182,39 @@ fn render_flow_status(f: &mut Frame, app: &ApiApp, area: Rect) {
 
             let total = run.steps.len();
             let passed = run.passed_count();
-            let pct = if total == 0 { 0 } else { (passed * 100) / total };
+            let pct = if total == 0 {
+                0
+            } else {
+                (passed * 100) / total
+            };
             let bar_w = inner_w.saturating_sub(8).max(4);
             let filled = if pct == 0 { 0 } else { (pct * bar_w) / 100 };
             let empty = bar_w.saturating_sub(filled);
-            let bar_col = if pct == 100 { GREEN } else if pct >= 50 { YELLOW } else { RED };
+            let bar_col = if pct == 100 {
+                GREEN
+            } else if pct >= 50 {
+                YELLOW
+            } else {
+                RED
+            };
 
             lines.push(Line::from(vec![
                 Span::styled("  ", Style::default()),
                 Span::styled("\u{2588}".repeat(filled), Style::default().fg(bar_col)),
                 Span::styled("\u{2591}".repeat(empty), Style::default().fg(DIMMER)),
-                Span::styled(format!(" {:>3}%", pct), Style::default().fg(bar_col).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    format!(" {:>3}%", pct),
+                    Style::default().fg(bar_col).add_modifier(Modifier::BOLD),
+                ),
             ]));
 
             // Timing
- lines.push(Line::from(vec![
+            lines.push(Line::from(vec![
                 Span::styled("  ", Style::default()),
-                Span::styled(format!("{}ms avg", run.avg_latency_ms()), Style::default().fg(TEXT_DIM)),
+                Span::styled(
+                    format!("{}ms avg", run.avg_latency_ms()),
+                    Style::default().fg(TEXT_DIM),
+                ),
             ]));
         }
     } else {

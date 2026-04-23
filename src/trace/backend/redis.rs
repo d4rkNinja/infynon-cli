@@ -1,4 +1,7 @@
-use crate::trace::types::{TraceLayer, TraceNote, TraceScope, TraceSource, NoteStatus, PackageRisk, SyncRun, KgEntity, KgEdge, EntityKind, RelationType};
+use crate::trace::types::{
+    EntityKind, KgEdge, KgEntity, NoteStatus, PackageRisk, RelationType, SyncRun, TraceLayer,
+    TraceNote, TraceScope, TraceSource,
+};
 use redis::{Commands, Connection};
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -58,7 +61,11 @@ pub fn record_sync(source: &TraceSource, run: &SyncRun) -> Result<(), String> {
     Ok(())
 }
 
-pub fn push_kg(source: &TraceSource, entities: &[KgEntity], edges: &[KgEdge]) -> Result<(), String> {
+pub fn push_kg(
+    source: &TraceSource,
+    entities: &[KgEntity],
+    edges: &[KgEdge],
+) -> Result<(), String> {
     let mut conn = connection(source)?;
     for entity in entities {
         upsert_kg_entity(&mut conn, source, entity)?;
@@ -103,7 +110,11 @@ pub fn pull_kg(source: &TraceSource) -> Result<(Vec<KgEntity>, Vec<KgEdge>), Str
     Ok((entities, edges))
 }
 
-fn upsert_kg_entity(conn: &mut Connection, source: &TraceSource, entity: &KgEntity) -> Result<(), String> {
+fn upsert_kg_entity(
+    conn: &mut Connection,
+    source: &TraceSource,
+    entity: &KgEntity,
+) -> Result<(), String> {
     let entity_key = key(source, &format!("kg:entity:{}", entity.id));
     let metadata_json = serde_json::to_string(&entity.metadata).map_err(|e| e.to_string())?;
     let _: () = redis::cmd("HSET")
@@ -128,15 +139,28 @@ fn upsert_kg_entity(conn: &mut Connection, source: &TraceSource, entity: &KgEnti
         .sadd(key(source, "kg:entities:all"), &entity.id)
         .map_err(|e| e.to_string())?;
     let _: () = conn
-        .sadd(key(source, &format!("kg:index:branch:{}:entities", entity.branch)), &entity.id)
+        .sadd(
+            key(
+                source,
+                &format!("kg:index:branch:{}:entities", entity.branch),
+            ),
+            &entity.id,
+        )
         .map_err(|e| e.to_string())?;
     let _: () = conn
-        .sadd(key(source, &format!("kg:index:kind:{}", entity.kind.as_str())), &entity.id)
+        .sadd(
+            key(source, &format!("kg:index:kind:{}", entity.kind.as_str())),
+            &entity.id,
+        )
         .map_err(|e| e.to_string())?;
     Ok(())
 }
 
-fn upsert_kg_edge(conn: &mut Connection, source: &TraceSource, edge: &KgEdge) -> Result<(), String> {
+fn upsert_kg_edge(
+    conn: &mut Connection,
+    source: &TraceSource,
+    edge: &KgEdge,
+) -> Result<(), String> {
     let edge_key = key(source, &format!("kg:edge:{}", edge.id));
     let _: () = redis::cmd("HSET")
         .arg(&edge_key)
@@ -162,10 +186,19 @@ fn upsert_kg_edge(conn: &mut Connection, source: &TraceSource, edge: &KgEdge) ->
         .sadd(key(source, "kg:edges:all"), &edge.id)
         .map_err(|e| e.to_string())?;
     let _: () = conn
-        .sadd(key(source, &format!("kg:index:branch:{}:edges", edge.branch)), &edge.id)
+        .sadd(
+            key(source, &format!("kg:index:branch:{}:edges", edge.branch)),
+            &edge.id,
+        )
         .map_err(|e| e.to_string())?;
     let _: () = conn
-        .sadd(key(source, &format!("kg:index:relation:{}", edge.relation.as_str())), &edge.id)
+        .sadd(
+            key(
+                source,
+                &format!("kg:index:relation:{}", edge.relation.as_str()),
+            ),
+            &edge.id,
+        )
         .map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -175,7 +208,8 @@ fn entity_from_hash(hash: &HashMap<String, String>) -> Result<KgEntity, String> 
         id: value(hash, "id")?,
         kind: EntityKind::from_str(&value(hash, "kind")?).map_err(|e| e.to_string())?,
         name: value(hash, "name")?,
-        metadata: serde_json::from_str(&value(hash, "metadata_json")?).map_err(|e| e.to_string())?,
+        metadata: serde_json::from_str(&value(hash, "metadata_json")?)
+            .map_err(|e| e.to_string())?,
         branch: value(hash, "branch")?,
         created_at: value(hash, "created_at")?,
         updated_at: value(hash, "updated_at")?,
@@ -188,14 +222,20 @@ fn edge_from_hash(hash: &HashMap<String, String>) -> Result<KgEdge, String> {
         source: value(hash, "source_entity")?,
         target: value(hash, "target_entity")?,
         relation: RelationType::from_str(&value(hash, "relation")?).map_err(|e| e.to_string())?,
-        weight: value(hash, "weight")?.parse::<f64>().map_err(|e| e.to_string())?,
+        weight: value(hash, "weight")?
+            .parse::<f64>()
+            .map_err(|e| e.to_string())?,
         branch: value(hash, "branch")?,
         evidence: value(hash, "evidence")?,
         created_at: value(hash, "created_at")?,
     })
 }
 
-fn upsert_note(conn: &mut Connection, source: &TraceSource, note: &TraceNote) -> Result<(), String> {
+fn upsert_note(
+    conn: &mut Connection,
+    source: &TraceSource,
+    note: &TraceNote,
+) -> Result<(), String> {
     let note_key = key(source, &format!("note:{}", note.id));
     let files = serde_json::to_string(&note.files).map_err(|e| e.to_string())?;
     let tags = serde_json::to_string(&note.tags).map_err(|e| e.to_string())?;
@@ -237,13 +277,22 @@ fn upsert_note(conn: &mut Connection, source: &TraceSource, note: &TraceNote) ->
         .sadd(key(source, "notes:all"), &note.id)
         .map_err(|e| e.to_string())?;
     let _: () = conn
-        .sadd(key(source, &format!("index:layer:{}", note.layer.as_str())), &note.id)
+        .sadd(
+            key(source, &format!("index:layer:{}", note.layer.as_str())),
+            &note.id,
+        )
         .map_err(|e| e.to_string())?;
     let _: () = conn
-        .sadd(key(source, &format!("index:scope:{}", note.scope.as_str())), &note.id)
+        .sadd(
+            key(source, &format!("index:scope:{}", note.scope.as_str())),
+            &note.id,
+        )
         .map_err(|e| e.to_string())?;
     let _: () = conn
-        .sadd(key(source, &format!("index:author:{}", note.author)), &note.id)
+        .sadd(
+            key(source, &format!("index:author:{}", note.author)),
+            &note.id,
+        )
         .map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -314,7 +363,10 @@ fn upsert_package_finding(
         .map_err(|e| e.to_string())?;
     let _: () = conn
         .sadd(
-            key(source, &format!("package:index:severity:{}", finding.severity)),
+            key(
+                source,
+                &format!("package:index:severity:{}", finding.severity),
+            ),
             id,
         )
         .map_err(|e| e.to_string())?;
@@ -351,8 +403,6 @@ fn value(hash: &HashMap<String, String>, key: &str) -> Result<String, String> {
         .cloned()
         .ok_or_else(|| format!("missing field '{}'", key))
 }
-
-
 
 fn connection(source: &TraceSource) -> Result<Connection, String> {
     let client = redis::Client::open(source.url.as_str()).map_err(|e| e.to_string())?;

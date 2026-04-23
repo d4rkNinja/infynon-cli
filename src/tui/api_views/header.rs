@@ -1,9 +1,9 @@
 use ratatui::{
-    Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::Paragraph,
+    Frame,
 };
 
 use crate::tui::api_app::ApiApp;
@@ -36,12 +36,19 @@ pub(super) fn render_info_bar(f: &mut Frame, app: &ApiApp, area: Rect) {
             left_spans.push(Span::styled("  \u{2502}  ", Style::default().fg(DIMMER)));
         }
         None => {
-            left_spans.push(Span::styled(" no flow  \u{2502}  ", Style::default().fg(DIMMER)));
+            left_spans.push(Span::styled(
+                " no flow  \u{2502}  ",
+                Style::default().fg(DIMMER),
+            ));
         }
     }
 
     left_spans.push(Span::styled(
-        format!("{} flows \u{00B7} {} nodes", app.flows.len(), app.nodes.len()),
+        format!(
+            "{} flows \u{00B7} {} nodes",
+            app.flows.len(),
+            app.nodes.len()
+        ),
         Style::default().fg(DIM),
     ));
 
@@ -49,7 +56,10 @@ pub(super) fn render_info_bar(f: &mut Frame, app: &ApiApp, area: Rect) {
     let mut right_spans: Vec<Span> = vec![];
     if !app.search_input.is_empty() {
         right_spans.push(Span::styled("/ ", Style::default().fg(YELLOW)));
-        right_spans.push(Span::styled(&app.search_input, Style::default().fg(WHITE).add_modifier(Modifier::BOLD)));
+        right_spans.push(Span::styled(
+            &app.search_input,
+            Style::default().fg(WHITE).add_modifier(Modifier::BOLD),
+        ));
     } else {
         right_spans.push(Span::styled("/ ", Style::default().fg(YELLOW)));
         right_spans.push(Span::styled("search...", Style::default().fg(DIMMER)));
@@ -58,7 +68,9 @@ pub(super) fn render_info_bar(f: &mut Frame, app: &ApiApp, area: Rect) {
     let bg = Style::default().bg(BG_SURFACE);
     f.render_widget(Paragraph::new(Line::from(left_spans)).style(bg), halves[0]);
     f.render_widget(
-        Paragraph::new(Line::from(right_spans)).style(bg).alignment(Alignment::Right),
+        Paragraph::new(Line::from(right_spans))
+            .style(bg)
+            .alignment(Alignment::Right),
         halves[1],
     );
 }
@@ -76,9 +88,16 @@ pub(super) fn render_status_bar(f: &mut Frame, app: &ApiApp, area: Rect) {
 
     // Status indicator
     if app.flow_running || app.live_running {
-        left_spans.push(Span::styled(" \u{25CF} RUNNING", Style::default().fg(CYAN).add_modifier(Modifier::BOLD)));
+        left_spans.push(Span::styled(
+            " \u{25CF} RUNNING",
+            Style::default().fg(CYAN).add_modifier(Modifier::BOLD),
+        ));
     } else if let Some(run) = &app.last_run {
-        let (icon, col) = if run.passed { ("\u{2713}", GREEN) } else { ("\u{2717}", RED) };
+        let (icon, col) = if run.passed {
+            ("\u{2713}", GREEN)
+        } else {
+            ("\u{2717}", RED)
+        };
         left_spans.push(Span::styled(
             format!(" {} {}ms", icon, run.duration_ms()),
             Style::default().fg(col),
@@ -106,7 +125,9 @@ pub(super) fn render_status_bar(f: &mut Frame, app: &ApiApp, area: Rect) {
     let bg = Style::default().bg(BG_SURFACE);
     f.render_widget(Paragraph::new(Line::from(left_spans)).style(bg), halves[0]);
     f.render_widget(
-        Paragraph::new(Line::from(right_spans)).style(bg).alignment(Alignment::Right),
+        Paragraph::new(Line::from(right_spans))
+            .style(bg)
+            .alignment(Alignment::Right),
         halves[1],
     );
 }

@@ -1,16 +1,16 @@
 use ratatui::{
-    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Wrap},
+    Frame,
 };
 
 use crate::api::types::FlowRunResult;
 use crate::tui::api_app::ApiApp;
 use crate::tui::theme::*;
 
-use super::{truncate, dashboard::render_no_flows_hint};
+use super::{dashboard::render_no_flows_hint, truncate};
 
 // ── Environment context view ──────────────────────────────────────────────────
 
@@ -70,8 +70,14 @@ fn render_env_panel(f: &mut Frame, app: &mut ApiApp, area: Rect) {
     let sep_w = splits[0].width.saturating_sub(4) as usize;
     let header = Paragraph::new(vec![
         Line::from(vec![
-            Span::styled(format!("  {:<w$}", "KEY", w = key_w), Style::default().fg(DIMMER).add_modifier(Modifier::BOLD)),
-            Span::styled("VALUE", Style::default().fg(DIMMER).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                format!("  {:<w$}", "KEY", w = key_w),
+                Style::default().fg(DIMMER).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "VALUE",
+                Style::default().fg(DIMMER).add_modifier(Modifier::BOLD),
+            ),
         ]),
         Line::from(vec![Span::styled(
             format!("  {}", "\u{2500}".repeat(sep_w)),
@@ -84,48 +90,58 @@ fn render_env_panel(f: &mut Frame, app: &mut ApiApp, area: Rect) {
     if entries.is_empty() {
         let hint = Paragraph::new(vec![
             Line::raw(""),
-            Line::from(vec![Span::styled("  No variables set.", Style::default().fg(DIM))]),
+            Line::from(vec![Span::styled(
+                "  No variables set.",
+                Style::default().fg(DIM),
+            )]),
             Line::raw(""),
             Line::from(vec![
                 Span::styled("  Press ", Style::default().fg(DIMMER)),
                 Span::styled("[n]", Style::default().fg(YELLOW)),
                 Span::styled(" to add one.", Style::default().fg(DIMMER)),
             ]),
-            Line::from(vec![Span::styled("  Reference in nodes as {$KEY}", Style::default().fg(DIMMER))]),
+            Line::from(vec![Span::styled(
+                "  Reference in nodes as {$KEY}",
+                Style::default().fg(DIMMER),
+            )]),
         ]);
         f.render_widget(hint, splits[1]);
     } else {
         let val_w = splits[1].width.saturating_sub(key_w as u16 + 6) as usize;
-        let items: Vec<ListItem> = entries.iter().enumerate().map(|(i, (key, value))| {
-            let selected = i == app.env_selected;
-            let sensitive = env_cmd::looks_sensitive(key);
-            let display = if !app.env_reveal && sensitive {
-                env_cmd::mask(value)
-            } else {
-                truncate(value, val_w.max(8)).to_string()
-            };
-            let (key_style, val_style) = if selected {
-                (
-                    Style::default().fg(CYAN).add_modifier(Modifier::BOLD),
-                    Style::default().fg(WHITE),
-                )
-            } else {
-                (
-                    Style::default().fg(CYAN),
-                    Style::default().fg(TEXT_DIM),
-                )
-            };
-            let tag = if sensitive && !app.env_reveal {
-                Span::styled(" [hidden]", Style::default().fg(DIMMER))
-            } else {
-                Span::raw("")
-            };
-            ListItem::new(Line::from(vec![
-                Span::styled(format!("  {:<w$}", truncate(key, key_w), w = key_w), key_style),
-                Span::styled(display, val_style),
-                tag,
-            ]))
-        }).collect();
+        let items: Vec<ListItem> = entries
+            .iter()
+            .enumerate()
+            .map(|(i, (key, value))| {
+                let selected = i == app.env_selected;
+                let sensitive = env_cmd::looks_sensitive(key);
+                let display = if !app.env_reveal && sensitive {
+                    env_cmd::mask(value)
+                } else {
+                    truncate(value, val_w.max(8)).to_string()
+                };
+                let (key_style, val_style) = if selected {
+                    (
+                        Style::default().fg(CYAN).add_modifier(Modifier::BOLD),
+                        Style::default().fg(WHITE),
+                    )
+                } else {
+                    (Style::default().fg(CYAN), Style::default().fg(TEXT_DIM))
+                };
+                let tag = if sensitive && !app.env_reveal {
+                    Span::styled(" [hidden]", Style::default().fg(DIMMER))
+                } else {
+                    Span::raw("")
+                };
+                ListItem::new(Line::from(vec![
+                    Span::styled(
+                        format!("  {:<w$}", truncate(key, key_w), w = key_w),
+                        key_style,
+                    ),
+                    Span::styled(display, val_style),
+                    tag,
+                ]))
+            })
+            .collect();
 
         let mut list_state = ListState::default();
         list_state.select(Some(app.env_selected));
@@ -165,26 +181,27 @@ fn render_env_panel(f: &mut Frame, app: &mut ApiApp, area: Rect) {
             ]),
             Line::from(vec![
                 Span::styled("  Value: ", Style::default().fg(DIMMER)),
-                Span::styled(format!("{}{}", edit.value_input, val_cursor), val_label_style),
+                Span::styled(
+                    format!("{}{}", edit.value_input, val_cursor),
+                    val_label_style,
+                ),
             ]),
             Line::from(vec![Span::styled(field_hint, Style::default().fg(DIMMER))]),
         ]);
         f.render_widget(editor, splits[2]);
     } else {
-        let hints = Paragraph::new(vec![
-            Line::from(vec![
-                Span::styled("  [n]", Style::default().fg(YELLOW)),
-                Span::styled(" Add  ", Style::default().fg(DIMMER)),
-                Span::styled("[Enter]", Style::default().fg(YELLOW)),
-                Span::styled(" Edit  ", Style::default().fg(DIMMER)),
-                Span::styled("[d]", Style::default().fg(YELLOW)),
-                Span::styled(" Delete  ", Style::default().fg(DIMMER)),
-                Span::styled("[v]", Style::default().fg(YELLOW)),
-                Span::styled(" Reveal  ", Style::default().fg(DIMMER)),
-                Span::styled("\u{2191}\u{2193}/jk", Style::default().fg(YELLOW)),
-                Span::styled(" Navigate", Style::default().fg(DIMMER)),
-            ]),
-        ]);
+        let hints = Paragraph::new(vec![Line::from(vec![
+            Span::styled("  [n]", Style::default().fg(YELLOW)),
+            Span::styled(" Add  ", Style::default().fg(DIMMER)),
+            Span::styled("[Enter]", Style::default().fg(YELLOW)),
+            Span::styled(" Edit  ", Style::default().fg(DIMMER)),
+            Span::styled("[d]", Style::default().fg(YELLOW)),
+            Span::styled(" Delete  ", Style::default().fg(DIMMER)),
+            Span::styled("[v]", Style::default().fg(YELLOW)),
+            Span::styled(" Reveal  ", Style::default().fg(DIMMER)),
+            Span::styled("\u{2191}\u{2193}/jk", Style::default().fg(YELLOW)),
+            Span::styled(" Navigate", Style::default().fg(DIMMER)),
+        ])]);
         f.render_widget(hints, splits[2]);
     }
 }
@@ -200,19 +217,23 @@ fn render_flow_context_panel(f: &mut Frame, app: &ApiApp, area: Rect) {
                 Style::default().fg(DIM),
             )]));
             lines.push(Line::raw(""));
-            lines.push(Line::from(vec![
-                Span::styled("  Run a flow to see", Style::default().fg(DIMMER)),
-            ]));
-            lines.push(Line::from(vec![
-                Span::styled("  extracted context here.", Style::default().fg(DIMMER)),
-            ]));
+            lines.push(Line::from(vec![Span::styled(
+                "  Run a flow to see",
+                Style::default().fg(DIMMER),
+            )]));
+            lines.push(Line::from(vec![Span::styled(
+                "  extracted context here.",
+                Style::default().fg(DIMMER),
+            )]));
             lines.push(Line::raw(""));
-            lines.push(Line::from(vec![
-                Span::styled("  Tip: seed initial vars with", Style::default().fg(DIMMER)),
-            ]));
-            lines.push(Line::from(vec![
-                Span::styled("  --set KEY=VALUE at run time.", Style::default().fg(DIMMER)),
-            ]));
+            lines.push(Line::from(vec![Span::styled(
+                "  Tip: seed initial vars with",
+                Style::default().fg(DIMMER),
+            )]));
+            lines.push(Line::from(vec![Span::styled(
+                "  --set KEY=VALUE at run time.",
+                Style::default().fg(DIMMER),
+            )]));
         }
         Some(run) if run.final_context.is_empty() => {
             lines.push(Line::from(vec![Span::styled(
@@ -220,19 +241,27 @@ fn render_flow_context_panel(f: &mut Frame, app: &ApiApp, area: Rect) {
                 Style::default().fg(DIM),
             )]));
             lines.push(Line::raw(""));
-            lines.push(Line::from(vec![
-                Span::styled("  Nodes must declare capture", Style::default().fg(DIMMER)),
-            ]));
-            lines.push(Line::from(vec![
-                Span::styled("  rules to extract variables.", Style::default().fg(DIMMER)),
-            ]));
+            lines.push(Line::from(vec![Span::styled(
+                "  Nodes must declare capture",
+                Style::default().fg(DIMMER),
+            )]));
+            lines.push(Line::from(vec![Span::styled(
+                "  rules to extract variables.",
+                Style::default().fg(DIMMER),
+            )]));
         }
         Some(run) => {
             // Header with column labels
             let var_w = (panel_w / 3).max(8).min(22);
             lines.push(Line::from(vec![
-                Span::styled(format!("  {:<w$}", "VARIABLE", w = var_w), Style::default().fg(DIMMER).add_modifier(Modifier::BOLD)),
-                Span::styled("VALUE", Style::default().fg(DIMMER).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    format!("  {:<w$}", "VARIABLE", w = var_w),
+                    Style::default().fg(DIMMER).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    "VALUE",
+                    Style::default().fg(DIMMER).add_modifier(Modifier::BOLD),
+                ),
             ]));
             lines.push(Line::from(vec![Span::styled(
                 format!("  {}", "\u{2500}".repeat(panel_w)),
@@ -277,12 +306,10 @@ fn render_flow_context_panel(f: &mut Frame, app: &ApiApp, area: Rect) {
 
             // Count footer
             lines.push(Line::raw(""));
-            lines.push(Line::from(vec![
-                Span::styled(
-                    format!("  {} var(s) from last run", run.final_context.len()),
-                    Style::default().fg(DIMMER),
-                ),
-            ]));
+            lines.push(Line::from(vec![Span::styled(
+                format!("  {} var(s) from last run", run.final_context.len()),
+                Style::default().fg(DIMMER),
+            )]));
         }
     }
 
@@ -291,7 +318,9 @@ fn render_flow_context_panel(f: &mut Frame, app: &ApiApp, area: Rect) {
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(border_style());
-    let para = Paragraph::new(lines).block(block).wrap(Wrap { trim: false });
+    let para = Paragraph::new(lines)
+        .block(block)
+        .wrap(Wrap { trim: false });
     f.render_widget(para, area);
 }
 
@@ -310,9 +339,10 @@ pub(super) fn render_state_inspector(f: &mut Frame, app: &ApiApp, area: Rect) {
                     Line::raw(""),
                     Line::from(vec![Span::styled("  No run yet.", dim_style())]),
                     Line::raw(""),
-                    Line::from(vec![
-                        Span::styled("  Run a flow to inspect its context.", Style::default().fg(DIMMER)),
-                    ]),
+                    Line::from(vec![Span::styled(
+                        "  Run a flow to inspect its context.",
+                        Style::default().fg(DIMMER),
+                    )]),
                 ])
                 .block(
                     Block::default()
@@ -348,8 +378,14 @@ fn render_context_panel(f: &mut Frame, run: &FlowRunResult, area: Rect) {
 
     if run.final_context.is_empty() {
         lines.push(Line::raw(""));
-        lines.push(Line::from(vec![Span::styled("  No context captured", dim_style())]));
-        lines.push(Line::from(vec![Span::styled("  \u{00B7} no data", Style::default().fg(DIM))]));
+        lines.push(Line::from(vec![Span::styled(
+            "  No context captured",
+            dim_style(),
+        )]));
+        lines.push(Line::from(vec![Span::styled(
+            "  \u{00B7} no data",
+            Style::default().fg(DIM),
+        )]));
     } else {
         let var_w = (panel_w / 3).max(8).min(20);
         // Sort alphabetically
@@ -360,12 +396,19 @@ fn render_context_panel(f: &mut Frame, run: &FlowRunResult, area: Rect) {
             let val_max = panel_w.saturating_sub(var_w + 6);
             let display = match val {
                 serde_json::Value::String(s) => {
-                    if s.len() > val_max { format!("{}\u{2026}", &s[..val_max]) } else { s.clone() }
+                    if s.len() > val_max {
+                        format!("{}\u{2026}", &s[..val_max])
+                    } else {
+                        s.clone()
+                    }
                 }
                 other => truncate(&other.to_string(), val_max),
             };
             lines.push(Line::from(vec![
-                Span::styled(format!("  {:<w$}", truncate(key, var_w), w = var_w), Style::default().fg(CYAN)),
+                Span::styled(
+                    format!("  {:<w$}", truncate(key, var_w), w = var_w),
+                    Style::default().fg(CYAN),
+                ),
                 Span::styled(" = ", Style::default().fg(DIM)),
                 Span::styled(display, Style::default().fg(TEXT_DIM)),
             ]));
@@ -385,7 +428,6 @@ fn render_context_panel(f: &mut Frame, run: &FlowRunResult, area: Rect) {
     f.render_widget(p, area);
 }
 
-
 fn render_schema_drift_panel(f: &mut Frame, app: &ApiApp, run: &FlowRunResult, area: Rect) {
     let mut lines: Vec<Line> = vec![Line::raw("")];
     let panel_w = area.width.saturating_sub(4) as usize;
@@ -401,29 +443,43 @@ fn render_schema_drift_panel(f: &mut Frame, app: &ApiApp, run: &FlowRunResult, a
         let mut has_drift = false;
 
         for step in &run.steps {
-            let prev_step = previous_run.steps.iter().find(|s| s.node_id == step.node_id);
+            let prev_step = previous_run
+                .steps
+                .iter()
+                .find(|s| s.node_id == step.node_id);
             if let Some(prev) = prev_step {
                 let curr_keys = extract_json_keys(step.response_body.as_deref());
                 let prev_keys = extract_json_keys(prev.response_body.as_deref());
 
-                let added: Vec<String> = curr_keys.iter().filter(|k| !prev_keys.contains(k)).cloned().collect();
-                let removed: Vec<String> = prev_keys.iter().filter(|k| !curr_keys.contains(k)).cloned().collect();
+                let added: Vec<String> = curr_keys
+                    .iter()
+                    .filter(|k| !prev_keys.contains(k))
+                    .cloned()
+                    .collect();
+                let removed: Vec<String> = prev_keys
+                    .iter()
+                    .filter(|k| !curr_keys.contains(k))
+                    .cloned()
+                    .collect();
 
                 if !added.is_empty() || !removed.is_empty() {
                     has_drift = true;
                     lines.push(Line::raw(""));
-                    lines.push(Line::from(vec![
-                        Span::styled(format!("  {} ", step.node_id), Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
-                    ]));
+                    lines.push(Line::from(vec![Span::styled(
+                        format!("  {} ", step.node_id),
+                        Style::default().fg(CYAN).add_modifier(Modifier::BOLD),
+                    )]));
                     for k in added {
-                        lines.push(Line::from(vec![
-                            Span::styled(format!("    + {}", k), Style::default().fg(GREEN)),
-                        ]));
+                        lines.push(Line::from(vec![Span::styled(
+                            format!("    + {}", k),
+                            Style::default().fg(GREEN),
+                        )]));
                     }
                     for k in removed {
-                        lines.push(Line::from(vec![
-                            Span::styled(format!("    - {}", k), Style::default().fg(RED)),
-                        ]));
+                        lines.push(Line::from(vec![Span::styled(
+                            format!("    - {}", k),
+                            Style::default().fg(RED),
+                        )]));
                     }
                 }
             }

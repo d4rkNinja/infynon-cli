@@ -1,1 +1,5 @@
-pub enum Verdict { Safe, Warn(String), Blocked(String), }
+pub enum Verdict {
+    Safe,
+    Warn(String),
+    Blocked(String),
+}

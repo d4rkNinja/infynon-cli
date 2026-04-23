@@ -6,10 +6,14 @@ use std::process::{Command, Stdio};
 /// Windows: `where <binary>` — resolves .cmd, .bat, .exe in PATH correctly.
 /// macOS / Linux: `which <binary>` — standard POSIX resolver.
 pub fn is_installed(binary: &str) -> bool {
-    if native_which(binary) { return true; }
+    if native_which(binary) {
+        return true;
+    }
     // Also check known alternative names for the same tool
     for alt in alt_binaries(binary) {
-        if native_which(alt) { return true; }
+        if native_which(alt) {
+            return true;
+        }
     }
     false
 }
@@ -18,9 +22,13 @@ pub fn is_installed(binary: &str) -> bool {
 /// Tries the primary name first, then falls through alternatives.
 /// Falls back to the primary name if nothing is found (command will fail with a clear OS error).
 pub fn resolve_binary(primary: &str) -> String {
-    if native_which(primary) { return primary.to_string(); }
+    if native_which(primary) {
+        return primary.to_string();
+    }
     for alt in alt_binaries(primary) {
-        if native_which(alt) { return alt.to_string(); }
+        if native_which(alt) {
+            return alt.to_string();
+        }
     }
     primary.to_string()
 }
@@ -56,19 +64,19 @@ fn native_which(binary: &str) -> bool {
 fn alt_binaries(binary: &str) -> &'static [&'static str] {
     match binary {
         // Python: distros often ship `python3` not `python`
-        "pip"       => &["pip3", "pip3.12", "pip3.11", "pip3.10"],
-        "python"    => &["python3"],
+        "pip" => &["pip3", "pip3.12", "pip3.11", "pip3.10"],
+        "python" => &["python3"],
         // Node: some Linux distros package as `nodejs`
-        "node"      => &["nodejs"],
+        "node" => &["nodejs"],
         // Go: sometimes installed as `golang`
-        "go"        => &["golang"],
+        "go" => &["golang"],
         // Ruby gem
-        "gem"       => &["gem3", "gem2"],
+        "gem" => &["gem3", "gem2"],
         // dart sometimes accessed via flutter
-        "dart"      => &["flutter"],
+        "dart" => &["flutter"],
         // dotnet sometimes `dotnet-host`
-        "dotnet"    => &["dotnet-host"],
-        _           => &[],
+        "dotnet" => &["dotnet-host"],
+        _ => &[],
     }
 }
 
@@ -76,7 +84,7 @@ fn alt_binaries(binary: &str) -> &'static [&'static str] {
 
 pub struct EcosystemInfo {
     pub install_url: &'static str,
-    pub note:        &'static str,
+    pub note: &'static str,
     /// Install command appropriate for the detected OS (determined at runtime).
     pub install_cmd: String,
 }
@@ -206,21 +214,36 @@ pub fn install_instructions(pm: &str) -> Option<EcosystemInfo> {
 
 // ── OS abstraction ────────────────────────────────────────────────────────────
 
-enum Os { Windows, MacOs, Linux, Unknown }
+enum Os {
+    Windows,
+    MacOs,
+    Linux,
+    Unknown,
+}
 
 impl Os {
     fn detect() -> Self {
-        #[cfg(target_os = "windows")] { return Os::Windows; }
-        #[cfg(target_os = "macos")]   { return Os::MacOs; }
-        #[cfg(target_os = "linux")]   { return Os::Linux; }
-        #[allow(unreachable_code)] Os::Unknown
+        #[cfg(target_os = "windows")]
+        {
+            return Os::Windows;
+        }
+        #[cfg(target_os = "macos")]
+        {
+            return Os::MacOs;
+        }
+        #[cfg(target_os = "linux")]
+        {
+            return Os::Linux;
+        }
+        #[allow(unreachable_code)]
+        Os::Unknown
     }
 
     /// Pick the right string for the current OS. `unknown` falls back to linux.
     fn cmd(&self, win: &str, mac: &str, linux: &str) -> String {
         match self {
             Os::Windows => win.to_string(),
-            Os::MacOs   => mac.to_string(),
+            Os::MacOs => mac.to_string(),
             Os::Linux | Os::Unknown => linux.to_string(),
         }
     }

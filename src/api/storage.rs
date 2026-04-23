@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::api::types::{Assertion, Edge, Flow, FlowRunResult, Node, Extraction, OnFail, PromptInput};
+use crate::api::types::{
+    Assertion, Edge, Extraction, Flow, FlowRunResult, Node, OnFail, PromptInput,
+};
 
 // ── Directory helpers ─────────────────────────────────────────────────────────
 
@@ -90,7 +92,9 @@ struct YamlAssertion {
     enabled: bool,
 }
 
-fn bool_true() -> bool { true }
+fn bool_true() -> bool {
+    true
+}
 
 #[derive(Debug, Deserialize)]
 struct YamlCheck {
@@ -129,6 +133,17 @@ struct YamlStep {
     id: Option<String>,
     #[serde(default)]
     depends_on: Vec<String>,
+    #[serde(default)]
+    carry: Vec<String>,
+    #[serde(default)]
+    condition: Option<String>,
+    #[serde(default)]
+    incoming: Vec<YamlIncomingStep>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct YamlIncomingStep {
+    step: String,
     #[serde(default)]
     carry: Vec<String>,
     #[serde(default)]
@@ -190,7 +205,11 @@ fn yaml_assertion_to_expr(check: &serde_yaml::Value) -> String {
                 "json_path" => {
                     let raw = path.as_deref().unwrap_or("$");
                     let field = raw.trim_start_matches("$.");
-                    let field = if field == "$" || field.is_empty() { "body".to_string() } else { format!("body.{}", field) };
+                    let field = if field == "$" || field.is_empty() {
+                        "body".to_string()
+                    } else {
+                        format!("body.{}", field)
+                    };
                     if op == "exists" || op == "not exists" {
                         format!("{} {}", field, op)
                     } else {
@@ -256,7 +275,11 @@ fn yaml_check_to_expr(check: &YamlCheck) -> String {
             let raw = check.path.as_deref().unwrap_or("$");
             // Convert $.field.sub → body.field.sub, $ alone → body
             let field = raw.trim_start_matches("$.");
-            let field = if field == "$" || field.is_empty() { "body".to_string() } else { format!("body.{}", field) };
+            let field = if field == "$" || field.is_empty() {
+                "body".to_string()
+            } else {
+                format!("body.{}", field)
+            };
             if op == "exists" || op == "not exists" {
                 format!("{} {}", field, op)
             } else {
@@ -288,7 +311,11 @@ fn convert_yaml_node(y: YamlNode) -> Node {
     // Determine method/path/headers/body — support both nested `request` and flat fields
     let (method, path, headers, body_json) = if let Some(req) = y.request {
         let body_json = req.body.as_ref().and_then(|b| {
-            if b.is_null() { None } else { serde_json::to_string(b).ok() }
+            if b.is_null() {
+                None
+            } else {
+                serde_json::to_string(b).ok()
+            }
         });
         (req.method, req.path, req.headers, body_json)
     } else {
@@ -300,24 +327,38 @@ fn convert_yaml_node(y: YamlNode) -> Node {
         )
     };
 
-    let assertions = y.assertions.into_iter().map(|a| {
-        let check_expr = if !matches!(a.check, serde_yaml::Value::Null) {
-            yaml_assertion_to_expr(&a.check)
-        } else if let Some(s) = a.check_str {
-            s
-        } else {
-            String::new()
-        };
-        let on_fail = match a.on_fail.as_deref().unwrap_or("stop") {
-            "continue" | "warn" => OnFail::Warn,
-            _ => OnFail::Stop,
-        };
-        Assertion { check: check_expr, on_fail, enabled: a.enabled }
-    }).filter(|a| !a.check.is_empty()).collect();
+    let assertions = y
+        .assertions
+        .into_iter()
+        .map(|a| {
+            let check_expr = if !matches!(a.check, serde_yaml::Value::Null) {
+                yaml_assertion_to_expr(&a.check)
+            } else if let Some(s) = a.check_str {
+                s
+            } else {
+                String::new()
+            };
+            let on_fail = match a.on_fail.as_deref().unwrap_or("stop") {
+                "continue" | "warn" => OnFail::Warn,
+                _ => OnFail::Stop,
+            };
+            Assertion {
+                check: check_expr,
+                on_fail,
+                enabled: a.enabled,
+            }
+        })
+        .filter(|a| !a.check.is_empty())
+        .collect();
 
-    let extractions = y.extractions.into_iter().map(|e| {
-        Extraction { name: e.name, from: e.from }
-    }).collect();
+    let extractions = y
+        .extractions
+        .into_iter()
+        .map(|e| Extraction {
+            name: e.name,
+            from: e.from,
+        })
+        .collect();
 
     Node {
         id: y.id,
@@ -351,12 +392,16 @@ fn convert_yaml_flow(y: YamlFlow) -> Flow {
 
     // Convert step-list format → graph edges
     // Build step_id → node_id map
-    let step_map: HashMap<String, String> = y.steps.iter()
+    let step_map: HashMap<String, String> = y
+        .steps
+        .iter()
         .filter_map(|s| s.id.as_ref().map(|id| (id.clone(), s.node_id.clone())))
         .collect();
 
     // Entry: first step with no depends_on (or simply the first step)
-    let entry_node = y.steps.iter()
+    let entry_node = y
+        .steps
+        .iter()
         .find(|s| s.depends_on.is_empty())
         .or_else(|| y.steps.first())
         .map(|s| s.node_id.clone())
@@ -365,18 +410,36 @@ fn convert_yaml_flow(y: YamlFlow) -> Flow {
     // Build edges
     let mut edges: Vec<Edge> = Vec::new();
     for step in &y.steps {
-        for dep_step_id in &step.depends_on {
-            let from_node = step_map.get(dep_step_id)
+        let incoming: Vec<YamlIncomingStep> = if step.incoming.is_empty() {
+            step.depends_on
+                .iter()
                 .cloned()
-                .unwrap_or_else(|| dep_step_id.clone());
+                .map(|dep_step_id| YamlIncomingStep {
+                    step: dep_step_id,
+                    carry: step.carry.clone(),
+                    condition: step.condition.clone(),
+                })
+                .collect()
+        } else {
+            step.incoming.clone()
+        };
+
+        for dep in incoming {
+            let dep_step_id = dep.step;
+            let from_node = step_map.get(&dep_step_id).cloned().unwrap_or(dep_step_id);
             let to_node = step.node_id.clone();
-            let already = edges.iter().any(|e| e.from == from_node && e.to == to_node);
+            let already = edges.iter().any(|e| {
+                e.from == from_node
+                    && e.to == to_node
+                    && e.carry == dep.carry
+                    && e.condition == dep.condition
+            });
             if !already {
                 edges.push(Edge {
                     from: from_node,
                     to: to_node,
-                    carry: step.carry.clone(),
-                    condition: step.condition.clone(),
+                    carry: dep.carry,
+                    condition: dep.condition,
                 });
             }
         }
@@ -435,7 +498,9 @@ struct YamlSaveAssertion {
     enabled: bool,
 }
 
-fn is_true(b: &bool) -> bool { *b }
+fn is_true(b: &bool) -> bool {
+    *b
+}
 
 #[derive(Serialize)]
 struct YamlSaveFlow {
@@ -458,28 +523,56 @@ struct YamlSaveStep {
     carry: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     condition: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    incoming: Vec<YamlSaveIncomingStep>,
     on_fail: String,
+}
+
+#[derive(Serialize)]
+struct YamlSaveIncomingStep {
+    step: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    carry: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    condition: Option<String>,
 }
 
 // ── YAML save helpers ─────────────────────────────────────────────────────────
 
-/// Returns true if the nodes directory contains any .yaml files.
+/// Returns true if the project uses YAML for nodes or flows.
 fn detect_project_yaml() -> bool {
-    let dir = PathBuf::from(".infynon/api/nodes");
-    if let Ok(entries) = fs::read_dir(&dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-            if ext == "yaml" || ext == "yml" {
-                return true;
+    for dir in [nodes_dir(), flows_dir()] {
+        if let Ok(entries) = fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+                if ext == "yaml" || ext == "yml" {
+                    return true;
+                }
             }
         }
     }
     false
 }
 
+fn existing_definition_path(dir: &Path, id: &str) -> Option<PathBuf> {
+    ["yaml", "yml", "toml"]
+        .into_iter()
+        .map(|ext| dir.join(format!("{}.{}", id, ext)))
+        .find(|path| path.exists())
+}
+
+fn yaml_definition_path(dir: &Path, id: &str) -> Option<PathBuf> {
+    ["yaml", "yml"]
+        .into_iter()
+        .map(|ext| dir.join(format!("{}.{}", id, ext)))
+        .find(|path| path.exists())
+}
+
 fn node_to_yaml_save(node: &Node) -> YamlSaveNode {
-    let body = node.body_json.as_deref()
+    let body = node
+        .body_json
+        .as_deref()
         .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok());
 
     YamlSaveNode {
@@ -492,18 +585,26 @@ fn node_to_yaml_save(node: &Node) -> YamlSaveNode {
             headers: node.headers.clone(),
             body,
         },
-        extractions: node.extractions.iter().map(|e| YamlSaveExtraction {
-            name: e.name.clone(),
-            from: e.from.clone(),
-        }).collect(),
-        assertions: node.assertions.iter().map(|a| YamlSaveAssertion {
-            check: a.check.clone(),
-            on_fail: match a.on_fail {
-                OnFail::Stop => "stop".to_string(),
-                OnFail::Warn => "warn".to_string(),
-            },
-            enabled: a.enabled,
-        }).collect(),
+        extractions: node
+            .extractions
+            .iter()
+            .map(|e| YamlSaveExtraction {
+                name: e.name.clone(),
+                from: e.from.clone(),
+            })
+            .collect(),
+        assertions: node
+            .assertions
+            .iter()
+            .map(|a| YamlSaveAssertion {
+                check: a.check.clone(),
+                on_fail: match a.on_fail {
+                    OnFail::Stop => "stop".to_string(),
+                    OnFail::Warn => "warn".to_string(),
+                },
+                enabled: a.enabled,
+            })
+            .collect(),
         tags: node.tags.clone(),
         prompt_inputs: node.prompt_inputs.clone(),
     }
@@ -512,23 +613,52 @@ fn node_to_yaml_save(node: &Node) -> YamlSaveNode {
 fn flow_to_yaml_save(flow: &Flow) -> YamlSaveFlow {
     let node_ids = flow.all_node_ids();
 
-    let steps = node_ids.iter().map(|node_id| {
-        let preds: Vec<&Edge> = flow.predecessors(node_id);
-        let depends_on: Vec<String> = preds.iter()
-            .map(|e| format!("step-{}", e.from))
-            .collect();
-        let carry = preds.first().map(|e| e.carry.clone()).unwrap_or_default();
-        let condition = preds.first().and_then(|e| e.condition.clone());
+    let steps = node_ids
+        .iter()
+        .map(|node_id| {
+            let preds: Vec<&Edge> = flow.predecessors(node_id);
+            let incoming: Vec<YamlSaveIncomingStep> = preds
+                .iter()
+                .map(|e| YamlSaveIncomingStep {
+                    step: format!("step-{}", e.from),
+                    carry: e.carry.clone(),
+                    condition: e.condition.clone(),
+                })
+                .collect();
+            let depends_on = incoming.iter().map(|dep| dep.step.clone()).collect();
+            let uniform_metadata = incoming
+                .first()
+                .map(|first| {
+                    incoming
+                        .iter()
+                        .all(|dep| dep.carry == first.carry && dep.condition == first.condition)
+                })
+                .unwrap_or(true);
+            let carry = if uniform_metadata {
+                incoming
+                    .first()
+                    .map(|dep| dep.carry.clone())
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
+            let condition = if uniform_metadata {
+                incoming.first().and_then(|dep| dep.condition.clone())
+            } else {
+                None
+            };
 
-        YamlSaveStep {
-            node_id: node_id.clone(),
-            id: format!("step-{}", node_id),
-            depends_on,
-            carry,
-            condition,
-            on_fail: "stop".to_string(),
-        }
-    }).collect();
+            YamlSaveStep {
+                node_id: node_id.clone(),
+                id: format!("step-{}", node_id),
+                depends_on,
+                carry,
+                condition,
+                incoming,
+                on_fail: "stop".to_string(),
+            }
+        })
+        .collect();
 
     YamlSaveFlow {
         id: flow.id.clone(),
@@ -541,23 +671,23 @@ fn flow_to_yaml_save(flow: &Flow) -> YamlSaveFlow {
 
 pub fn save_node_yaml(node: &Node) -> Result<PathBuf, String> {
     let dir = nodes_dir();
-    let path = dir.join(format!("{}.yaml", node.id));
+    let path = yaml_definition_path(&dir, &node.id)
+        .unwrap_or_else(|| dir.join(format!("{}.yaml", node.id)));
     let save = node_to_yaml_save(node);
     let content = serde_yaml::to_string(&save)
         .map_err(|e| format!("Failed to serialize node as YAML: {}", e))?;
-    fs::write(&path, content)
-        .map_err(|e| format!("Failed to write node YAML file: {}", e))?;
+    fs::write(&path, content).map_err(|e| format!("Failed to write node YAML file: {}", e))?;
     Ok(path)
 }
 
 pub fn save_flow_yaml(flow: &Flow) -> Result<PathBuf, String> {
     let dir = flows_dir();
-    let path = dir.join(format!("{}.yaml", flow.id));
+    let path = yaml_definition_path(&dir, &flow.id)
+        .unwrap_or_else(|| dir.join(format!("{}.yaml", flow.id)));
     let save = flow_to_yaml_save(flow);
     let content = serde_yaml::to_string(&save)
         .map_err(|e| format!("Failed to serialize flow as YAML: {}", e))?;
-    fs::write(&path, content)
-        .map_err(|e| format!("Failed to write flow YAML file: {}", e))?;
+    fs::write(&path, content).map_err(|e| format!("Failed to write flow YAML file: {}", e))?;
     Ok(path)
 }
 
@@ -570,21 +700,17 @@ pub fn save_node(node: &Node) -> Result<PathBuf, String> {
     }
     let dir = nodes_dir();
     let path = dir.join(format!("{}.toml", node.id));
-    let content = toml::to_string_pretty(node)
-        .map_err(|e| format!("Failed to serialize node: {}", e))?;
-    fs::write(&path, content)
-        .map_err(|e| format!("Failed to write node file: {}", e))?;
+    let content =
+        toml::to_string_pretty(node).map_err(|e| format!("Failed to serialize node: {}", e))?;
+    fs::write(&path, content).map_err(|e| format!("Failed to write node file: {}", e))?;
     Ok(path)
 }
 
 pub fn load_node(id: &str) -> Result<Node, String> {
-    // Try YAML first, then TOML
-    let yaml_path = nodes_dir().join(format!("{}.yaml", id));
-    if yaml_path.exists() {
-        return load_node_from_path(&yaml_path);
+    if let Some(path) = existing_definition_path(&nodes_dir(), id) {
+        return load_node_from_path(&path);
     }
-    let toml_path = nodes_dir().join(format!("{}.toml", id));
-    load_node_from_path(&toml_path)
+    load_node_from_path(&nodes_dir().join(format!("{}.toml", id)))
 }
 
 pub fn load_node_from_path(path: &Path) -> Result<Node, String> {
@@ -621,19 +747,14 @@ pub fn list_nodes() -> Vec<Node> {
 }
 
 pub fn delete_node(id: &str) -> Result<(), String> {
-    let path = nodes_dir().join(format!("{}.toml", id));
-    if path.exists() {
-        return fs::remove_file(&path)
-            .map_err(|e| format!("Cannot delete node '{}': {}", id, e));
+    if let Some(path) = existing_definition_path(&nodes_dir(), id) {
+        return fs::remove_file(&path).map_err(|e| format!("Cannot delete node '{}': {}", id, e));
     }
-    let yaml_path = nodes_dir().join(format!("{}.yaml", id));
-    fs::remove_file(&yaml_path)
-        .map_err(|e| format!("Cannot delete node '{}': {}", id, e))
+    Err(format!("Cannot delete node '{}': not found", id))
 }
 
 pub fn node_exists(id: &str) -> bool {
-    nodes_dir().join(format!("{}.toml", id)).exists()
-        || nodes_dir().join(format!("{}.yaml", id)).exists()
+    existing_definition_path(&nodes_dir(), id).is_some()
 }
 
 /// Load all nodes as a map for fast lookup during flow execution.
@@ -653,21 +774,17 @@ pub fn save_flow(flow: &Flow) -> Result<PathBuf, String> {
     }
     let dir = flows_dir();
     let path = dir.join(format!("{}.toml", flow.id));
-    let content = toml::to_string_pretty(flow)
-        .map_err(|e| format!("Failed to serialize flow: {}", e))?;
-    fs::write(&path, content)
-        .map_err(|e| format!("Failed to write flow file: {}", e))?;
+    let content =
+        toml::to_string_pretty(flow).map_err(|e| format!("Failed to serialize flow: {}", e))?;
+    fs::write(&path, content).map_err(|e| format!("Failed to write flow file: {}", e))?;
     Ok(path)
 }
 
 pub fn load_flow(id: &str) -> Result<Flow, String> {
-    // Try YAML first, then TOML
-    let yaml_path = flows_dir().join(format!("{}.yaml", id));
-    if yaml_path.exists() {
-        return load_flow_from_path(&yaml_path);
+    if let Some(path) = existing_definition_path(&flows_dir(), id) {
+        return load_flow_from_path(&path);
     }
-    let toml_path = flows_dir().join(format!("{}.toml", id));
-    load_flow_from_path(&toml_path)
+    load_flow_from_path(&flows_dir().join(format!("{}.toml", id)))
 }
 
 pub fn load_flow_from_path(path: &Path) -> Result<Flow, String> {
@@ -704,19 +821,14 @@ pub fn list_flows() -> Vec<Flow> {
 }
 
 pub fn delete_flow(id: &str) -> Result<(), String> {
-    let path = flows_dir().join(format!("{}.toml", id));
-    if path.exists() {
-        return fs::remove_file(&path)
-            .map_err(|e| format!("Cannot delete flow '{}': {}", id, e));
+    if let Some(path) = existing_definition_path(&flows_dir(), id) {
+        return fs::remove_file(&path).map_err(|e| format!("Cannot delete flow '{}': {}", id, e));
     }
-    let yaml_path = flows_dir().join(format!("{}.yaml", id));
-    fs::remove_file(&yaml_path)
-        .map_err(|e| format!("Cannot delete flow '{}': {}", id, e))
+    Err(format!("Cannot delete flow '{}': not found", id))
 }
 
 pub fn flow_exists(id: &str) -> bool {
-    flows_dir().join(format!("{}.toml", id)).exists()
-        || flows_dir().join(format!("{}.yaml", id)).exists()
+    existing_definition_path(&flows_dir(), id).is_some()
 }
 
 // ── Run history I/O ───────────────────────────────────────────────────────────
@@ -727,8 +839,7 @@ pub fn save_run_result(result: &FlowRunResult) -> Result<PathBuf, String> {
     let path = dir.join(&filename);
     let content = serde_json::to_string_pretty(result)
         .map_err(|e| format!("Failed to serialize run result: {}", e))?;
-    fs::write(&path, content)
-        .map_err(|e| format!("Failed to write run result: {}", e))?;
+    fs::write(&path, content).map_err(|e| format!("Failed to write run result: {}", e))?;
     Ok(path)
 }
 
@@ -802,4 +913,65 @@ pub fn load_all_recent_runs(limit: usize) -> Vec<FlowRunResult> {
         }
     }
     results
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{convert_yaml_flow, flow_to_yaml_save, YamlFlow};
+    use crate::api::types::{Edge, Flow};
+
+    #[test]
+    fn yaml_round_trip_preserves_per_incoming_edge_metadata() {
+        let flow = Flow {
+            id: "checkout".to_string(),
+            name: "Checkout".to_string(),
+            entry: "login".to_string(),
+            edges: vec![
+                Edge {
+                    from: "login".to_string(),
+                    to: "coupon".to_string(),
+                    carry: vec!["token".to_string()],
+                    condition: Some("status == 200".to_string()),
+                },
+                Edge {
+                    from: "coupon".to_string(),
+                    to: "cart".to_string(),
+                    carry: vec!["coupon_code".to_string()],
+                    condition: Some("body.valid == true".to_string()),
+                },
+                Edge {
+                    from: "login".to_string(),
+                    to: "cart".to_string(),
+                    carry: vec!["token".to_string()],
+                    condition: Some("status == 200".to_string()),
+                },
+            ],
+            description: None,
+            base_url: None,
+        };
+
+        let yaml = serde_yaml::to_string(&flow_to_yaml_save(&flow)).unwrap();
+        let parsed: YamlFlow = serde_yaml::from_str(&yaml).unwrap();
+        let round_tripped = convert_yaml_flow(parsed);
+
+        assert_eq!(round_tripped.edges.len(), 3);
+        assert!(round_tripped.edges.iter().any(|edge| {
+            edge.from == "login"
+                && edge.to == "coupon"
+                && edge.carry == vec!["token".to_string()]
+                && edge.condition.as_deref() == Some("status == 200")
+        }));
+        assert!(round_tripped.edges.iter().any(|edge| {
+            edge.from == "login"
+                && edge.to == "cart"
+                && edge.carry == vec!["token".to_string()]
+                && edge.condition.as_deref() == Some("status == 200")
+        }));
+        assert!(round_tripped.edges.iter().any(|edge| {
+            edge.from == "coupon"
+                && edge.to == "cart"
+                && edge.carry == vec!["coupon_code".to_string()]
+                && edge.condition.as_deref() == Some("body.valid == true")
+        }));
+    }
 }

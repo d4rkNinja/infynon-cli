@@ -47,8 +47,12 @@ impl super::app_state::ApiApp {
                     self.attach_input.clear();
                 }
                 KeyCode::Enter => self.confirm_attach(),
-                KeyCode::Backspace => { self.attach_input.pop(); }
-                KeyCode::Char(c) => { self.attach_input.push(c); }
+                KeyCode::Backspace => {
+                    self.attach_input.pop();
+                }
+                KeyCode::Char(c) => {
+                    self.attach_input.push(c);
+                }
                 _ => {}
             }
             return;
@@ -57,9 +61,15 @@ impl super::app_state::ApiApp {
         // Search mode
         if self.search_active {
             match key.code {
-                KeyCode::Esc | KeyCode::Enter => { self.search_active = false; }
-                KeyCode::Backspace => { self.search_input.pop(); }
-                KeyCode::Char(c) => { self.search_input.push(c); }
+                KeyCode::Esc | KeyCode::Enter => {
+                    self.search_active = false;
+                }
+                KeyCode::Backspace => {
+                    self.search_input.pop();
+                }
+                KeyCode::Char(c) => {
+                    self.search_input.push(c);
+                }
                 _ => {}
             }
             return;
@@ -73,19 +83,58 @@ impl super::app_state::ApiApp {
 
         // Global keys
         match key.code {
-            KeyCode::Char('q') => { self.should_quit = true; return; }
-            KeyCode::Char('1') => { self.current_view = ApiView::Dashboard; self.reset_scroll(); return; }
-            KeyCode::Char('2') => { self.current_view = ApiView::Nodes; self.reset_scroll(); return; }
-            KeyCode::Char('3') => { self.current_view = ApiView::Flows; self.reset_scroll(); return; }
-            KeyCode::Char('4') => { self.current_view = ApiView::Runner; self.reset_scroll(); return; }
-            KeyCode::Char('5') => { self.current_view = ApiView::Environment; self.reset_scroll(); return; }
-            KeyCode::Char('6') => { self.current_view = ApiView::Settings; self.reset_scroll(); return; }
-            KeyCode::Char('?') => { self.show_help = true; return; }
-            KeyCode::Char('/') => { self.search_active = true; self.search_input.clear(); return; }
-            KeyCode::Char('R') => { self.refresh_data(); return; }
+            KeyCode::Char('q') => {
+                self.should_quit = true;
+                return;
+            }
+            KeyCode::Char('1') => {
+                self.current_view = ApiView::Dashboard;
+                self.reset_scroll();
+                return;
+            }
+            KeyCode::Char('2') => {
+                self.current_view = ApiView::Nodes;
+                self.reset_scroll();
+                return;
+            }
+            KeyCode::Char('3') => {
+                self.current_view = ApiView::Flows;
+                self.reset_scroll();
+                return;
+            }
+            KeyCode::Char('4') => {
+                self.current_view = ApiView::Runner;
+                self.reset_scroll();
+                return;
+            }
+            KeyCode::Char('5') => {
+                self.current_view = ApiView::Environment;
+                self.reset_scroll();
+                return;
+            }
+            KeyCode::Char('6') => {
+                self.current_view = ApiView::Settings;
+                self.reset_scroll();
+                return;
+            }
+            KeyCode::Char('?') => {
+                self.show_help = true;
+                return;
+            }
+            KeyCode::Char('/') => {
+                self.search_active = true;
+                self.search_input.clear();
+                return;
+            }
+            KeyCode::Char('R') => {
+                self.refresh_data();
+                return;
+            }
             // Switch active flow with [ ]
             KeyCode::Char('[') => {
-                if self.active_flow_idx > 0 { self.switch_flow(self.active_flow_idx - 1); }
+                if self.active_flow_idx > 0 {
+                    self.switch_flow(self.active_flow_idx - 1);
+                }
                 return;
             }
             KeyCode::Char(']') => {
@@ -129,16 +178,28 @@ impl super::app_state::ApiApp {
                 // Get sorted node list and pick selected
                 let mut node_ids: Vec<String> = self.nodes.keys().cloned().collect();
                 node_ids.sort();
-                if let Some(node_id) = node_ids.get(self.selected_index.min(node_ids.len().saturating_sub(1))) {
+                if let Some(node_id) =
+                    node_ids.get(self.selected_index.min(node_ids.len().saturating_sub(1)))
+                {
                     let node_id = node_id.clone();
                     self.start_node_run(&node_id);
                 }
             }
-            KeyCode::Char('b') => { self.open_body_editor(); }
-            KeyCode::Char('n') => { self.open_node_field_editor(NodeField::Name); }
-            KeyCode::Char('p') => { self.open_node_field_editor(NodeField::Path); }
-            KeyCode::Char('d') => { self.open_node_field_editor(NodeField::Description); }
-            KeyCode::Char('m') => { self.cycle_node_method(); }
+            KeyCode::Char('b') => {
+                self.open_body_editor();
+            }
+            KeyCode::Char('n') => {
+                self.open_node_field_editor(NodeField::Name);
+            }
+            KeyCode::Char('p') => {
+                self.open_node_field_editor(NodeField::Path);
+            }
+            KeyCode::Char('d') => {
+                self.open_node_field_editor(NodeField::Description);
+            }
+            KeyCode::Char('m') => {
+                self.cycle_node_method();
+            }
             KeyCode::Char('f') => {
                 self.nodes_filter = self.nodes_filter.cycle();
                 self.selected_index = 0;
@@ -211,10 +272,20 @@ impl super::app_state::ApiApp {
         // Handle step detail modal if open
         if let Some(ref mut modal) = self.step_detail {
             match key.code {
-                KeyCode::Esc | KeyCode::Char('q') => { self.step_detail = None; }
-                KeyCode::Up   => { if modal.scroll > 0 { modal.scroll -= 1; } }
-                KeyCode::Down => { modal.scroll += 1; }
-                KeyCode::Home => { modal.scroll = 0; }
+                KeyCode::Esc | KeyCode::Char('q') => {
+                    self.step_detail = None;
+                }
+                KeyCode::Up => {
+                    if modal.scroll > 0 {
+                        modal.scroll -= 1;
+                    }
+                }
+                KeyCode::Down => {
+                    modal.scroll += 1;
+                }
+                KeyCode::Home => {
+                    modal.scroll = 0;
+                }
                 _ => {}
             }
             return;
@@ -223,7 +294,10 @@ impl super::app_state::ApiApp {
         // Tab to cycle sub-views
         if key.code == KeyCode::Tab {
             let all = RunnerSubview::all();
-            let idx = all.iter().position(|v| *v == self.runner_subview).unwrap_or(0);
+            let idx = all
+                .iter()
+                .position(|v| *v == self.runner_subview)
+                .unwrap_or(0);
             self.runner_subview = all[(idx + 1) % all.len()].clone();
             return;
         }
@@ -231,12 +305,10 @@ impl super::app_state::ApiApp {
         // Sub-view specific keys
         match self.runner_subview {
             RunnerSubview::Steps => self.handle_live_key(key),
-            RunnerSubview::Diff => {
-                match key.code {
-                    KeyCode::Char('d') => self.load_comparison_run(),
-                    _ => self.handle_scroll_key(key),
-                }
-            }
+            RunnerSubview::Diff => match key.code {
+                KeyCode::Char('d') => self.load_comparison_run(),
+                _ => self.handle_scroll_key(key),
+            },
             _ => self.handle_scroll_key(key),
         }
     }
@@ -245,11 +317,19 @@ impl super::app_state::ApiApp {
         match key.code {
             KeyCode::Char('m') => {
                 self.config_output_markdown = !self.config_output_markdown;
-                self.notify(if self.config_output_markdown { "Markdown output: ON" } else { "Markdown output: OFF" });
+                self.notify(if self.config_output_markdown {
+                    "Markdown output: ON"
+                } else {
+                    "Markdown output: OFF"
+                });
             }
             KeyCode::Char('p') => {
                 self.config_output_pdf = !self.config_output_pdf;
-                self.notify(if self.config_output_pdf { "PDF output: ON" } else { "PDF output: OFF" });
+                self.notify(if self.config_output_pdf {
+                    "PDF output: ON"
+                } else {
+                    "PDF output: OFF"
+                });
             }
             KeyCode::Char('R') => self.refresh_data(),
             _ => {}
@@ -269,22 +349,38 @@ impl super::app_state::ApiApp {
                         return;
                     }
                     KeyCode::Tab => {
-                        if edit.is_new() { edit.editing_key = !edit.editing_key; }
+                        if edit.is_new() {
+                            edit.editing_key = !edit.editing_key;
+                        }
                         return;
                     }
                     KeyCode::Enter => {
                         if edit.is_new() && edit.editing_key {
-                            if !edit.key_input.trim().is_empty() { edit.editing_key = false; }
+                            if !edit.key_input.trim().is_empty() {
+                                edit.editing_key = false;
+                            }
                             return;
                         }
-                        Some((edit.key_input.trim().to_string(), edit.value_input.clone(), edit.original_key.clone()))
+                        Some((
+                            edit.key_input.trim().to_string(),
+                            edit.value_input.clone(),
+                            edit.original_key.clone(),
+                        ))
                     }
                     KeyCode::Backspace => {
-                        if edit.editing_key { edit.key_input.pop(); } else { edit.value_input.pop(); }
+                        if edit.editing_key {
+                            edit.key_input.pop();
+                        } else {
+                            edit.value_input.pop();
+                        }
                         return;
                     }
                     KeyCode::Char(c) => {
-                        if edit.editing_key { edit.key_input.push(c); } else { edit.value_input.push(c); }
+                        if edit.editing_key {
+                            edit.key_input.push(c);
+                        } else {
+                            edit.value_input.push(c);
+                        }
                         return;
                     }
                     _ => return,
@@ -310,10 +406,14 @@ impl super::app_state::ApiApp {
         let entries = env_cmd::env_list();
         match key.code {
             KeyCode::Up | KeyCode::Char('k') => {
-                if self.env_selected > 0 { self.env_selected -= 1; }
+                if self.env_selected > 0 {
+                    self.env_selected -= 1;
+                }
             }
             KeyCode::Down | KeyCode::Char('j') => {
-                if self.env_selected + 1 < entries.len() { self.env_selected += 1; }
+                if self.env_selected + 1 < entries.len() {
+                    self.env_selected += 1;
+                }
             }
             KeyCode::Char('n') => {
                 self.env_edit = Some(EnvEditState::new_entry());
@@ -341,7 +441,11 @@ impl super::app_state::ApiApp {
             }
             KeyCode::Char('v') => {
                 self.env_reveal = !self.env_reveal;
-                self.notify(if self.env_reveal { "Values revealed" } else { "Sensitive values hidden" });
+                self.notify(if self.env_reveal {
+                    "Values revealed"
+                } else {
+                    "Sensitive values hidden"
+                });
             }
             _ => {}
         }
@@ -350,10 +454,14 @@ impl super::app_state::ApiApp {
     fn handle_list_key(&mut self, key: KeyEvent, max: usize) {
         match key.code {
             KeyCode::Up => {
-                if self.selected_index > 0 { self.selected_index -= 1; }
+                if self.selected_index > 0 {
+                    self.selected_index -= 1;
+                }
             }
             KeyCode::Down => {
-                if self.selected_index + 1 < max { self.selected_index += 1; }
+                if self.selected_index + 1 < max {
+                    self.selected_index += 1;
+                }
             }
             _ => {}
         }
@@ -361,9 +469,17 @@ impl super::app_state::ApiApp {
 
     fn handle_scroll_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Up   => { if self.scroll_offset > 0 { self.scroll_offset -= 1; } }
-            KeyCode::Down => { self.scroll_offset += 1; }
-            KeyCode::Home => { self.scroll_offset = 0; }
+            KeyCode::Up => {
+                if self.scroll_offset > 0 {
+                    self.scroll_offset -= 1;
+                }
+            }
+            KeyCode::Down => {
+                self.scroll_offset += 1;
+            }
+            KeyCode::Home => {
+                self.scroll_offset = 0;
+            }
             _ => {}
         }
     }
