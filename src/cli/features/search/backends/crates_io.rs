@@ -49,9 +49,18 @@ struct CrateVersion {
 }
 
 pub(super) fn search(client: &Client, query: &str) -> Vec<SearchHit> {
-    let url = build_query_url("https://crates.io/api/v1/crates", &[("q", query), ("per_page", "8")]);
+    let url = build_query_url(
+        "https://crates.io/api/v1/crates",
+        &[("q", query), ("per_page", "8")],
+    );
     fetch_json::<SearchResponse>(client, &url)
-        .map(|response| response.crates.into_iter().map(|item| to_hit(client, query, item)).collect())
+        .map(|response| {
+            response
+                .crates
+                .into_iter()
+                .map(|item| to_hit(client, query, item))
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -71,10 +80,14 @@ fn to_hit(client: &Client, query: &str, item: SearchCrate) -> SearchHit {
         if detail.krate.recent_downloads.unwrap_or(0) >= 10_000 {
             push_qualifier(&mut qualifiers, "maintained");
         }
-        if has_non_empty(detail.krate.repository.as_deref()) || has_non_empty(detail.krate.homepage.as_deref()) {
+        if has_non_empty(detail.krate.repository.as_deref())
+            || has_non_empty(detail.krate.homepage.as_deref())
+        {
             push_qualifier(&mut qualifiers, "repo");
         }
-        if has_non_empty(detail.krate.documentation.as_deref()) || has_non_empty(detail.krate.homepage.as_deref()) {
+        if has_non_empty(detail.krate.documentation.as_deref())
+            || has_non_empty(detail.krate.homepage.as_deref())
+        {
             push_qualifier(&mut qualifiers, "docs");
         }
         add_release_age_qualifiers(&mut qualifiers, detail.krate.updated_at.as_deref());
@@ -82,7 +95,10 @@ fn to_hit(client: &Client, query: &str, item: SearchCrate) -> SearchHit {
         if let Some(best_version) = detail
             .versions
             .iter()
-            .find(|meta| meta.num == version || (!meta.yanked.unwrap_or(false) && !meta.num.contains("alpha")))
+            .find(|meta| {
+                meta.num == version
+                    || (!meta.yanked.unwrap_or(false) && !meta.num.contains("alpha"))
+            })
             .or_else(|| detail.versions.first())
         {
             if license_present(best_version.license.as_deref()) {

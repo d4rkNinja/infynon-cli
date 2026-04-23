@@ -2,7 +2,9 @@ use reqwest::blocking::Client;
 use serde::Deserialize;
 
 use super::super::http::{build_query_url, fetch_json};
-use super::super::signals::{add_release_age_qualifiers, add_version_qualifiers, has_non_empty, push_qualifier};
+use super::super::signals::{
+    add_release_age_qualifiers, add_version_qualifiers, has_non_empty, push_qualifier,
+};
 use super::super::signals_extra::{build_signal, version_base_score};
 use super::super::types::SearchHit;
 
@@ -38,7 +40,14 @@ struct Pubspec {
 pub(super) fn search(client: &Client, query: &str) -> Vec<SearchHit> {
     let url = build_query_url("https://pub.dev/api/search", &[("q", query)]);
     fetch_json::<SearchResponse>(client, &url)
-        .map(|response| response.packages.into_iter().take(8).map(|item| to_hit(client, query, item)).collect())
+        .map(|response| {
+            response
+                .packages
+                .into_iter()
+                .take(8)
+                .map(|item| to_hit(client, query, item))
+                .collect()
+        })
         .unwrap_or_default()
 }
 

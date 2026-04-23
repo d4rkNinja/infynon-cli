@@ -93,7 +93,12 @@ pub(super) fn risk_levels_for_choice(choice: &str) -> Vec<String> {
     match choice.trim() {
         "1" => vec!["CRITICAL".into()],
         "3" => vec!["CRITICAL".into(), "HIGH".into(), "MEDIUM".into()],
-        "4" => vec!["CRITICAL".into(), "HIGH".into(), "MEDIUM".into(), "LOW".into()],
+        "4" => vec![
+            "CRITICAL".into(),
+            "HIGH".into(),
+            "MEDIUM".into(),
+            "LOW".into(),
+        ],
         "5" => vec![
             "CRITICAL".into(),
             "HIGH".into(),

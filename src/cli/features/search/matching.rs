@@ -33,7 +33,10 @@ pub(super) fn levenshtein(a: &str, b: &str) -> usize {
     prev[b.len()]
 }
 
-pub(super) fn best_follow_up_hint<'a>(query: &str, results: &'a [SearchHit]) -> Option<&'a SearchHit> {
+pub(super) fn best_follow_up_hint<'a>(
+    query: &str,
+    results: &'a [SearchHit],
+) -> Option<&'a SearchHit> {
     if query.chars().count() < 4 {
         return None;
     }

@@ -3,6 +3,7 @@ mod clean;
 mod diff;
 mod doctor;
 pub mod eagle_eye;
+mod explain;
 mod fix;
 mod migrate;
 mod outdated;
@@ -15,6 +16,7 @@ pub use audit::cmd_audit_deep;
 pub use clean::cmd_clean;
 pub use diff::cmd_diff;
 pub use doctor::cmd_doctor;
+pub use explain::cmd_explain;
 pub use fix::cmd_fix_auto;
 pub use migrate::cmd_migrate;
 pub use outdated::cmd_outdated;
@@ -23,8 +25,8 @@ pub use size::cmd_size;
 pub use why_cmd::cmd_why;
 
 pub(crate) use shared::{
-    bar, cargo_lock_deps, cargo_root_name, cargo_toml_dep_names, detect_ecosystem,
-    format_bytes, format_severity_bar, http_client, load_packages, npm_declared_deps, spinner,
+    bar, cargo_lock_deps, cargo_root_name, cargo_toml_dep_names, detect_ecosystem, format_bytes,
+    format_severity_bar, http_client, load_packages, npm_declared_deps, spinner,
 };
 
 use crate::engine::{registry, scanner};

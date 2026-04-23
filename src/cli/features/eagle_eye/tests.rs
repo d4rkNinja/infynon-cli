@@ -63,7 +63,10 @@ fn env_password_is_preferred_over_legacy_password() {
         legacy_password: "legacy-secret".into(),
         ..Default::default()
     };
-    assert_eq!(resolve_smtp_password(&config).as_deref(), Some("env-secret"));
+    assert_eq!(
+        resolve_smtp_password(&config).as_deref(),
+        Some("env-secret")
+    );
     assert_eq!(password_status(&config), format!("env:{}", key));
     std::env::remove_var(key);
 }
@@ -74,6 +77,9 @@ fn legacy_password_still_resolves_when_no_env_is_set() {
         legacy_password: "legacy-secret".into(),
         ..Default::default()
     };
-    assert_eq!(resolve_smtp_password(&config).as_deref(), Some("legacy-secret"));
+    assert_eq!(
+        resolve_smtp_password(&config).as_deref(),
+        Some("legacy-secret")
+    );
     assert_eq!(password_status(&config), "legacy config");
 }

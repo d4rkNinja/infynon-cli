@@ -91,38 +91,26 @@ fn collect_unresolved_placeholders(node: &Node, context: &HashMap<String, Value>
 }
 
 /// Build a non-interactive on_prompt callback for AI/CI/probe mode.
-/// Uses each PromptInput's `default` value; returns empty string if no default.
-/// Never blocks on stdin.
+/// Uses only explicit `default` values and never blocks on stdin.
 pub fn make_noninteractive_prompt() -> impl Fn(&str, &[PromptInput]) -> HashMap<String, Value> {
     use crate::api::types::PromptType;
     |_node_id: &str, inputs: &[PromptInput]| -> HashMap<String, Value> {
         inputs
             .iter()
-            .map(|pi| {
+            .filter_map(|pi| {
                 let val = match pi.prompt_type {
-                    PromptType::Boolean => pi
-                        .default
-                        .as_deref()
-                        .map(|d| {
-                            if d == "true" || d == "yes" || d == "1" {
-                                "true"
-                            } else {
-                                "false"
-                            }
-                        })
-                        .unwrap_or("false")
-                        .to_string(),
-                    PromptType::Select => pi
-                        .default
-                        .as_deref()
-                        .map(|d| d.to_string())
-                        .or_else(|| pi.options.first().cloned())
-                        .unwrap_or_default(),
-                    PromptType::Multiselect | PromptType::Text => {
-                        pi.default.clone().unwrap_or_default()
+                    PromptType::Boolean => pi.default.as_deref().map(|d| {
+                        if d == "true" || d == "yes" || d == "1" {
+                            "true".to_string()
+                        } else {
+                            "false".to_string()
+                        }
+                    }),
+                    PromptType::Select | PromptType::Multiselect | PromptType::Text => {
+                        pi.default.clone()
                     }
-                };
-                (pi.var.clone(), Value::String(val))
+                }?;
+                Some((pi.var.clone(), Value::String(val)))
             })
             .collect()
     }
@@ -302,4 +290,3 @@ fn print_step_result(step: &crate::api::types::StepResult) {
 }
 
 // ── node export ───────────────────────────────────────────────────────────────
-

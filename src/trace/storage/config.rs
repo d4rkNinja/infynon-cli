@@ -1,11 +1,12 @@
 pub fn init_config(repo_name: &str, owner: &str, default_user: Option<&str>) -> Result<(), String> {
     ensure_layout()?;
+    let sqlite_source = default_sqlite_source(default_user);
     let cfg = TraceConfig {
         repo_name: repo_name.to_string(),
         owner: owner.to_string(),
         default_user: default_user.and_then(normalize_user),
-        default_source: None,
-        sources: Vec::new(),
+        default_source: Some(sqlite_source.id.clone()),
+        sources: vec![sqlite_source],
     };
     save_config(&cfg)
 }
@@ -101,3 +102,17 @@ pub fn detect_user_name() -> Option<String> {
     None
 }
 
+fn default_sqlite_source(default_user: Option<&str>) -> TraceSource {
+    TraceSource {
+        id: "local-sqlite".to_string(),
+        kind: SourceKind::Sqlite,
+        url: "sqlite://.infynon/trace/trace.db".to_string(),
+        enabled: true,
+        owner_user: default_user.and_then(normalize_user),
+        database: None,
+        namespace: None,
+        username: None,
+        password_env: None,
+        notes: Some("Auto-created local Trace source".to_string()),
+    }
+}

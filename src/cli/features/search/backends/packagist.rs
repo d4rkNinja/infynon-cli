@@ -60,9 +60,19 @@ struct PackageSource {
 }
 
 pub(super) fn search(client: &Client, query: &str) -> Vec<SearchHit> {
-    let url = build_query_url("https://packagist.org/search.json", &[("q", query), ("per_page", "8")]);
+    let url = build_query_url(
+        "https://packagist.org/search.json",
+        &[("q", query), ("per_page", "8")],
+    );
     fetch_json::<SearchResponse>(client, &url)
-        .map(|response| response.results.into_iter().take(8).map(|item| to_hit(client, query, item)).collect())
+        .map(|response| {
+            response
+                .results
+                .into_iter()
+                .take(8)
+                .map(|item| to_hit(client, query, item))
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -82,17 +92,34 @@ fn to_hit(client: &Client, query: &str, item: SearchPackage) -> SearchHit {
     }
 
     if let Some(detail) = fetch_json::<DetailResponse>(client, &detail_url) {
-        if detail.package.maintainers.iter().any(|m| has_non_empty(m.name.as_deref())) {
+        if detail
+            .package
+            .maintainers
+            .iter()
+            .any(|m| has_non_empty(m.name.as_deref()))
+        {
             push_qualifier(&mut qualifiers, "owners");
         }
         if let Some(chosen) = detail
             .package
             .versions
             .values()
-            .filter(|meta| meta.version.as_deref().map(|value| !value.contains("dev")).unwrap_or(false))
+            .filter(|meta| {
+                meta.version
+                    .as_deref()
+                    .map(|value| !value.contains("dev"))
+                    .unwrap_or(false)
+            })
             .max_by_key(|meta| meta.time.clone().unwrap_or_default())
             .cloned()
-            .or_else(|| detail.package.versions.values().max_by_key(|meta| meta.time.clone().unwrap_or_default()).cloned())
+            .or_else(|| {
+                detail
+                    .package
+                    .versions
+                    .values()
+                    .max_by_key(|meta| meta.time.clone().unwrap_or_default())
+                    .cloned()
+            })
         {
             if let Some(chosen_version) = chosen.version.as_deref() {
                 version = chosen_version.to_string();
@@ -101,12 +128,21 @@ fn to_hit(client: &Client, query: &str, item: SearchPackage) -> SearchHit {
             if licenses_present(&chosen.license) {
                 push_qualifier(&mut qualifiers, "licensed");
             }
-            if chosen.support.as_ref().map(|support| support.values().any(|value| !value.trim().is_empty())).unwrap_or(false)
+            if chosen
+                .support
+                .as_ref()
+                .map(|support| support.values().any(|value| !value.trim().is_empty()))
+                .unwrap_or(false)
                 || has_non_empty(chosen.homepage.as_deref())
             {
                 push_qualifier(&mut qualifiers, "docs");
             }
-            if chosen.source.as_ref().and_then(|source| source.url.as_deref()).map(|value| !value.trim().is_empty()).unwrap_or(false)
+            if chosen
+                .source
+                .as_ref()
+                .and_then(|source| source.url.as_deref())
+                .map(|value| !value.trim().is_empty())
+                .unwrap_or(false)
             {
                 push_qualifier(&mut qualifiers, "repo");
             }

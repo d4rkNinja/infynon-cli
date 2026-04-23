@@ -14,8 +14,18 @@ pub fn parse_pkg_spec(spec: &str) -> (String, String) {
     for sep in &["==", "~=", "<=", ">=", "!="] {
         if let Some(pos) = spec.find(sep) {
             let raw_name = spec[..pos].trim();
-            let name = raw_name.split('[').next().unwrap_or(raw_name).trim().to_string();
-            let version = spec[pos + sep.len()..].split(',').next().unwrap_or("").trim().to_string();
+            let name = raw_name
+                .split('[')
+                .next()
+                .unwrap_or(raw_name)
+                .trim()
+                .to_string();
+            let version = spec[pos + sep.len()..]
+                .split(',')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_string();
             if !name.is_empty() && !version.is_empty() {
                 return (name, version);
             }
@@ -23,8 +33,18 @@ pub fn parse_pkg_spec(spec: &str) -> (String, String) {
     }
     for sep in &[">", "<"] {
         if let Some(pos) = spec.find(sep) {
-            let name = spec[..pos].split('[').next().unwrap_or(&spec[..pos]).trim().to_string();
-            let version = spec[pos + 1..].split(',').next().unwrap_or("").trim().to_string();
+            let name = spec[..pos]
+                .split('[')
+                .next()
+                .unwrap_or(&spec[..pos])
+                .trim()
+                .to_string();
+            let version = spec[pos + 1..]
+                .split(',')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_string();
             if !name.is_empty() && !version.is_empty() {
                 return (name, version);
             }

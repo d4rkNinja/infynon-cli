@@ -16,5 +16,7 @@ pub enum PromptAction {
         #[arg(long)]
         options: Option<String>,
     },
-    Remove { index: usize },
+    Remove {
+        index: usize,
+    },
 }

@@ -23,11 +23,21 @@ pub fn cmd_status() {
 
     Logger::detail("  Paths:", &format!("{}", config.scan_paths.len()));
     for path in &config.scan_paths {
-        println!("    {} {}", "·".truecolor(60, 60, 80), path.truecolor(180, 180, 200));
+        println!(
+            "    {} {}",
+            "·".truecolor(60, 60, 80),
+            path.truecolor(180, 180, 200)
+        );
     }
-    Logger::detail("  Interval:", &format!("every {} hours", config.interval_hours));
+    Logger::detail(
+        "  Interval:",
+        &format!("every {} hours", config.interval_hours),
+    );
     Logger::detail("  Risk levels:", &config.risk_levels.join(", "));
-    Logger::detail("  SMTP:", &format!("{}:{}", config.smtp.host, config.smtp.port));
+    Logger::detail(
+        "  SMTP:",
+        &format!("{}:{}", config.smtp.host, config.smtp.port),
+    );
     Logger::detail("  SMTP secret:", &password_status(&config.smtp));
     Logger::detail("  From:", &config.from);
     Logger::detail("  To:", &config.recipients.join(", "));
@@ -52,7 +62,9 @@ pub fn cmd_start() {
         return;
     }
     if config.smtp.host.is_empty() || config.recipients.is_empty() {
-        Logger::error("SMTP host or recipients are not configured. Run `infynon pkg eagle-eye setup` first.");
+        Logger::error(
+            "SMTP host or recipients are not configured. Run `infynon pkg eagle-eye setup` first.",
+        );
         return;
     }
     if resolve_smtp_password(&config.smtp).is_none() {
@@ -61,9 +73,18 @@ pub fn cmd_start() {
     }
 
     Logger::title("EAGLE EYE MONITORING", "blue");
-    println!("  {}  Starting scheduled vulnerability monitoring...\n", "🦅".bold());
-    Logger::detail("  Paths:", &format!("{} project(s)", config.scan_paths.len()));
-    Logger::detail("  Interval:", &format!("every {} hours", config.interval_hours));
+    println!(
+        "  {}  Starting scheduled vulnerability monitoring...\n",
+        "🦅".bold()
+    );
+    Logger::detail(
+        "  Paths:",
+        &format!("{} project(s)", config.scan_paths.len()),
+    );
+    Logger::detail(
+        "  Interval:",
+        &format!("every {} hours", config.interval_hours),
+    );
     Logger::detail("  Risk:", &config.risk_levels.join(", "));
     Logger::detail("  Email to:", &config.recipients.join(", "));
     println!();
@@ -71,8 +92,13 @@ pub fn cmd_start() {
 
     run_scan_cycle(&config);
     loop {
-        Logger::raw_dim(&format!("  Next scan in {} hours...", config.interval_hours));
-        std::thread::sleep(std::time::Duration::from_secs(config.interval_hours as u64 * 3600));
+        Logger::raw_dim(&format!(
+            "  Next scan in {} hours...",
+            config.interval_hours
+        ));
+        std::thread::sleep(std::time::Duration::from_secs(
+            config.interval_hours as u64 * 3600,
+        ));
         let updated = load_config();
         if !updated.enabled {
             Logger::info("Eagle Eye has been disabled. Stopping.");

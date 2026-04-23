@@ -26,7 +26,12 @@ pub(super) fn resolve_search_ecosystems(
         "nuget" | "dotnet" => "NuGet",
         "hex" | "mix" => "Hex",
         "go" | "golang" => "Go",
-        other => return Err(format!("Search is not implemented for ecosystem '{}'.", other)),
+        other => {
+            return Err(format!(
+                "Search is not implemented for ecosystem '{}'.",
+                other
+            ))
+        }
     };
 
     Ok(vec![canonical])

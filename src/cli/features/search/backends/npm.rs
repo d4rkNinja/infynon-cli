@@ -60,9 +60,18 @@ struct PackageMeta {
 }
 
 pub(super) fn search(client: &Client, query: &str) -> Vec<SearchHit> {
-    let url = build_query_url("https://api.npms.io/v2/search", &[("q", query), ("size", "8")]);
+    let url = build_query_url(
+        "https://api.npms.io/v2/search",
+        &[("q", query), ("size", "8")],
+    );
     fetch_json::<SearchResponse>(client, &url)
-        .map(|response| response.results.into_iter().map(|item| to_hit(client, query, item)).collect())
+        .map(|response| {
+            response
+                .results
+                .into_iter()
+                .map(|item| to_hit(client, query, item))
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -96,14 +105,26 @@ fn to_hit(client: &Client, query: &str, item: SearchObject) -> SearchHit {
         if meta
             .scripts
             .as_ref()
-            .map(|scripts| ["preinstall", "install", "postinstall", "prepare"].iter().any(|key| {
-                scripts.get(*key).map(|value| !value.trim().is_empty()).unwrap_or(false)
-            }))
+            .map(|scripts| {
+                ["preinstall", "install", "postinstall", "prepare"]
+                    .iter()
+                    .any(|key| {
+                        scripts
+                            .get(*key)
+                            .map(|value| !value.trim().is_empty())
+                            .unwrap_or(false)
+                    })
+            })
             .unwrap_or(false)
         {
             push_qualifier(&mut qualifiers, "install-script-risk");
         }
-        if meta.maintainers.as_ref().map(|value| !value.is_empty()).unwrap_or(false) {
+        if meta
+            .maintainers
+            .as_ref()
+            .map(|value| !value.is_empty())
+            .unwrap_or(false)
+        {
             push_qualifier(&mut qualifiers, "owners");
         }
         if has_json_value(meta.repository.as_ref()) {

@@ -33,20 +33,37 @@ pub(super) fn build_eagle_eye_html(findings: &[ScanFinding], config: &EagleEyeCo
     )
 }
 
-fn group_findings_by_project<'a>(findings: &'a [ScanFinding]) -> BTreeMap<String, Vec<&'a ScanFinding>> {
+fn group_findings_by_project<'a>(
+    findings: &'a [ScanFinding],
+) -> BTreeMap<String, Vec<&'a ScanFinding>> {
     let mut grouped = BTreeMap::new();
     for finding in findings {
-        grouped.entry(finding.project_path.clone()).or_insert_with(Vec::new).push(finding);
+        grouped
+            .entry(finding.project_path.clone())
+            .or_insert_with(Vec::new)
+            .push(finding);
     }
     grouped
 }
 
 fn severity_counts(findings: &[ScanFinding]) -> (usize, usize, usize, usize) {
     (
-        findings.iter().filter(|item| item.severity == "CRITICAL").count(),
-        findings.iter().filter(|item| item.severity == "HIGH").count(),
-        findings.iter().filter(|item| item.severity == "MEDIUM").count(),
-        findings.iter().filter(|item| item.severity == "LOW").count(),
+        findings
+            .iter()
+            .filter(|item| item.severity == "CRITICAL")
+            .count(),
+        findings
+            .iter()
+            .filter(|item| item.severity == "HIGH")
+            .count(),
+        findings
+            .iter()
+            .filter(|item| item.severity == "MEDIUM")
+            .count(),
+        findings
+            .iter()
+            .filter(|item| item.severity == "LOW")
+            .count(),
     )
 }
 

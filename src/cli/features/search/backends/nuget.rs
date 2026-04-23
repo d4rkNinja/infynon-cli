@@ -59,7 +59,13 @@ pub(super) fn search(client: &Client, query: &str) -> Vec<SearchHit> {
         &[("q", query), ("take", "8"), ("prerelease", "false")],
     );
     fetch_json::<SearchResponse>(client, &url)
-        .map(|response| response.data.into_iter().map(|item| to_hit(client, query, item)).collect())
+        .map(|response| {
+            response
+                .data
+                .into_iter()
+                .map(|item| to_hit(client, query, item))
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -83,7 +89,13 @@ fn to_hit(client: &Client, query: &str, item: SearchPackage) -> SearchHit {
             .into_iter()
             .flat_map(|page| page.items.into_iter())
             .filter_map(|leaf| leaf.catalog_entry)
-            .find(|entry| entry.version.as_deref().map(|value| value.eq_ignore_ascii_case(&item.version)).unwrap_or(false))
+            .find(|entry| {
+                entry
+                    .version
+                    .as_deref()
+                    .map(|value| value.eq_ignore_ascii_case(&item.version))
+                    .unwrap_or(false)
+            })
         {
             if license_present(entry.license_expression.as_deref()) {
                 push_qualifier(&mut qualifiers, "licensed");

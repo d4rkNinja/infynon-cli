@@ -6,17 +6,28 @@ use owo_colors::OwoColorize;
 
 pub(super) fn run_scan_cycle(config: &EagleEyeConfig) {
     let timestamp = chrono::Utc::now().format("%Y-%m-%d %H:%M UTC").to_string();
-    println!("  {} {} Starting scan cycle...", "🔎".bold(), timestamp.truecolor(120, 120, 140));
+    println!(
+        "  {} {} Starting scan cycle...",
+        "🔎".bold(),
+        timestamp.truecolor(120, 120, 140)
+    );
 
     let mut all_findings = Vec::new();
     for path in &config.scan_paths {
-        println!("  {} Scanning: {}", ">>".truecolor(255, 100, 100).bold(), path.bold());
+        println!(
+            "  {} Scanning: {}",
+            ">>".truecolor(255, 100, 100).bold(),
+            path.bold()
+        );
         all_findings.extend(scan_path(path, config));
     }
 
     println!();
     if all_findings.is_empty() {
-        Logger::success(&format!("All {} projects are clean!", config.scan_paths.len()));
+        Logger::success(&format!(
+            "All {} projects are clean!",
+            config.scan_paths.len()
+        ));
     } else {
         println!(
             "  {} {} vulnerabilities found across {} project(s)\n",
@@ -59,7 +70,11 @@ fn scan_path(path: &str, config: &EagleEyeConfig) -> Vec<ScanFinding> {
         restore_dir(original_dir.as_ref());
         return Vec::new();
     }
-    println!("    {} Found {} packages", "·".truecolor(100, 100, 120), packages.len());
+    println!(
+        "    {} Found {} packages",
+        "·".truecolor(100, 100, 120),
+        packages.len()
+    );
 
     let queries: Vec<(String, String, String)> = packages
         .iter()
@@ -74,7 +89,10 @@ fn scan_path(path: &str, config: &EagleEyeConfig) -> Vec<ScanFinding> {
         }
     };
 
-    let vuln_ids: Vec<String> = results.iter().flat_map(|refs| refs.iter().map(|item| item.id.clone())).collect();
+    let vuln_ids: Vec<String> = results
+        .iter()
+        .flat_map(|refs| refs.iter().map(|item| item.id.clone()))
+        .collect();
     let details = osv::fetch_vuln_details_batch(&vuln_ids)
         .into_iter()
         .filter_map(|(id, result)| result.ok().map(|detail| (id, detail)))
@@ -85,7 +103,11 @@ fn scan_path(path: &str, config: &EagleEyeConfig) -> Vec<ScanFinding> {
         for vuln_ref in refs {
             let detail = details.get(&vuln_ref.id);
             let severity = detail.map(osv::severity_label).unwrap_or("INFORMATIONAL");
-            if !config.risk_levels.iter().any(|level| level.eq_ignore_ascii_case(severity)) {
+            if !config
+                .risk_levels
+                .iter()
+                .any(|level| level.eq_ignore_ascii_case(severity))
+            {
                 continue;
             }
             let pkg = &packages[index];
@@ -99,7 +121,9 @@ fn scan_path(path: &str, config: &EagleEyeConfig) -> Vec<ScanFinding> {
                 summary: detail
                     .and_then(|item| item.summary.clone())
                     .unwrap_or_else(|| "No description available".into()),
-                fixed_version: detail.and_then(osv::first_fixed_version).unwrap_or_default(),
+                fixed_version: detail
+                    .and_then(osv::first_fixed_version)
+                    .unwrap_or_default(),
             });
         }
     }
@@ -107,7 +131,10 @@ fn scan_path(path: &str, config: &EagleEyeConfig) -> Vec<ScanFinding> {
     let status = if findings.is_empty() {
         "clean".bright_green().bold().to_string()
     } else {
-        format!("{} vulnerabilities found", findings.len()).bright_red().bold().to_string()
+        format!("{} vulnerabilities found", findings.len())
+            .bright_red()
+            .bold()
+            .to_string()
     };
     println!("    {} {}", "✔".green(), status);
     restore_dir(original_dir.as_ref());

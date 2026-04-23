@@ -1,4 +1,4 @@
-fn execute_note(action: NoteAction) {
+fn execute_note(action: NoteAction) -> i32 {
     match action {
         NoteAction::Add {
             id,
@@ -36,7 +36,6 @@ fn execute_note(action: NoteAction) {
     }
 }
 
-
 #[allow(clippy::too_many_arguments)]
 fn cmd_note_add(
     id: &str,
@@ -50,14 +49,20 @@ fn cmd_note_add(
     files: &[String],
     tags: &[String],
     related_pr: Option<u64>,
-) {
+) -> i32 {
     let layer = match parse_layer(layer) {
         Ok(v) => v,
-        Err(e) => return Logger::error(&e),
+        Err(e) => {
+            Logger::error(&e);
+            return EXIT_TRACE_INVALID_INPUT;
+        }
     };
     let scope = match parse_scope(scope) {
         Ok(v) => v,
-        Err(e) => return Logger::error(&e),
+        Err(e) => {
+            Logger::error(&e);
+            return EXIT_TRACE_INVALID_INPUT;
+        }
     };
     let now = Utc::now().to_rfc3339();
     let note = TraceNote {
@@ -77,8 +82,14 @@ fn cmd_note_add(
         updated_at: now,
     };
     match storage::create_note(note) {
-        Ok(()) => Logger::success(&format!("Saved note '{}'", id)),
-        Err(e) => Logger::error(&e),
+        Ok(()) => {
+            Logger::success(&format!("Saved note '{}'", id));
+            0
+        }
+        Err(e) => {
+            Logger::error(&e);
+            EXIT_TRACE_STORAGE_ERROR
+        }
     }
 }
 
@@ -91,31 +102,52 @@ fn resolve_author(author: Option<&str>) -> String {
         .unwrap_or_else(|| "unknown".to_string())
 }
 
-fn cmd_note_update(id: &str, title: Option<&str>, body: Option<&str>, status: Option<&str>) {
+fn cmd_note_update(id: &str, title: Option<&str>, body: Option<&str>, status: Option<&str>) -> i32 {
     let status = match status {
         Some(value) => match parse_status(value) {
             Ok(v) => Some(v),
-            Err(e) => return Logger::error(&e),
+            Err(e) => {
+                Logger::error(&e);
+                return EXIT_TRACE_INVALID_INPUT;
+            }
         },
         None => None,
     };
     match storage::update_note(id, title, body, status) {
-        Ok(()) => Logger::success(&format!("Updated note '{}'", id)),
-        Err(e) => Logger::error(&e),
+        Ok(()) => {
+            Logger::success(&format!("Updated note '{}'", id));
+            0
+        }
+        Err(e) => {
+            Logger::error(&e);
+            EXIT_TRACE_STORAGE_ERROR
+        }
     }
 }
 
-fn cmd_note_remove(id: &str) {
+fn cmd_note_remove(id: &str) -> i32 {
     match storage::delete_note(id) {
-        Ok(()) => Logger::success(&format!("Removed note '{}'", id)),
-        Err(e) => Logger::error(&e),
+        Ok(()) => {
+            Logger::success(&format!("Removed note '{}'", id));
+            0
+        }
+        Err(e) => {
+            Logger::error(&e);
+            EXIT_TRACE_STORAGE_ERROR
+        }
     }
 }
 
-fn cmd_note_list() {
+fn cmd_note_list() -> i32 {
     match storage::list_notes() {
-        Ok(notes) => print_notes(&notes),
-        Err(e) => Logger::error(&e),
+        Ok(notes) => {
+            print_notes(&notes);
+            0
+        }
+        Err(e) => {
+            Logger::error(&e);
+            EXIT_TRACE_STORAGE_ERROR
+        }
     }
 }
 
@@ -126,40 +158,77 @@ fn cmd_retrieve(
     author: Option<&str>,
     file: Option<&str>,
     tag: Option<&str>,
-) {
+    format: &str,
+    limit: Option<usize>,
+) -> i32 {
     let layer = match layer {
         Some(v) => match parse_layer(v) {
             Ok(v) => Some(v),
-            Err(e) => return Logger::error(&e),
+            Err(e) => {
+                Logger::error(&e);
+                return EXIT_TRACE_INVALID_INPUT;
+            }
         },
         None => None,
     };
     let scope = match scope {
         Some(v) => match parse_scope(v) {
             Ok(v) => Some(v),
-            Err(e) => return Logger::error(&e),
+            Err(e) => {
+                Logger::error(&e);
+                return EXIT_TRACE_INVALID_INPUT;
+            }
         },
         None => None,
     };
     match storage::retrieve_notes(layer, scope, target, author, file, tag) {
-        Ok(notes) => print_notes(&notes),
-        Err(e) => Logger::error(&e),
+        Ok(mut notes) => {
+            if let Some(limit) = limit {
+                notes.truncate(limit);
+            }
+            match format.trim().to_ascii_lowercase().as_str() {
+                "table" => print_notes(&notes),
+                "markdown" | "md" => print_notes_markdown(&notes),
+                "json" => print_notes_json(&notes),
+                other => {
+                    Logger::error(&format!(
+                        "Unsupported format '{}'. Use table | markdown | json.",
+                        other
+                    ));
+                    return EXIT_TRACE_INVALID_INPUT;
+                }
+            }
+            0
+        }
+        Err(e) => {
+            Logger::error(&e);
+            EXIT_TRACE_STORAGE_ERROR
+        }
     }
 }
 
-fn cmd_sync(source: Option<&str>, direction: &str) {
+fn cmd_sync(source: Option<&str>, direction: &str) -> i32 {
     let direction = match parse_direction(direction) {
         Ok(v) => v,
-        Err(e) => return Logger::error(&e),
+        Err(e) => {
+            Logger::error(&e);
+            return EXIT_TRACE_INVALID_INPUT;
+        }
     };
     let source = match storage::get_source(source) {
         Ok(v) => v,
-        Err(e) => return Logger::error(&e),
+        Err(e) => {
+            Logger::error(&e);
+            return EXIT_TRACE_STORAGE_ERROR;
+        }
     };
 
     let local_notes = match storage::list_notes() {
         Ok(v) => v,
-        Err(e) => return Logger::error(&e),
+        Err(e) => {
+            Logger::error(&e);
+            return EXIT_TRACE_STORAGE_ERROR;
+        }
     };
     let package_findings = storage::package_risks().unwrap_or_default();
 
@@ -175,8 +244,12 @@ fn cmd_sync(source: Option<&str>, direction: &str) {
                 Ok(()) => {
                     let _ = storage::record_sync(direction, Some(&source.id), &run.summary);
                     Logger::success("Push sync completed");
+                    0
                 }
-                Err(e) => Logger::error(&e),
+                Err(e) => {
+                    Logger::error(&e);
+                    EXIT_TRACE_STORAGE_ERROR
+                }
             }
         }
         SyncDirection::Pull => match crate::trace::backend::pull_notes(&source) {
@@ -186,10 +259,17 @@ fn cmd_sync(source: Option<&str>, direction: &str) {
                     let _ = crate::trace::backend::record_sync(&source, direction, &summary);
                     let _ = storage::record_sync(direction, Some(&source.id), &summary);
                     Logger::success(&format!("Pull sync completed, merged {}", merged));
+                    0
                 }
-                Err(e) => Logger::error(&e),
+                Err(e) => {
+                    Logger::error(&e);
+                    EXIT_TRACE_STORAGE_ERROR
+                }
             },
-            Err(e) => Logger::error(&e),
+            Err(e) => {
+                Logger::error(&e);
+                EXIT_TRACE_STORAGE_ERROR
+            }
         },
         SyncDirection::Both => {
             let run = crate::trace::types::SyncRun {
@@ -201,7 +281,8 @@ fn cmd_sync(source: Option<&str>, direction: &str) {
             if let Err(e) =
                 crate::trace::backend::push_all(&source, &local_notes, &package_findings, &run)
             {
-                return Logger::error(&e);
+                Logger::error(&e);
+                return EXIT_TRACE_STORAGE_ERROR;
             }
             match crate::trace::backend::pull_notes(&source) {
                 Ok(notes) => match storage::merge_remote_notes(notes) {
@@ -213,10 +294,17 @@ fn cmd_sync(source: Option<&str>, direction: &str) {
                             "Bidirectional sync completed, merged {}",
                             merged
                         ));
+                        0
                     }
-                    Err(e) => Logger::error(&e),
+                    Err(e) => {
+                        Logger::error(&e);
+                        EXIT_TRACE_STORAGE_ERROR
+                    }
                 },
-                Err(e) => Logger::error(&e),
+                Err(e) => {
+                    Logger::error(&e);
+                    EXIT_TRACE_STORAGE_ERROR
+                }
             }
         }
     }
@@ -267,6 +355,48 @@ fn print_notes(notes: &[TraceNote]) {
     }
 }
 
+fn print_notes_markdown(notes: &[TraceNote]) {
+    if notes.is_empty() {
+        println!("# Trace Retrieve\n\nNo notes matched.");
+        return;
+    }
+
+    println!("# Trace Retrieve");
+    println!();
+    println!("Matched {} note(s).", notes.len());
+    println!();
+
+    for note in notes {
+        println!("## {}", note.title);
+        println!();
+        println!("- ID: `{}`", note.id);
+        println!("- Layer: `{}`", note.layer.as_str());
+        println!("- Scope: `{}`", note.scope.as_str());
+        println!("- Target: `{}`", note.target);
+        println!("- Status: `{}`", note.status.as_str());
+        println!("- Author: `{}`", note.author);
+        println!("- Updated: `{}`", note.updated_at);
+        if !note.tags.is_empty() {
+            println!("- Tags: `{}`", note.tags.join("`, `"));
+        }
+        if !note.files.is_empty() {
+            println!("- Files: `{}`", note.files.join("`, `"));
+        }
+        println!();
+        println!("{}", note.body);
+        println!();
+    }
+}
+
+fn print_notes_json(notes: &[TraceNote]) {
+    let payload = serde_json::json!({
+        "schema_version":"infynon.trace.retrieve.v1",
+        "count":notes.len(),
+        "notes":notes
+    });
+    println!("{}", serde_json::to_string_pretty(&payload).unwrap());
+}
+
 fn parse_layer(value: &str) -> Result<TraceLayer, String> {
     value
         .parse()
@@ -295,4 +425,3 @@ fn parse_direction(value: &str) -> Result<SyncDirection, String> {
 }
 
 // ─── Knowledge Graph commands ───────────────────────────────────────────────
-

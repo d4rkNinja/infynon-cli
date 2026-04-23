@@ -16,7 +16,11 @@ pub(crate) fn load_packages(explicit_file: Option<&str>) -> Vec<scanner::LockedP
 
     println!();
     let mut options = vec![format!("  ✦ All ({} files detected)", found.len())];
-    options.extend(found.iter().map(|(file, eco)| format!("  {}  ({})", file, eco)));
+    options.extend(
+        found
+            .iter()
+            .map(|(file, eco)| format!("  {}  ({})", file, eco)),
+    );
     let selection = Select::new()
         .with_prompt("Multiple lock files detected — select which to scan")
         .items(&options)

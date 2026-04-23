@@ -15,9 +15,10 @@ infynon pkg scan [OPTIONS]
 
 | Flag | Description |
 |------|-------------|
-| `--output <FORMAT>` | Export high-quality security report: `markdown`, `pdf`, `both` |
-| `--fix [LEVEL]` | Run the auto-fix remediation workflow with live progress tracking, error reporting, and strict/warn security gating. Levels: `critical`, `high`, `medium`, `low`, `informational`, `all` (default: `all`) |
 | `--pkg-file <PATH>` | Scan a specific lock/manifest file instead of auto-detecting |
+| `--json` | Emit machine-readable JSON to stdout using the `infynon.pkg.scan.v1` schema |
+| `--output <FORMAT>` | Export a human-readable security report: `markdown`, `pdf`, `both` |
+| `--fix [LEVEL]` | Run the auto-fix remediation workflow with live progress tracking, error reporting, and strict/warn security gating. Levels: `critical`, `high`, `medium`, `low`, `informational`, `all` (default: `all`) |
 
 ## Examples
 
@@ -28,7 +29,10 @@ infynon pkg scan
 # Scan a specific file
 infynon pkg scan --pkg-file ./Cargo.lock
 
-# Export professional PDF & Markdown reports
+# Emit machine-readable output for CI or agents
+infynon pkg scan --json
+
+# Export Markdown and PDF reports for human review
 infynon pkg scan --output both
 
 # Auto-fix all fixable vulnerabilities with live progress tracking

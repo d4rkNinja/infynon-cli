@@ -12,7 +12,9 @@ pub enum AiAction {
         #[arg(long, value_name = "FLOW_ID")]
         flow: Option<String>,
     },
-    Complete { flow_id: String },
+    Complete {
+        flow_id: String,
+    },
     Probe {
         flow_id: String,
         #[arg(long, value_name = "URL")]
@@ -29,6 +31,10 @@ pub enum AiAction {
         #[arg(long, default_value = "0")]
         run: usize,
     },
-    Assert { node_id: String },
-    Branch { node_id: String },
+    Assert {
+        node_id: String,
+    },
+    Branch {
+        node_id: String,
+    },
 }

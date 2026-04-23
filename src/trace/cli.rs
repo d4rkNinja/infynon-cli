@@ -52,6 +52,12 @@ pub enum TraceAction {
         /// Filter by tag
         #[arg(long)]
         tag: Option<String>,
+        /// Output format: table | markdown | json
+        #[arg(long, default_value = "table")]
+        format: String,
+        /// Limit the number of notes returned
+        #[arg(long)]
+        limit: Option<usize>,
     },
 
     /// Record a pull, push, or bidirectional sync against a configured backend.

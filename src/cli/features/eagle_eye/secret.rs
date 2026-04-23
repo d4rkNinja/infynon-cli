@@ -16,7 +16,11 @@ pub(super) fn resolve_smtp_password(config: &SmtpConfig) -> Option<String> {
 
 pub(super) fn password_status(config: &SmtpConfig) -> String {
     if !config.password_env.trim().is_empty() {
-        if std::env::var(&config.password_env).ok().filter(|value| !value.trim().is_empty()).is_some() {
+        if std::env::var(&config.password_env)
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .is_some()
+        {
             format!("env:{}", config.password_env)
         } else {
             format!("missing env:{}", config.password_env)

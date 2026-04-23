@@ -49,7 +49,11 @@ struct Ownership {
 const NOTE: &str = "PyPI search still uses exact package lookup because the public registry search endpoint is not reliably accessible from this CLI.";
 
 pub(super) fn search(client: &Client, query: &str) -> (Vec<SearchHit>, Option<String>) {
-    for candidate in [query.to_string(), query.replace('_', "-"), query.replace('-', "_")] {
+    for candidate in [
+        query.to_string(),
+        query.replace('_', "-"),
+        query.replace('-', "_"),
+    ] {
         let url = format!("https://pypi.org/pypi/{}/json", candidate);
         if let Some(response) = fetch_json::<Response>(client, &url) {
             let hit = to_hit(query, response);
@@ -69,7 +73,11 @@ fn to_hit(query: &str, response: Response) -> SearchHit {
         .map(str::to_string);
 
     if license_present(response.info.license.as_deref())
-        || response.info.classifiers.iter().any(|value| value.starts_with("License ::"))
+        || response
+            .info
+            .classifiers
+            .iter()
+            .any(|value| value.starts_with("License ::"))
     {
         push_qualifier(&mut qualifiers, "licensed");
     }
@@ -91,11 +99,19 @@ fn to_hit(query: &str, response: Response) -> SearchHit {
     }
     if has_non_empty(response.info.author.as_deref())
         || has_non_empty(response.info.maintainer.as_deref())
-        || response.ownership.as_ref().map(|value| !value.roles.is_empty()).unwrap_or(false)
+        || response
+            .ownership
+            .as_ref()
+            .map(|value| !value.roles.is_empty())
+            .unwrap_or(false)
     {
         push_qualifier(&mut qualifiers, "owners");
     }
-    if response.urls.iter().any(|file| file.yanked.unwrap_or(false)) {
+    if response
+        .urls
+        .iter()
+        .any(|file| file.yanked.unwrap_or(false))
+    {
         push_qualifier(&mut qualifiers, "yanked");
     }
     add_release_age_qualifiers(&mut qualifiers, latest_upload.as_deref());

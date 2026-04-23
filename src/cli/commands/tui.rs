@@ -26,12 +26,20 @@ pub(super) fn run_api_tui(flow_id: Option<&str>) {
         if event::poll(std::time::Duration::from_millis(50)).unwrap_or(false) {
             if let Ok(Event::Key(key)) = event::read() {
                 if key.kind == crossterm::event::KeyEventKind::Press {
-                    if key.code == KeyCode::Char('c') && key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) { break; }
+                    if key.code == KeyCode::Char('c')
+                        && key
+                            .modifiers
+                            .contains(crossterm::event::KeyModifiers::CONTROL)
+                    {
+                        break;
+                    }
                     app.handle_key(key);
                 }
             }
         }
-        if app.should_quit { break; }
+        if app.should_quit {
+            break;
+        }
     }
     let _ = disable_raw_mode();
     let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);

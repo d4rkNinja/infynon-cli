@@ -53,10 +53,19 @@ pub(crate) fn cargo_lock_deps() -> HashMap<String, Vec<String>> {
             in_deps = false;
         } else if in_deps {
             if let Some(ref name) = current_name {
-                let dep = trimmed.trim_matches('"').trim_matches(',').trim_matches('"');
-                let dep_name = dep.split_whitespace().next().unwrap_or("").trim_matches('"');
+                let dep = trimmed
+                    .trim_matches('"')
+                    .trim_matches(',')
+                    .trim_matches('"');
+                let dep_name = dep
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("")
+                    .trim_matches('"');
                 if !dep_name.is_empty() {
-                    deps.entry(name.clone()).or_default().push(dep_name.to_string());
+                    deps.entry(name.clone())
+                        .or_default()
+                        .push(dep_name.to_string());
                 }
             }
         }
@@ -86,7 +95,10 @@ pub(crate) fn cargo_toml_dep_names() -> Vec<String> {
     let mut in_deps = false;
     for line in content.lines() {
         let trimmed = line.trim();
-        if trimmed == "[dependencies]" || trimmed == "[dev-dependencies]" || trimmed == "[build-dependencies]" {
+        if trimmed == "[dependencies]"
+            || trimmed == "[dev-dependencies]"
+            || trimmed == "[build-dependencies]"
+        {
             in_deps = true;
         } else if trimmed.starts_with('[') {
             in_deps = false;

@@ -83,7 +83,7 @@ pub fn cmd_why(package: &str, pkg_file: Option<&str>) {
     println!();
 }
 
-fn is_direct_dep(package: &str) -> bool {
+pub(crate) fn is_direct_dep(package: &str) -> bool {
     if npm_declared_deps().contains(package) {
         return true;
     }
@@ -114,7 +114,7 @@ fn is_direct_dep(package: &str) -> bool {
     false
 }
 
-fn trace_why(package: &str) -> Vec<Vec<String>> {
+pub(crate) fn trace_why(package: &str) -> Vec<Vec<String>> {
     let mut paths = Vec::new();
 
     // npm: package-lock.json

@@ -119,6 +119,31 @@ pub fn execute_node(
             for (k, v) in prompted {
                 context.insert(k, v);
             }
+            let missing: Vec<String> = to_prompt
+                .iter()
+                .filter(|input| !context.contains_key(&input.var))
+                .map(|input| input.var.clone())
+                .collect();
+            if !missing.is_empty() {
+                return StepResult {
+                    node_id: node.id.clone(),
+                    node_name: node.name.clone(),
+                    method: node.method.to_uppercase(),
+                    url: String::new(),
+                    status_code: None,
+                    duration_ms: 0,
+                    passed: false,
+                    assertion_results: vec![],
+                    extracted: HashMap::new(),
+                    error: Some(format!(
+                        "Missing required runtime input(s): {}",
+                        missing.join(", ")
+                    )),
+                    request_body: None,
+                    response_body: None,
+                    response_headers: HashMap::new(),
+                };
+            }
         }
     }
 

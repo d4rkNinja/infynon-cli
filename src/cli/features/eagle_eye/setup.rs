@@ -16,7 +16,11 @@ pub fn cmd_setup() {
 
     let mut config = load_config();
 
-    println!("  {}  {}\n", "1".bold().bright_cyan(), "SMTP Configuration".bold().white());
+    println!(
+        "  {}  {}\n",
+        "1".bold().bright_cyan(),
+        "SMTP Configuration".bold().white()
+    );
     let host_default = if config.smtp.host.is_empty() {
         "smtp.gmail.com"
     } else {
@@ -38,12 +42,23 @@ pub fn cmd_setup() {
     };
     config.smtp.password_env = prompt_line("SMTP Password env var", password_env_default);
     config.smtp.legacy_password.clear();
-    if std::env::var(&config.smtp.password_env).ok().filter(|value| !value.trim().is_empty()).is_none() {
-        Logger::info(&format!("Set {} before running Eagle Eye.", config.smtp.password_env));
+    if std::env::var(&config.smtp.password_env)
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .is_none()
+    {
+        Logger::info(&format!(
+            "Set {} before running Eagle Eye.",
+            config.smtp.password_env
+        ));
     }
     config.smtp.tls = prompt_bool("Use TLS", config.smtp.tls);
 
-    println!("\n  {}  {}\n", "2".bold().bright_cyan(), "Email Addresses".bold().white());
+    println!(
+        "\n  {}  {}\n",
+        "2".bold().bright_cyan(),
+        "Email Addresses".bold().white()
+    );
     let from_default = if config.from.is_empty() {
         config.smtp.username.as_str()
     } else {
@@ -60,19 +75,40 @@ pub fn cmd_setup() {
         config.recipients = parse_csv_list(&recipients);
     }
 
-    println!("\n  {}  {}\n", "3".bold().bright_cyan(), "Project Paths to Monitor".bold().white());
+    println!(
+        "\n  {}  {}\n",
+        "3".bold().bright_cyan(),
+        "Project Paths to Monitor".bold().white()
+    );
     collect_scan_paths(&mut config.scan_paths);
 
-    println!("\n  {}  {}\n", "4".bold().bright_cyan(), "Scan Schedule".bold().white());
+    println!(
+        "\n  {}  {}\n",
+        "4".bold().bright_cyan(),
+        "Scan Schedule".bold().white()
+    );
     config.interval_hours = prompt_u32("Scan interval in hours", config.interval_hours);
 
-    println!("\n  {}  {}\n", "5".bold().bright_cyan(), "Risk Level Threshold".bold().white());
+    println!(
+        "\n  {}  {}\n",
+        "5".bold().bright_cyan(),
+        "Risk Level Threshold".bold().white()
+    );
     println!("  Select which severity levels trigger an email alert:");
     println!("  {}  CRITICAL only", "[1]".bold().bright_red());
     println!("  {}  CRITICAL + HIGH", "[2]".bold().bright_red());
-    println!("  {}  CRITICAL + HIGH + MEDIUM", "[3]".bold().bright_yellow());
-    println!("  {}  CRITICAL + HIGH + MEDIUM + LOW", "[4]".bold().bright_green());
-    println!("  {}  ALL (including INFORMATIONAL)", "[5]".bold().bright_cyan());
+    println!(
+        "  {}  CRITICAL + HIGH + MEDIUM",
+        "[3]".bold().bright_yellow()
+    );
+    println!(
+        "  {}  CRITICAL + HIGH + MEDIUM + LOW",
+        "[4]".bold().bright_green()
+    );
+    println!(
+        "  {}  ALL (including INFORMATIONAL)",
+        "[5]".bold().bright_cyan()
+    );
     println!();
     let choice = prompt_line("Choice", "2");
     config.risk_levels = risk_levels_for_choice(&choice);
@@ -83,8 +119,14 @@ pub fn cmd_setup() {
             println!();
             Logger::success("Eagle Eye configuration saved!");
             Logger::detail("  Config:", &config_path().display().to_string());
-            Logger::detail("  Paths:", &format!("{} project(s)", config.scan_paths.len()));
-            Logger::detail("  Interval:", &format!("every {} hours", config.interval_hours));
+            Logger::detail(
+                "  Paths:",
+                &format!("{} project(s)", config.scan_paths.len()),
+            );
+            Logger::detail(
+                "  Interval:",
+                &format!("every {} hours", config.interval_hours),
+            );
             Logger::detail("  Risk:", &config.risk_levels.join(", "));
             Logger::detail("  Email to:", &config.recipients.join(", "));
             Logger::detail("  Status:", "ENABLED");

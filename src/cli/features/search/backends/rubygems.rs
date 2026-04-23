@@ -38,9 +38,18 @@ struct GemMetadata {
 }
 
 pub(super) fn search(client: &Client, query: &str) -> Vec<SearchHit> {
-    let url = build_query_url("https://rubygems.org/api/v1/search.json", &[("query", query)]);
+    let url = build_query_url(
+        "https://rubygems.org/api/v1/search.json",
+        &[("query", query)],
+    );
     fetch_json::<Vec<SearchGem>>(client, &url)
-        .map(|response| response.into_iter().take(8).map(|item| to_hit(client, query, item)).collect())
+        .map(|response| {
+            response
+                .into_iter()
+                .take(8)
+                .map(|item| to_hit(client, query, item))
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -52,7 +61,9 @@ fn to_hit(client: &Client, query: &str, item: SearchGem) -> SearchHit {
         if let Some(detail_version) = detail.version.as_deref() {
             version = detail_version.to_string();
         }
-        if detail.downloads.unwrap_or(0) >= 1_000_000 || detail.version_downloads.unwrap_or(0) >= 100_000 {
+        if detail.downloads.unwrap_or(0) >= 1_000_000
+            || detail.version_downloads.unwrap_or(0) >= 100_000
+        {
             push_qualifier(&mut qualifiers, "popular");
         }
         if licenses_present(&detail.licenses) {
@@ -67,7 +78,9 @@ fn to_hit(client: &Client, query: &str, item: SearchGem) -> SearchHit {
         {
             push_qualifier(&mut qualifiers, "mfa");
         }
-        if has_non_empty(detail.source_code_uri.as_deref()) || has_non_empty(detail.homepage_uri.as_deref()) {
+        if has_non_empty(detail.source_code_uri.as_deref())
+            || has_non_empty(detail.homepage_uri.as_deref())
+        {
             push_qualifier(&mut qualifiers, "repo");
         }
         if has_non_empty(detail.documentation_uri.as_deref())

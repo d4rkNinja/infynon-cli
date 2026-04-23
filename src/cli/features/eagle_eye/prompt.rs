@@ -72,7 +72,11 @@ pub(super) fn collect_scan_paths(existing: &mut Vec<String>) {
     if !existing.is_empty() {
         println!("  Current paths:");
         for path in existing.iter() {
-            println!("    {} {}", "·".truecolor(60, 60, 80), path.truecolor(180, 180, 200));
+            println!(
+                "    {} {}",
+                "·".truecolor(60, 60, 80),
+                path.truecolor(180, 180, 200)
+            );
         }
         print!("\n  Keep existing paths? [Y/n]: ");
         io::stdout().flush().ok();

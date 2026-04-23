@@ -28,6 +28,15 @@ If you use Claude Code with Trace, pair it with `code-guardian` so handoff conte
 infynon pkg <subcommand>
 ```
 
+Contract-focused flags available across `pkg` workflows:
+
+- `--json`
+  Emit machine-readable JSON to stdout for automation and CI.
+- `--no-input`
+  Disable prompts and fail when an install would otherwise require a decision.
+
+Machine-readable and exit-code details for `pkg` and `trace` are documented in `docs/contracts.md`.
+
 ### `scan`
 
 Use `scan` when you want to inspect the current repo's dependency files for known package risk.
@@ -41,10 +50,11 @@ Typical cases:
 
 ```bash
 infynon pkg scan
-infynon pkg scan --pkg-file <PATH>
+infynon pkg scan --json
 infynon pkg scan --output markdown
 infynon pkg scan --output pdf
 infynon pkg scan --output both
+infynon pkg scan --pkg-file <PATH>
 infynon pkg scan --fix
 infynon pkg scan --fix high
 ```
@@ -55,8 +65,10 @@ Command behavior:
   Auto-detects supported package files in the current repo and scans them.
 - `infynon pkg scan --pkg-file <PATH>`
   Forces the scan to use a specific file instead of auto-detection.
+- `infynon pkg scan --json`
+  Emits versioned machine-readable output to stdout for CI, agents, and automation.
 - `infynon pkg scan --output markdown|pdf|both`
-  Saves scan results in a report format for sharing or documentation.
+  Saves a shareable report file for humans when you need an artifact in addition to terminal output.
 - `infynon pkg scan --fix`
   Starts remediation after the scan using the default fix behavior.
 - `infynon pkg scan --fix high`
@@ -74,6 +86,7 @@ Typical cases:
 
 ```bash
 infynon pkg npm install <pkg>
+infynon pkg npm install <pkg> --strict high --no-input
 infynon pkg yarn add <pkg>
 infynon pkg pnpm add <pkg>
 infynon pkg bun add <pkg>
@@ -94,6 +107,9 @@ How to think about these:
 - same package-manager intent
 - same ecosystem-specific syntax
 - INFYNON adds package inspection, reporting, and policy around the install
+- use `--no-input` in CI so installs fail instead of prompting
+- use `--json` for machine-readable results
+- use `--skip-vulnerable`, `--auto-fix`, or `--yes` only when you want an explicit non-interactive install policy
 
 ### Strict Mode
 
@@ -122,6 +138,9 @@ These commands support audit, investigation, cleanup, and remediation workflows.
 ```bash
 infynon pkg audit
 infynon pkg why <package>
+infynon pkg explain <package>
+infynon pkg explain requests --ecosystem pip
+infynon pkg explain tokio --pkg-file Cargo.lock
 infynon pkg outdated
 infynon pkg diff <pkg> <v1> <v2>
 infynon pkg doctor
@@ -138,6 +157,9 @@ What each one is for:
   Review the repo's current dependency risk without installing anything.
 - `infynon pkg why <package>`
   Explain why a package exists in the tree and what pulled it in.
+- `infynon pkg explain <package>`
+  Show direct/transitive status, advisory context, and a remediation plan for one installed package.
+  Typical examples: `infynon pkg explain serde_json`, `infynon pkg explain requests --ecosystem pip`, `infynon pkg explain tokio --pkg-file Cargo.lock`.
 - `infynon pkg outdated`
   Show dependency versions that are behind current releases.
 - `infynon pkg diff <pkg> <v1> <v2>`
@@ -256,7 +278,9 @@ infynon weave flow create "checkout" --ai "login then create order"
 infynon weave flow list
 infynon weave flow show <flow-id>
 infynon weave flow run <flow-id>
+infynon weave flow run <flow-id> --format json --no-input
 infynon weave flow run-all
+infynon weave flow run-all --format junit --no-input
 infynon weave flow remove <flow-id>
 infynon weave flow merge <flow1-id> <flow2-id> --join-at <node-id>
 ```
@@ -271,8 +295,14 @@ What each one is for:
   Displays a flow graph and its node connections.
 - `flow run`
   Executes one flow from start to finish.
+- `flow run --format json|markdown|junit`
+  Emits structured stdout for CI, reports, or agent consumption.
+- `flow run --no-input`
+  Disables runtime prompts and fails with an explicit exit code when required input is missing.
+  Exit codes: `0` pass, `20` flow failed, `21` input missing in non-interactive mode, `22` invalid flow definition.
 - `flow run-all`
   Executes every flow in the current project.
+  Exit codes: `0` all passed, `20` at least one flow failed, `21` input missing, `22` invalid flow definition.
 - `flow remove`
   Deletes a flow without removing the underlying nodes.
 - `flow merge`
@@ -355,12 +385,11 @@ Recommended Claude Code companion:
 
 ```bash
 infynon trace overview
-infynon trace init --owner team --user alien
+infynon trace init
 infynon trace source add-redis team-redis --url redis://localhost:6379/0 --namespace infynon --user alien --default
-infynon trace source add-sql team-db --engine sqlite --url sqlite://.infynon/trace/trace.db --user alien --default
 infynon trace source list
-infynon trace source default team-db
-infynon trace source remove team-db
+infynon trace source default local-sqlite
+infynon trace source remove team-redis
 ```
 
 What each one is for:
@@ -368,7 +397,7 @@ What each one is for:
 - `overview`
   Prints the current Trace state summary for the repo.
 - `init`
-  Creates the local Trace configuration for the repo and stores owner/default-user identity.
+  Creates the local Trace configuration for the repo and prepares a default local SQLite source at `.infynon/trace/trace.db`.
 - `source add-redis`
   Adds a Redis backend for lower-latency retrieval and live-style coordination.
 - `source add-sql`
@@ -407,6 +436,8 @@ infynon trace retrieve --scope branch --target auth
 infynon trace retrieve --scope package --target chrono
 infynon trace retrieve --author alien
 infynon trace retrieve --file Cargo.toml
+infynon trace retrieve --scope package --target chrono --format json
+infynon trace retrieve --scope branch --target auth --format markdown --limit 5
 ```
 
 Use `retrieve` when you want the right context for a repo task instead of reading all notes manually.

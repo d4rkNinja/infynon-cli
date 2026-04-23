@@ -7,10 +7,17 @@ pub enum NodeAction {
         #[arg(long, value_name = "DESCRIPTION")]
         ai: Option<String>,
     },
-    Get { id: String },
+    Get {
+        id: String,
+    },
     List,
-    Remove { id: String },
-    Clone { id: String, new_id: String },
+    Remove {
+        id: String,
+    },
+    Clone {
+        id: String,
+        new_id: String,
+    },
     Run {
         id: String,
         #[arg(long)]

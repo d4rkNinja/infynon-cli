@@ -11,7 +11,12 @@ pub(super) fn version_base_score(version: &str) -> i32 {
     }
 }
 
-pub(super) fn compute_match_score(query: &str, query_norm: &str, candidate: &str, signal: &str) -> i32 {
+pub(super) fn compute_match_score(
+    query: &str,
+    query_norm: &str,
+    candidate: &str,
+    signal: &str,
+) -> i32 {
     let candidate_norm = normalize_pkg_name(candidate);
     let distance = levenshtein(query_norm, &candidate_norm) as i32;
     let mut score = if candidate.eq_ignore_ascii_case(query) {

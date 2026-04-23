@@ -53,16 +53,15 @@ If you want Trace to work smoothly with Claude Code, pair it with the `code-guar
 Use this once per repo to define owner and default user identity.
 
 ```bash
-infynon trace init --repo infynon-cli --owner team --user alien
+infynon trace init
 ```
 
 What it does:
 
 - creates Trace config for the repo
-- stores the repo owner label
-- stores the default user so later notes have a sensible author
+- prepares a default local SQLite source at `.infynon/trace/trace.db`
 
-### 2. Add a backend source
+### 2. Add optional backend sources
 
 Use Redis when you want fast retrieval and live-feeling coordination:
 
@@ -96,6 +95,8 @@ What `source add-sql` is for:
 - structured filtering
 - canonical memory and durable history
 
+If you do nothing after `trace init`, Trace already has a usable local SQLite backend. Add Redis or another SQL source only when you need shared or remote storage.
+
 ### 3. Inspect configured sources
 
 Use these when you want to understand or change source configuration.
@@ -114,6 +115,12 @@ What each command does:
   Switches the default source used by Trace operations.
 - `source remove <name>`
   Removes a source from local Trace configuration.
+
+Source command exit codes:
+
+- `0` source command completed successfully
+- `30` invalid source input such as unsupported SQL engine
+- `31` trace storage or backend validation failure
 
 ## Notes
 
@@ -184,6 +191,12 @@ Use this to inspect the current local note set.
 infynon trace note list
 ```
 
+Note command exit codes:
+
+- `0` note command completed successfully
+- `30` invalid note input such as unsupported layer, scope, or status
+- `31` trace storage failure
+
 ## Retrieval
 
 Use `retrieve` when you want Trace to answer a task-specific question instead of reading every note.
@@ -193,6 +206,8 @@ infynon trace retrieve --scope branch --target auth
 infynon trace retrieve --scope package --target chrono
 infynon trace retrieve --author alien
 infynon trace retrieve --file Cargo.toml
+infynon trace retrieve --scope package --target chrono --format json
+infynon trace retrieve --scope branch --target auth --format markdown --limit 5
 ```
 
 What each pattern is good for:
@@ -205,6 +220,18 @@ What each pattern is good for:
   Pull notes created by one user.
 - `--file Cargo.toml`
   Pull notes attached to a file.
+- `--format json`
+  Emit machine-readable retrieval output.
+- `--format markdown`
+  Produce a pasteable human summary for PRs, docs, or agent context.
+- `--limit 5`
+  Keep retrieval output focused when the note set is large.
+
+Retrieve exit codes:
+
+- `0` retrieval completed successfully, including empty result sets
+- `30` invalid retrieval filter or unsupported output format
+- `31` trace storage or backend retrieval failure
 
 ## Sync
 
@@ -239,6 +266,12 @@ infynon trace sync --direction both
 ```
 
 Use this as the normal "bring everything up to date" command.
+
+Sync exit codes:
+
+- `0` sync completed successfully
+- `30` invalid sync input such as unsupported direction
+- `31` trace storage or backend sync failure
 
 ## Compact
 
@@ -427,7 +460,7 @@ Graph data is included in `trace sync` operations when using push/pull.
 
 ```bash
 infynon trace overview
-infynon trace init --owner team --user alien
+infynon trace init
 infynon trace source add-redis <name> --url redis://... --user alien --default
 infynon trace source add-sql <name> --engine postgres --url postgres://... --user alien --default
 infynon trace source list
@@ -437,7 +470,7 @@ infynon trace note add <id> --title "..." --body "..."
 infynon trace note update <id> --status stale
 infynon trace note remove <id>
 infynon trace note list
-infynon trace retrieve --scope <scope> --target <target>
+infynon trace retrieve --scope <scope> --target <target> --format table|markdown|json
 infynon trace sync --direction push
 infynon trace sync --direction pull
 infynon trace sync --direction both

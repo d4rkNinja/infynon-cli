@@ -526,7 +526,15 @@ infynon weave flow run <flow-id> --base-url http://staging.example.com
 # Seed context variables before the first node runs
 infynon weave flow run <flow-id> --set user_id=42 --set role=admin
 
-# Save a report
+# Emit a stable stdout contract
+infynon weave flow run <flow-id> --format json
+infynon weave flow run <flow-id> --format markdown
+infynon weave flow run <flow-id> --format junit
+
+# Disable prompts and fail if runtime input is missing
+infynon weave flow run <flow-id> --no-input
+
+# Optional: save a report bundle under ./reports/
 infynon weave flow run <flow-id> --output markdown
 infynon weave flow run <flow-id> --output pdf
 infynon weave flow run <flow-id> --output both
@@ -541,6 +549,7 @@ When a flow reaches a node with prompt inputs defined, **it pauses and asks for 
 ```bash
 infynon weave flow run-all
 infynon weave flow run-all --base-url http://staging.example.com
+infynon weave flow run-all --format junit --no-input
 infynon weave flow run-all --set env=staging --output both
 ```
 
@@ -695,13 +704,21 @@ infynon weave ai branch <node-id>                  # suggest conditional branche
 infynon weave validate
 
 # Run a flow — exits 1 if any assertion fails
-infynon weave flow run <flow-id> --base-url $API_URL
+infynon weave flow run <flow-id> --base-url $API_URL --format json --no-input
+# Exit codes: 0 pass, 20 fail, 21 input missing, 22 invalid flow definition
 
-# Run all flows and save a report
-infynon weave flow run-all --base-url $API_URL --output markdown
+# Run all flows in CI and emit a JUnit artifact stream
+infynon weave flow run-all --base-url $API_URL --format junit --no-input
 ```
 
 `{$ENV_VAR}` placeholders resolve from CI environment variables automatically — no `.env` file needed in CI.
+
+Flow run exit codes:
+
+- `0` all flow assertions passed
+- `20` flow execution failed
+- `21` required runtime input was missing in non-interactive mode
+- `22` invalid flow definition, missing node, or unsupported request definition
 
 Nodes with `prompt_inputs` work in CI in two ways:
 

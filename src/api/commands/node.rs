@@ -18,7 +18,11 @@ include!("node/manage.rs");
 
 fn check_index(idx: usize, len: usize) -> bool {
     if idx >= len {
-        Logger::error(&format!("Index {} out of range (0..{})", idx, len.saturating_sub(1)));
+        Logger::error(&format!(
+            "Index {} out of range (0..{})",
+            idx,
+            len.saturating_sub(1)
+        ));
         return false;
     }
     true

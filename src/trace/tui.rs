@@ -561,4 +561,3 @@ include!("tui/handlers_forms.rs");
 include!("tui/views_core.rs");
 include!("tui/views_modal.rs");
 include!("tui/views_graph.rs");
-

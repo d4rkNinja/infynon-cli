@@ -1,5 +1,5 @@
-use reqwest::blocking::Client;
 use regex::Regex;
+use reqwest::blocking::Client;
 use serde::Deserialize;
 
 use super::super::http::{build_query_url, fetch_json, fetch_text};
@@ -16,20 +16,37 @@ struct LatestResponse {
 }
 
 pub(super) fn search(client: &Client, query: &str) -> Vec<SearchHit> {
-    let url = build_query_url("https://pkg.go.dev/search", &[("q", query), ("m", "package")]);
+    let url = build_query_url(
+        "https://pkg.go.dev/search",
+        &[("q", query), ("m", "package")],
+    );
     let html = match fetch_text(client, &url) {
         Some(value) => value,
         None => return Vec::new(),
     };
 
-    let path_re = Regex::new(r#"<span class="SearchSnippet-header-path">\(([^<]+)\)</span>"#).expect("valid Go path regex");
-    let synopsis_re = Regex::new(r#"<p class="SearchSnippet-synopsis"[^>]*>\s*(.*?)\s*</p>"#).expect("valid Go synopsis regex");
-    let imported_by_re = Regex::new(r#"Imported by </span><strong>([0-9,]+)</strong>"#).expect("valid Go imported-by regex");
-    let license_re = Regex::new(r#"\?tab=licenses"[^>]*>\s*([^<]+?)\s*</a>"#).expect("valid Go license regex");
+    let path_re = Regex::new(r#"<span class="SearchSnippet-header-path">\(([^<]+)\)</span>"#)
+        .expect("valid Go path regex");
+    let synopsis_re = Regex::new(r#"<p class="SearchSnippet-synopsis"[^>]*>\s*(.*?)\s*</p>"#)
+        .expect("valid Go synopsis regex");
+    let imported_by_re = Regex::new(r#"Imported by </span><strong>([0-9,]+)</strong>"#)
+        .expect("valid Go imported-by regex");
+    let license_re =
+        Regex::new(r#"\?tab=licenses"[^>]*>\s*([^<]+?)\s*</a>"#).expect("valid Go license regex");
 
     html.split(r#"<div class="SearchSnippet""#)
         .skip(1)
-        .filter_map(|block| to_hit(client, query, block, &path_re, &synopsis_re, &imported_by_re, &license_re))
+        .filter_map(|block| {
+            to_hit(
+                client,
+                query,
+                block,
+                &path_re,
+                &synopsis_re,
+                &imported_by_re,
+                &license_re,
+            )
+        })
         .take(8)
         .collect()
 }
@@ -64,9 +81,16 @@ fn to_hit(
         .map(|value| strip_html(value.as_str()))
         .unwrap_or_default();
 
-    let latest_url = format!("https://proxy.golang.org/{}/@latest", escape_go_module_path(&path));
+    let latest_url = format!(
+        "https://proxy.golang.org/{}/@latest",
+        escape_go_module_path(&path)
+    );
     let latest = fetch_json::<LatestResponse>(client, &latest_url);
-    let version = latest.as_ref().and_then(|value| value.version.as_deref()).unwrap_or("-").to_string();
+    let version = latest
+        .as_ref()
+        .and_then(|value| value.version.as_deref())
+        .unwrap_or("-")
+        .to_string();
 
     let mut qualifiers = Vec::new();
     if imported_by >= 500 {
@@ -75,10 +99,16 @@ fn to_hit(
     if !license.is_empty() {
         push_qualifier(&mut qualifiers, "licensed");
     }
-    if path.starts_with("github.com/") || path.starts_with("gitlab.com/") || path.starts_with("bitbucket.org/") {
+    if path.starts_with("github.com/")
+        || path.starts_with("gitlab.com/")
+        || path.starts_with("bitbucket.org/")
+    {
         push_qualifier(&mut qualifiers, "repo");
     }
-    add_release_age_qualifiers(&mut qualifiers, latest.as_ref().and_then(|value| value.time.as_deref()));
+    add_release_age_qualifiers(
+        &mut qualifiers,
+        latest.as_ref().and_then(|value| value.time.as_deref()),
+    );
     add_version_qualifiers(&mut qualifiers, &version);
 
     Some(SearchHit {

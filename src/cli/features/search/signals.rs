@@ -21,12 +21,11 @@ pub(super) fn has_json_value(value: Option<&Value>) -> bool {
     match value {
         Some(Value::String(text)) => !text.trim().is_empty(),
         Some(Value::Array(items)) => !items.is_empty(),
-        Some(Value::Object(map)) => {
-            map.get("url")
-                .and_then(Value::as_str)
-                .map(|value| !value.trim().is_empty())
-                .unwrap_or(!map.is_empty())
-        }
+        Some(Value::Object(map)) => map
+            .get("url")
+            .and_then(Value::as_str)
+            .map(|value| !value.trim().is_empty())
+            .unwrap_or(!map.is_empty()),
         Some(Value::Bool(flag)) => *flag,
         Some(Value::Number(_)) => true,
         _ => false,
@@ -51,7 +50,11 @@ pub(super) fn licenses_present(values: &[String]) -> bool {
 
 pub(super) fn days_since_rfc3339(value: &str) -> Option<i64> {
     let parsed = DateTime::parse_from_rfc3339(value).ok()?;
-    Some(Utc::now().signed_duration_since(parsed.with_timezone(&Utc)).num_days())
+    Some(
+        Utc::now()
+            .signed_duration_since(parsed.with_timezone(&Utc))
+            .num_days(),
+    )
 }
 
 pub(super) fn add_release_age_qualifiers(qualifiers: &mut Vec<String>, released_at: Option<&str>) {
@@ -74,9 +77,11 @@ pub(super) fn is_prerelease(version: &str) -> bool {
         return false;
     }
 
-    ["alpha", "beta", "rc", "dev", "preview", "snapshot", "canary", "next"]
-        .iter()
-        .any(|needle| normalized.contains(needle))
+    [
+        "alpha", "beta", "rc", "dev", "preview", "snapshot", "canary", "next",
+    ]
+    .iter()
+    .any(|needle| normalized.contains(needle))
 }
 
 pub(super) fn add_version_qualifiers(qualifiers: &mut Vec<String>, version: &str) {

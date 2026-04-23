@@ -5,16 +5,33 @@ use crate::cli::args::{
 use std::path::Path;
 
 const KNOWN_ECOSYSTEMS: &[&str] = &[
-    "npm", "yarn", "pnpm", "bun",
-    "pip", "pip3", "pypi", "uv", "poetry",
-    "cargo", "crates.io",
-    "go", "golang",
-    "gem", "rubygems",
-    "composer", "packagist",
-    "nuget", "dotnet",
-    "hex", "mix",
-    "pub", "pub.dev", "dart",
-    "postgres", "mysql", "sqlite",
+    "npm",
+    "yarn",
+    "pnpm",
+    "bun",
+    "pip",
+    "pip3",
+    "pypi",
+    "uv",
+    "poetry",
+    "cargo",
+    "crates.io",
+    "go",
+    "golang",
+    "gem",
+    "rubygems",
+    "composer",
+    "packagist",
+    "nuget",
+    "dotnet",
+    "hex",
+    "mix",
+    "pub",
+    "pub.dev",
+    "dart",
+    "postgres",
+    "mysql",
+    "sqlite",
 ];
 
 pub fn validate_pkg_args(args: &PkgArgs) -> Result<(), String> {
@@ -96,6 +113,15 @@ fn validate_pkg_command(command: &PkgCommands) -> Result<(), String> {
             validate_non_empty(package, "package")?;
             validate_optional_path(pkg_file.as_deref(), "--pkg-file")
         }
+        PkgCommands::Explain {
+            package,
+            ecosystem,
+            pkg_file,
+        } => {
+            validate_non_empty(package, "package")?;
+            validate_optional_ecosystem(ecosystem.as_deref(), "--ecosystem")?;
+            validate_optional_path(pkg_file.as_deref(), "--pkg-file")
+        }
         PkgCommands::Diff {
             package,
             v1,
@@ -173,17 +199,23 @@ fn validate_flow_action(action: &FlowAction) -> Result<(), String> {
         FlowAction::Run {
             id,
             base_url,
+            format,
             output,
             ..
         } => {
             validate_id(id, "flow id")?;
             validate_optional_url(base_url.as_deref(), "--base-url")?;
+            validate_optional_flow_format(format.as_deref(), "--format")?;
             validate_optional_output_format(output.as_deref())
         }
         FlowAction::RunAll {
-            base_url, output, ..
+            base_url,
+            format,
+            output,
+            ..
         } => {
             validate_optional_url(base_url.as_deref(), "--base-url")?;
+            validate_optional_flow_format(format.as_deref(), "--format")?;
             validate_optional_output_format(output.as_deref())
         }
         FlowAction::Merge {
@@ -315,6 +347,17 @@ fn validate_optional_output_format(value: Option<&str>) -> Result<(), String> {
         match value.trim().to_ascii_lowercase().as_str() {
             "markdown" | "pdf" | "both" => Ok(()),
             _ => Err("Output format must be one of: markdown | pdf | both.".to_string()),
+        }
+    } else {
+        Ok(())
+    }
+}
+
+fn validate_optional_flow_format(value: Option<&str>, flag: &str) -> Result<(), String> {
+    if let Some(value) = value {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "json" | "markdown" | "junit" => Ok(()),
+            _ => Err(format!("{} must be one of: json | markdown | junit.", flag)),
         }
     } else {
         Ok(())

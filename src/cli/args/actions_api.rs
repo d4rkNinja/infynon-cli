@@ -30,7 +30,10 @@ pub enum ApiCommands {
         ai: bool,
     },
     #[command(name = "detach")]
-    Detach { from: String, to: String },
+    Detach {
+        from: String,
+        to: String,
+    },
     #[command(name = "ai")]
     Ai {
         #[command(subcommand)]

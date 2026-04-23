@@ -100,8 +100,10 @@ What it gives you:
 
 ```bash
 infynon pkg scan
+infynon pkg scan --json
 infynon pkg audit
-infynon pkg npm install express --strict high
+infynon pkg explain serde_json
+infynon pkg npm install express --strict high --no-input
 infynon pkg fix --auto
 ```
 
@@ -121,8 +123,8 @@ What it gives you:
 infynon weave env set BASE_URL http://localhost:8001
 infynon weave node create --ai "POST /auth/login extracts token"
 infynon weave flow create "checkout" --ai "login then create order"
-infynon weave flow run checkout
-infynon weave ai probe checkout
+infynon weave flow run checkout --format json --no-input
+infynon weave flow run checkout --format junit --no-input
 ```
 
 ### `infynon trace`
@@ -145,9 +147,9 @@ What it gives you:
 - export to JSON and Graphviz DOT, import from JSON
 
 ```bash
-infynon trace init --owner team --user alien
-infynon trace source add-sql team-db --engine sqlite --url sqlite://.infynon/trace/trace.db --user alien --default
+infynon trace init
 infynon trace note add repo-handoff --title "Auth changed" --body "Refresh moved into middleware"
+infynon trace retrieve --scope branch --target feature/auth-refresh --format markdown
 infynon trace sync --direction both
 infynon trace tui
 infynon trace graph build

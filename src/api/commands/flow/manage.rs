@@ -1,41 +1,83 @@
 pub fn cmd_flow_run_all(
     base_url_override: Option<&str>,
     set_vars: &[(String, String)],
+    format: Option<&str>,
     output: Option<&str>,
-) {
+    no_input: bool,
+) -> i32 {
     let flows = storage::list_flows();
     if flows.is_empty() {
-        println!();
-        println!("  No flows to run.");
-        println!();
-        return;
+        if let Some(stdout_format) = format {
+            render_run_suite(&[], stdout_format);
+        } else {
+            println!();
+            println!("  No flows to run.");
+            println!();
+        }
+        return 0;
     }
 
-    println!();
-    Logger::title(&format!("Running all {} flow(s)", flows.len()), "cyan");
+    let human_output = format.is_none();
+    if human_output {
+        println!();
+        Logger::title(&format!("Running all {} flow(s)", flows.len()), "cyan");
+    }
 
-    let mut passed = 0;
-    let mut failed = 0;
+    let mut records = Vec::new();
 
     for flow in &flows {
-        cmd_flow_run(&flow.id, base_url_override, set_vars, output);
-        let runs = storage::load_recent_runs(&flow.id, 1);
-        if let Some(run) = runs.first() {
-            if run.passed {
-                passed += 1;
-            } else {
-                failed += 1;
+        match run_flow_once(
+            &flow.id,
+            base_url_override,
+            set_vars,
+            no_input,
+            human_output,
+        ) {
+            Ok(result) => {
+                if let Err(e) = storage::save_run_result(&result) {
+                    Logger::error(&format!("Could not save run result: {}", e));
+                }
+                if let Some(report_format) = output {
+                    save_run_report_pub(&result, report_format);
+                }
+                let exit_code = classify_flow_result(&result);
+                records.push(FlowRunRecord {
+                    flow_id: result.flow_id.clone(),
+                    flow_name: result.flow_name.clone(),
+                    exit_code,
+                    result: Some(result),
+                    error: None,
+                });
+            }
+            Err(failure) => {
+                if human_output {
+                    Logger::error(&format!("Flow '{}': {}", flow.id, failure.message));
+                }
+                records.push(FlowRunRecord {
+                    flow_id: failure.flow_id,
+                    flow_name: failure.flow_name,
+                    exit_code: failure.code,
+                    result: None,
+                    error: Some(failure.message),
+                });
             }
         }
     }
 
-    println!();
-    println!(
-        "  Summary: {} passed, {} failed",
-        passed.to_string().bright_green(),
-        failed.to_string().bright_red()
-    );
-    println!();
+    if let Some(stdout_format) = format {
+        render_run_suite(&records, stdout_format);
+    } else {
+        let passed = records
+            .iter()
+            .filter(|record| record.exit_code == 0)
+            .count();
+        let failed = records.len().saturating_sub(passed);
+        println!();
+        println!("  Summary: {} passed, {} failed", passed, failed);
+        println!();
+    }
+
+    suite_exit_code(&records)
 }
 
 // ── flow remove ───────────────────────────────────────────────────────────────
@@ -123,4 +165,3 @@ pub fn cmd_flow_merge(flow1_id: &str, flow2_id: &str, join_at: &str, new_name: &
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
-
