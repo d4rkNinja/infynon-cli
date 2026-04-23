@@ -93,6 +93,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Switch to latest main
+        shell: bash
+        run: |
+          git fetch origin main
+          git switch -C main origin/main
 
       - name: Sync version in Go wrapper
         shell: bash
@@ -109,7 +116,7 @@ jobs:
           git add go/main.go
           git diff --cached --quiet && echo "No changes" && exit 0
           git commit -m "ci: sync go wrapper version to ${GITHUB_REF_NAME}"
-          git push origin HEAD:main
+          git push origin main
 
       - name: Trigger Go proxy indexing
         run: |
