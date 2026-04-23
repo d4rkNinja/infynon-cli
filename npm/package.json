@@ -1,10 +1,10 @@
 {
   "name": "infynon",
-  "version": "0.2.0-beta.9.0.2",
+  "version": "0.2.0-beta.9.0.3",
   "description": "Security CLI for developers: scan npm/pip/cargo installs for CVEs before execution, self-hosted reverse proxy WAF with TUI, and API flow security testing across 14 ecosystems.",
   "bin": {
-    "infynon": "./run.js",
-    "infynon-pkg": "./run.js"
+    "infynon": "run.js",
+    "infynon-pkg": "run.js"
   },
   "scripts": {
     "postinstall": "node postinstall.js",
@@ -49,10 +49,14 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/d4rkNinja/infynon-cli"
+    "url": "git+https://github.com/d4rkNinja/infynon-cli.git"
   },
   "bugs": {
     "url": "https://github.com/d4rkNinja/infynon-cli/issues"
   },
-  "homepage": "https://cli.infynon.com/docs"
+  "homepage": "https://cli.infynon.com/docs",
+  "publishConfig": {
+    "access": "public",
+    "tag": "beta"
+  }
 }

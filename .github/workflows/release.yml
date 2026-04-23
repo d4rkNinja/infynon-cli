@@ -168,6 +168,6 @@ jobs:
 
       - name: Publish
         working-directory: npm
-        run: npm publish --access public
+        run: npm publish --access public --tag beta
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

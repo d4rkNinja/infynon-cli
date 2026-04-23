@@ -148,6 +148,8 @@ What each one is for:
   Inspect package footprint when dependency weight matters.
 - `infynon pkg search <query>`
   Search for packages before deciding what to install.
+  Supports npm/yarn/pnpm/bun, pip/uv/poetry, cargo, go, gem, composer, nuget, hex, and pub.
+  PyPI-backed search currently uses exact package lookup when the registry search endpoint is unavailable.
 - `infynon pkg fix --auto`
   Apply remediation automatically where the tool can do so safely.
 - `infynon pkg clean`

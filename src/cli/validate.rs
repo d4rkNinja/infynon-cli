@@ -5,8 +5,16 @@ use crate::cli::args::{
 use std::path::Path;
 
 const KNOWN_ECOSYSTEMS: &[&str] = &[
-    "npm", "yarn", "pnpm", "bun", "pip", "uv", "poetry", "cargo", "go", "gem", "composer", "nuget",
-    "hex", "pub", "postgres", "mysql", "sqlite",
+    "npm", "yarn", "pnpm", "bun",
+    "pip", "pip3", "pypi", "uv", "poetry",
+    "cargo", "crates.io",
+    "go", "golang",
+    "gem", "rubygems",
+    "composer", "packagist",
+    "nuget", "dotnet",
+    "hex", "mix",
+    "pub", "pub.dev", "dart",
+    "postgres", "mysql", "sqlite",
 ];
 
 pub fn validate_pkg_args(args: &PkgArgs) -> Result<(), String> {
