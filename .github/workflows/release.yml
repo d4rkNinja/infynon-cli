@@ -102,7 +102,6 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Verify version in Go wrapper
-        run: |
         run: python3 scripts/verify-release-versions.py "${GITHUB_REF_NAME}"
 
       - name: Trigger Go proxy indexing
