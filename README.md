@@ -5,7 +5,7 @@
 [![MIT License](https://img.shields.io/badge/license-MIT-0f172a?style=flat-square)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-cli.infynon.com-14b8a6?style=flat-square)](https://cli.infynon.com/docs)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-code--guardian-7c3aed?style=flat-square)](https://github.com/d4rkNinja/code-guardian)
-[![npm downloads](https://img.shields.io/badge/dynamic/json?style=flat-square&logo=npm&label=npm%20downloads%20(since%202024-10-28%3A2029-12-28)&query=%24.downloads&url=https%3A%2F%2Fapi.npmjs.org%2Fdownloads%2Fpoint%2F2024-10-28%3A2029-12-28%2Finfynon)](https://www.npmjs.com/package/infynon)
+[![npm downloads](https://img.shields.io/badge/dynamic/json?style=flat-square&logo=npm&label=npm%20downloads%20&query=%24.downloads&url=https%3A%2F%2Fapi.npmjs.org%2Fdownloads%2Fpoint%2F2024-10-28%3A2029-12-28%2Finfynon)](https://www.npmjs.com/package/infynon)
 
 INFYNON is a Rust CLI for three workflow problems:
 
