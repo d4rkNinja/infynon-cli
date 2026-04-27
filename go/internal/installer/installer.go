@@ -11,10 +11,10 @@ import (
 	"time"
 )
 
-const (
-	repo    = "d4rkNinja/infynon-cli"
-	version = "0.2.0-beta.9.0.7"
-)
+	const (
+		repo    = "d4rkNinja/infynon-cli"
+		version = "0.2.0-beta.9.0.8"
+	)
 
 func targetTriple() (target, ext string, ok bool) {
 	switch runtime.GOOS + "/" + runtime.GOARCH {

@@ -1,6 +1,6 @@
 {
   "name": "infynon",
-  "version": "0.2.0-beta.9.0.7",
+  "version": "0.2.0-beta.9.0.8",
   "description": "Package intelligence, API flow testing, and repo memory for AI-assisted backend teams.",
   "bin": {
     "infynon": "run.js",
