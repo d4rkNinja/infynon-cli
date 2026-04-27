@@ -1,8 +1,8 @@
 use crate::trace::{
     storage,
     types::{
-        EntityKind, KgEdge, KgEntity, KgGraph, NoteStatus, PackageRisk, RelationType, TraceLayer,
-        TraceNote, TraceScope,
+        EntityKind, KgEdge, KgEntity, NoteStatus, PackageRisk, RelationType, TraceLayer, TraceNote,
+        TraceScope,
     },
 };
 use chrono::Utc;
@@ -93,8 +93,9 @@ impl TraceTab {
 
 // ─── Edit fields ──────────────────────────────────────────────────────────────
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Default)]
 enum EditField {
+    #[default]
     Id,
     Title,
     Body,
@@ -103,12 +104,6 @@ enum EditField {
     Target,
     Author,
     Tags,
-}
-
-impl Default for EditField {
-    fn default() -> Self {
-        EditField::Id
-    }
 }
 
 impl EditField {
@@ -191,8 +186,9 @@ impl_field_accessors!(NoteForm, EditField, {
 
 // ─── KG Entity form ──────────────────────────────────────────────────────────
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Default)]
 enum KgEntityField {
+    #[default]
     Name,
     Kind,
     Branch,
@@ -216,12 +212,6 @@ impl KgEntityField {
 }
 
 impl_field_nav!(KgEntityField);
-
-impl Default for KgEntityField {
-    fn default() -> Self {
-        Self::Name
-    }
-}
 
 struct KgEntityForm {
     name: String,
@@ -270,8 +260,9 @@ impl_field_accessors!(KgEntityForm, KgEntityField, {
 
 // ─── KG Edge form ────────────────────────────────────────────────────────────
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Default)]
 enum KgEdgeField {
+    #[default]
     From,
     To,
     Relation,
@@ -304,12 +295,6 @@ impl KgEdgeField {
 }
 
 impl_field_nav!(KgEdgeField);
-
-impl Default for KgEdgeField {
-    fn default() -> Self {
-        Self::From
-    }
-}
 
 struct KgEdgeForm {
     from: String,

@@ -11,8 +11,8 @@ Write-Host ""
 # Detect arch
 $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
 $target = "x86_64-pc-windows-msvc"
-if ($arch -eq "Arm64") {
-    Write-Host "  [!!] ARM64 Windows not yet supported. Install from source:" -ForegroundColor Yellow
+if ($arch -ne "X64") {
+    Write-Host "  [!!] Windows $arch is not supported by prebuilt releases. Install from source:" -ForegroundColor Yellow
     Write-Host "    cargo install --git https://github.com/$repo"
     exit 1
 }
@@ -55,7 +55,25 @@ $url = "https://github.com/$repo/releases/download/$tag/$binary"
 Write-Host "  Downloading $url ..." -ForegroundColor Gray
 
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
-Invoke-WebRequest -Uri $url -OutFile "$installDir\infynon.exe"
+try {
+    Invoke-WebRequest -Uri $url -OutFile "$installDir\infynon.exe"
+} catch {
+    Write-Host "  [!!] Download failed. Building from source..." -ForegroundColor Yellow
+    $cargo = Get-Command cargo -ErrorAction SilentlyContinue
+    if (-not $cargo) {
+        Write-Host "  Installing Rust..." -ForegroundColor Yellow
+        Invoke-WebRequest -Uri "https://win.rustup.rs/x86_64" -OutFile "$env:TEMP\rustup-init.exe"
+        & "$env:TEMP\rustup-init.exe" -y
+        $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
+    }
+    cargo install --git "https://github.com/$repo"
+    $cargoBin = "$env:USERPROFILE\.cargo\bin"
+    if (Test-Path "$cargoBin\infynon.exe") {
+        Copy-Item "$cargoBin\infynon.exe" "$installDir\infynon.exe" -Force
+    } else {
+        throw "cargo install completed but infynon.exe was not found"
+    }
+}
 
 # Create copy for infynon-pkg
 Copy-Item "$installDir\infynon.exe" "$installDir\infynon-pkg.exe"

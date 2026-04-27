@@ -1,18 +1,11 @@
 use super::types::EagleEyeConfig;
-use std::path::PathBuf;
 
-pub(super) fn config_path() -> PathBuf {
+pub(super) fn config_path() -> std::path::PathBuf {
     config_dir().join("eagle-eye.toml")
 }
 
-pub(super) fn config_dir() -> PathBuf {
-    if let Ok(home) = std::env::var("HOME") {
-        PathBuf::from(home).join(".infynon")
-    } else if let Ok(profile) = std::env::var("USERPROFILE") {
-        PathBuf::from(profile).join(".infynon")
-    } else {
-        PathBuf::from(".infynon")
-    }
+pub(super) fn config_dir() -> std::path::PathBuf {
+    crate::utils::home_infynon_dir()
 }
 
 pub(super) fn load_config() -> EagleEyeConfig {

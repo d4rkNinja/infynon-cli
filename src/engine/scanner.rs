@@ -11,6 +11,43 @@ pub struct LockedPackage {
     pub source: String,
 }
 
+fn exact_manifest_version(raw: &str) -> Option<String> {
+    let value = raw
+        .trim()
+        .trim_matches('"')
+        .trim_matches('\'')
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim();
+    if value.is_empty()
+        || value == "*"
+        || value.contains(|c: char| c.is_whitespace())
+        || value.starts_with("workspace:")
+        || value.starts_with("file:")
+        || value.starts_with("path:")
+        || value.starts_with("git")
+        || value.starts_with("http:")
+        || value.starts_with("https:")
+        || value
+            .chars()
+            .any(|c| matches!(c, '^' | '~' | '<' | '>' | '=' | '*'))
+    {
+        return None;
+    }
+    let normalized = value.trim_start_matches('v');
+    if normalized
+        .chars()
+        .next()
+        .map(|c| c.is_ascii_digit())
+        .unwrap_or(false)
+    {
+        Some(normalized.to_string())
+    } else {
+        None
+    }
+}
+
 pub fn detect_locked_packages(custom_file: Option<&str>) -> Vec<LockedPackage> {
     if let Some(path) = custom_file {
         return parse_custom_file(path);

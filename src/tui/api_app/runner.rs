@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::mpsc;
 
 use crate::api::storage;
-use crate::api::types::{Flow, FlowRunResult};
+use crate::api::types::Flow;
 
 use super::types::*;
 
@@ -77,7 +77,7 @@ impl super::app_state::ApiApp {
         let base_url = match flow
             .base_url
             .clone()
-            .or_else(|| crate::api::commands::env::env_base_url())
+            .or_else(crate::api::commands::env::env_base_url)
         {
             Some(u) => u,
             None => {
@@ -153,7 +153,7 @@ impl super::app_state::ApiApp {
         let base_url = match self
             .active_flow()
             .and_then(|f| f.base_url.clone())
-            .or_else(|| crate::api::commands::env::env_base_url())
+            .or_else(crate::api::commands::env::env_base_url)
         {
             Some(u) => u,
             None => {
@@ -215,6 +215,7 @@ impl super::app_state::ApiApp {
         self.runner_subview = RunnerSubview::Steps;
     }
 
+    #[allow(clippy::while_let_loop)]
     pub fn poll_run_events(&mut self) {
         loop {
             let event = match &self.run_rx {
@@ -290,7 +291,7 @@ impl super::app_state::ApiApp {
     pub fn load_comparison_run(&mut self) {
         if let Some(flow) = self.active_flow() {
             let runs = storage::load_recent_runs(&flow.id, 2);
-            self.last_run = runs.get(0).cloned();
+            self.last_run = runs.first().cloned();
             self.compare_run = runs.get(1).cloned();
         }
     }

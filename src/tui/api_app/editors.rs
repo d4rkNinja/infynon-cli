@@ -212,7 +212,7 @@ impl super::app_state::ApiApp {
                 raw
             };
             let json_val = serde_json::from_str::<serde_json::Value>(&val)
-                .unwrap_or_else(|_| serde_json::Value::String(val));
+                .unwrap_or(serde_json::Value::String(val));
             map.insert(pi.var.clone(), json_val);
         }
         if let Some(tx) = &self.prompt_reply_tx {

@@ -24,8 +24,8 @@ pub(super) fn render_node_detail_overlay(f: &mut Frame, app: &ApiApp, area: Rect
         None => return,
     };
 
-    let w = (area.width * 3 / 4).max(42).min(64);
-    let h = (area.height * 3 / 4).max(16).min(28);
+    let w = (area.width * 3 / 4).clamp(42, 64);
+    let h = (area.height * 3 / 4).clamp(16, 28);
     let x = area.x + (area.width.saturating_sub(w)) / 2;
     let y = area.y + (area.height.saturating_sub(h)) / 2;
     let overlay_area = Rect {
@@ -269,8 +269,8 @@ pub(super) fn render_attach_overlay(f: &mut Frame, app: &ApiApp, area: Rect) {
 // ── Help overlay ──────────────────────────────────────────────────────────────
 
 pub(super) fn render_help_overlay(f: &mut Frame, area: Rect) {
-    let w = (area.width * 4 / 5).max(50).min(68);
-    let h = (area.height * 4 / 5).max(22).min(30);
+    let w = (area.width * 4 / 5).clamp(50, 68);
+    let h = (area.height * 4 / 5).clamp(22, 30);
     let x = area.x + (area.width.saturating_sub(w)) / 2;
     let y = area.y + (area.height.saturating_sub(h)) / 2;
     let overlay_area = Rect {

@@ -19,7 +19,7 @@ fn normalize_user(s: &str) -> Option<String> {
 }
 
 pub fn trace_dir() -> PathBuf {
-    PathBuf::from(".infynon").join("trace")
+    crate::utils::project_infynon_path(&["trace"])
 }
 
 pub fn ensure_layout() -> Result<(), String> {
@@ -45,17 +45,12 @@ pub fn sync_state_path() -> PathBuf {
     trace_dir().join("state").join("sync.json")
 }
 
-fn storage_key(input: &str) -> String {
-    let mut out = String::with_capacity(input.len() * 2 + 3);
-    out.push_str("id-");
-    for byte in input.as_bytes() {
-        out.push_str(&format!("{:02x}", byte));
-    }
-    out
+fn stable_trace_id(prefix: &str, raw: &str) -> String {
+    format!("{}-{}", prefix, crate::utils::storage_key(raw))
 }
 
-fn stable_trace_id(prefix: &str, raw: &str) -> String {
-    format!("{}-{}", prefix, storage_key(raw))
+fn storage_key(input: &str) -> String {
+    crate::utils::storage_key(input)
 }
 
 fn edge_dedupe_key(source: &str, target: &str, relation: RelationType) -> String {

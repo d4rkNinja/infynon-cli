@@ -17,7 +17,7 @@ pub fn execute_pkg_passthrough(args: &PkgArgs) -> Result<(), InfynonError> {
         .passthrough_args
         .get(cmd_idx)
         .cloned()
-        .filter(is_install_action)
+        .filter(|action| is_install_action(action))
         .unwrap_or_default();
     let install_packages = if install_action.is_empty() {
         Vec::new()
@@ -25,31 +25,37 @@ pub fn execute_pkg_passthrough(args: &PkgArgs) -> Result<(), InfynonError> {
         args.passthrough_args[cmd_idx + 1..].to_vec()
     };
 
-    let binary = match ensure_installed(ecosystem) {
+    let binary = match ensure_installed(&ecosystem) {
         Some(value) => value,
         None => return Ok(()),
     };
     if !args.machine_output() {
         Logger::subtitle("🛡️", "INFYNON Secure Proxy", "Active");
-        Logger::detail("» Ecosystem:", ecosystem);
+        Logger::detail("» Ecosystem:", &ecosystem);
         Logger::success(&format!("'{}' binary found — proceeding", binary));
     }
 
     if install_packages.is_empty() {
-        run_passthrough_command(ecosystem, &binary, &args.passthrough_args[cmd_idx..]);
+        run_passthrough_command(&ecosystem, &binary, &args.passthrough_args[cmd_idx..]);
         return Ok(());
     }
-    run_install_flow(args, ecosystem, &binary, &install_action, &install_packages)
+    run_install_flow(
+        args,
+        &ecosystem,
+        &binary,
+        &install_action,
+        &install_packages,
+    )
 }
 
-fn detect_passthrough_ecosystem(args: &PkgArgs) -> (&'static str, usize) {
+fn detect_passthrough_ecosystem(args: &PkgArgs) -> (String, usize) {
     let first_arg = &args.passthrough_args[0];
     let known = [
         "npm", "yarn", "pnpm", "bun", "pip", "uv", "poetry", "cargo", "go", "gem", "composer",
         "nuget", "hex", "pub",
     ];
     if known.contains(&first_arg.as_str()) {
-        return (Box::leak(first_arg.clone().into_boxed_str()), 1);
+        return (first_arg.clone(), 1);
     }
     let exists = |file: &str| Path::new(file).exists();
     let ecosystem = if exists("package.json") && exists("bun.lockb") || exists("bun.lockb") {
@@ -85,12 +91,12 @@ fn detect_passthrough_ecosystem(args: &PkgArgs) -> (&'static str, usize) {
     } else {
         "auto-detected"
     };
-    (ecosystem, 0)
+    (ecosystem.to_string(), 0)
 }
 
-fn is_install_action(action: &String) -> bool {
+fn is_install_action(action: &str) -> bool {
     matches!(
-        action.as_str(),
+        action,
         "install" | "add" | "i" | "require" | "get" | "update" | "upgrade" | "up"
     )
 }
@@ -183,7 +189,9 @@ fn handle_install_check_error(
     err: String,
 ) -> Result<(), InfynonError> {
     if args.machine_output() {
-        println!("{}", serde_json::to_string_pretty(&serde_json::json!({"schema_version":"infynon.pkg.install.v1","status":"error","error":err,"packages_checked":install_packages,"installed":false})).unwrap());
+        crate::utils::print_json_pretty(
+            &serde_json::json!({"schema_version":"infynon.pkg.install.v1","status":"error","error":err,"packages_checked":install_packages,"installed":false}),
+        );
         std::process::exit(EXIT_INSTALL_CHECK_ERROR);
     }
     Logger::error(&format!("Security gate blocked install: {}", err));
@@ -234,7 +242,9 @@ fn handle_strict_block(
 ) {
     if agent {
         let vulns: Vec<_> = hits.iter().map(hit_to_json).collect();
-        println!("{}", serde_json::to_string_pretty(&serde_json::json!({"schema_version":"infynon.pkg.install.v1","status":"blocked","packages_checked":install_packages,"vulnerabilities":vulns,"installed":false,"blocked_by":format!("--strict {}", strict)})).unwrap());
+        crate::utils::print_json_pretty(
+            &serde_json::json!({"schema_version":"infynon.pkg.install.v1","status":"blocked","packages_checked":install_packages,"vulnerabilities":vulns,"installed":false,"blocked_by":format!("--strict {}", strict)}),
+        );
         std::process::exit(EXIT_STRICT_BLOCK);
     }
     let label = if strict == "all" {
@@ -255,7 +265,9 @@ fn handle_strict_block(
 fn handle_input_required(agent: bool, install_packages: &[String], hits: &[scan::VulnHit]) {
     if agent {
         let vulns: Vec<_> = hits.iter().map(hit_to_json).collect();
-        println!("{}", serde_json::to_string_pretty(&serde_json::json!({"schema_version":"infynon.pkg.install.v1","status":"input_required","error":"Vulnerable packages require an explicit non-interactive decision. Use --yes, --skip-vulnerable, --auto-fix, or --strict.","packages_checked":install_packages,"vulnerabilities":vulns,"installed":false})).unwrap());
+        crate::utils::print_json_pretty(
+            &serde_json::json!({"schema_version":"infynon.pkg.install.v1","status":"input_required","error":"Vulnerable packages require an explicit non-interactive decision. Use --yes, --skip-vulnerable, --auto-fix, or --strict.","packages_checked":install_packages,"vulnerabilities":vulns,"installed":false}),
+        );
         std::process::exit(EXIT_INPUT_REQUIRED);
     }
     Logger::error("Interactive review is disabled, but vulnerable packages require a decision.");
@@ -399,7 +411,9 @@ fn emit_agent_result(
     } else {
         1
     };
-    println!("{}", serde_json::to_string_pretty(&serde_json::json!({"schema_version":"infynon.pkg.install.v1","status":status,"packages_checked":install_packages,"vulnerabilities":hits.iter().map(hit_to_json).collect::<Vec<_>>(),"installed":installed,"install_cmd":cmd})).unwrap());
+    crate::utils::print_json_pretty(
+        &serde_json::json!({"schema_version":"infynon.pkg.install.v1","status":status,"packages_checked":install_packages,"vulnerabilities":hits.iter().map(hit_to_json).collect::<Vec<_>>(),"installed":installed,"install_cmd":cmd}),
+    );
     std::process::exit(exit_code);
 }
 

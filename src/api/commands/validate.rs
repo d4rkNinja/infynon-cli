@@ -115,10 +115,8 @@ pub fn cmd_validate() {
         }
 
         // Check for cycles via DFS
-        if errors.is_empty() {
-            if has_cycle(flow) {
-                errors.push("circular dependency detected".to_string());
-            }
+        if errors.is_empty() && has_cycle(flow) {
+            errors.push("circular dependency detected".to_string());
         }
 
         let node_count = flow.all_node_ids().len();
@@ -195,10 +193,8 @@ fn has_cycle(flow: &crate::api::types::Flow) -> bool {
 
     let all_ids: Vec<String> = flow.all_node_ids();
     for node_id in &all_ids {
-        if !visited.contains(node_id) {
-            if dfs(node_id, flow, &mut visited, &mut rec_stack) {
-                return true;
-            }
+        if !visited.contains(node_id) && dfs(node_id, flow, &mut visited, &mut rec_stack) {
+            return true;
         }
     }
     false

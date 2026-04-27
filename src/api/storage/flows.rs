@@ -4,7 +4,7 @@ pub fn save_flow(flow: &Flow) -> Result<PathBuf, String> {
         return save_flow_yaml(flow);
     }
     let dir = flows_dir();
-    let path = dir.join(format!("{}.toml", flow.id));
+    let path = definition_path(&dir, &flow.id, "toml");
     let content =
         toml::to_string_pretty(flow).map_err(|e| format!("Failed to serialize flow: {}", e))?;
     fs::write(&path, content).map_err(|e| format!("Failed to write flow file: {}", e))?;
@@ -15,7 +15,7 @@ pub fn load_flow(id: &str) -> Result<Flow, String> {
     if let Some(path) = existing_definition_path(&flows_dir(), id) {
         return load_flow_from_path(&path);
     }
-    load_flow_from_path(&flows_dir().join(format!("{}.toml", id)))
+    load_flow_from_path(&definition_path(&flows_dir(), id, "toml"))
 }
 
 pub fn load_flow_from_path(path: &Path) -> Result<Flow, String> {

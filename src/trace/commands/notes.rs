@@ -151,6 +151,7 @@ fn cmd_note_list() -> i32 {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn cmd_retrieve(
     layer: Option<&str>,
     scope: Option<&str>,
@@ -338,8 +339,8 @@ fn print_notes(notes: &[TraceNote]) {
         return;
     }
     println!(
-        "  {:<16} {:<10} {:<10} {:<10} {:<16} {}",
-        "ID", "LAYER", "SCOPE", "STATUS", "AUTHOR", "TITLE"
+        "  {:<16} {:<10} {:<10} {:<10} {:<16} TITLE",
+        "ID", "LAYER", "SCOPE", "STATUS", "AUTHOR"
     );
     println!("  {}", "-".repeat(90));
     for note in notes {
@@ -394,7 +395,7 @@ fn print_notes_json(notes: &[TraceNote]) {
         "count":notes.len(),
         "notes":notes
     });
-    println!("{}", serde_json::to_string_pretty(&payload).unwrap());
+    crate::utils::print_json_pretty(&payload);
 }
 
 fn parse_layer(value: &str) -> Result<TraceLayer, String> {

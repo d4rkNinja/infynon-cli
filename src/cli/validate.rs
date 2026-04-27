@@ -4,36 +4,6 @@ use crate::cli::args::{
 };
 use std::path::Path;
 
-const KNOWN_ECOSYSTEMS: &[&str] = &[
-    "npm",
-    "yarn",
-    "pnpm",
-    "bun",
-    "pip",
-    "pip3",
-    "pypi",
-    "uv",
-    "poetry",
-    "cargo",
-    "crates.io",
-    "go",
-    "golang",
-    "gem",
-    "rubygems",
-    "composer",
-    "packagist",
-    "nuget",
-    "dotnet",
-    "hex",
-    "mix",
-    "pub",
-    "pub.dev",
-    "dart",
-    "postgres",
-    "mysql",
-    "sqlite",
-];
-
 pub fn validate_pkg_args(args: &PkgArgs) -> Result<(), String> {
     validate_optional_severity(args.strict.as_deref(), "--strict")?;
     validate_optional_path(args.pkg_file.as_deref(), "--pkg-file")?;
@@ -418,7 +388,7 @@ fn validate_optional_ecosystem(value: Option<&str>, label: &str) -> Result<(), S
 
 fn validate_ecosystem(value: &str, label: &str) -> Result<(), String> {
     let trimmed = value.trim().to_ascii_lowercase();
-    if KNOWN_ECOSYSTEMS.contains(&trimmed.as_str()) {
+    if crate::ecosystems::catalog::is_known_ecosystem(&trimmed) {
         Ok(())
     } else {
         Err(format!("{} '{}' is not supported.", label, value))

@@ -1,4 +1,4 @@
-use std::process::{Command, Stdio};
+use std::path::{Path, PathBuf};
 
 // ── Binary detection ──────────────────────────────────────────────────────────
 
@@ -22,12 +22,12 @@ pub fn is_installed(binary: &str) -> bool {
 /// Tries the primary name first, then falls through alternatives.
 /// Falls back to the primary name if nothing is found (command will fail with a clear OS error).
 pub fn resolve_binary(primary: &str) -> String {
-    if native_which(primary) {
-        return primary.to_string();
+    if let Some(path) = find_on_path(primary) {
+        return path.to_string_lossy().to_string();
     }
     for alt in alt_binaries(primary) {
-        if native_which(alt) {
-            return alt.to_string();
+        if let Some(path) = find_on_path(alt) {
+            return path.to_string_lossy().to_string();
         }
     }
     primary.to_string()
@@ -35,28 +35,52 @@ pub fn resolve_binary(primary: &str) -> String {
 
 /// Run the OS-native binary resolver.
 fn native_which(binary: &str) -> bool {
-    #[cfg(target_os = "windows")]
-    {
-        // `where` is built into Windows and correctly resolves .cmd/.bat/.exe/.ps1 in PATH
-        Command::new("where")
-            .arg(binary)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
+    find_on_path(binary).is_some()
+}
+
+fn find_on_path(binary: &str) -> Option<PathBuf> {
+    let input = Path::new(binary);
+    if input.components().count() > 1 {
+        return is_executable_file(input).then(|| input.to_path_buf());
     }
-    #[cfg(not(target_os = "windows"))]
-    {
-        // `which` is POSIX standard and available on macOS and all major Linux distros
-        Command::new("which")
-            .arg(binary)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
+
+    let path = std::env::var_os("PATH")?;
+    for dir in std::env::split_paths(&path) {
+        for candidate in executable_names(binary) {
+            let full = dir.join(candidate);
+            if is_executable_file(&full) {
+                return Some(full);
+            }
+        }
     }
+    None
+}
+
+fn is_executable_file(path: &Path) -> bool {
+    path.is_file()
+}
+
+#[cfg(windows)]
+fn executable_names(binary: &str) -> Vec<String> {
+    let path = Path::new(binary);
+    if path.extension().is_some() {
+        return vec![binary.to_string()];
+    }
+    let pathext = std::env::var_os("PATHEXT")
+        .map(|value| value.to_string_lossy().to_string())
+        .unwrap_or_else(|| ".COM;.EXE;.BAT;.CMD".to_string());
+    let mut names: Vec<String> = pathext
+        .split(';')
+        .filter(|ext| !ext.trim().is_empty())
+        .map(|ext| format!("{}{}", binary, ext.trim().to_ascii_lowercase()))
+        .collect();
+    names.push(binary.to_string());
+    names
+}
+
+#[cfg(not(windows))]
+fn executable_names(binary: &str) -> Vec<String> {
+    vec![binary.to_string()]
 }
 
 /// Alternative binary names to try when the primary name is not found.
@@ -216,7 +240,7 @@ pub fn install_instructions(pm: &str) -> Option<EcosystemInfo> {
 
 enum Os {
     Windows,
-    MacOs,
+    Mac,
     Linux,
     Unknown,
 }
@@ -229,7 +253,7 @@ impl Os {
         }
         #[cfg(target_os = "macos")]
         {
-            return Os::MacOs;
+            return Os::Mac;
         }
         #[cfg(target_os = "linux")]
         {
@@ -243,7 +267,7 @@ impl Os {
     fn cmd(&self, win: &str, mac: &str, linux: &str) -> String {
         match self {
             Os::Windows => win.to_string(),
-            Os::MacOs => mac.to_string(),
+            Os::Mac => mac.to_string(),
             Os::Linux | Os::Unknown => linux.to_string(),
         }
     }

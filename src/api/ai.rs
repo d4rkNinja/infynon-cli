@@ -181,7 +181,7 @@ pub fn suggest_next_nodes(current: &Node, candidates: &[Node]) -> Vec<NodeSugges
     }
 
     // Sort by confidence descending
-    suggestions.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
+    suggestions.sort_by(|a, b| b.confidence.total_cmp(&a.confidence));
     suggestions
 }
 
@@ -354,7 +354,7 @@ pub fn generate_extractions(node: &Node) -> Vec<Extraction> {
             .path
             .trim_end_matches('/')
             .split('/')
-            .last()
+            .next_back()
             .unwrap_or("resource")
             .trim_matches(|c| c == '{' || c == '}');
         let resource = resource.trim_end_matches('s'); // rough singularize: "users" → "user"
@@ -398,7 +398,7 @@ pub fn run_security_probes(
 }
 
 fn probe_auth_bypass(
-    flow: &crate::api::types::Flow,
+    _flow: &crate::api::types::Flow,
     nodes: &HashMap<String, Node>,
     run_result: &FlowRunResult,
     base_url: &str,
@@ -455,7 +455,7 @@ fn probe_auth_bypass(
 
 fn probe_missing_rate_limit(
     nodes: &HashMap<String, Node>,
-    run_result: &FlowRunResult,
+    _run_result: &FlowRunResult,
     base_url: &str,
 ) -> SecurityProbeResult {
     use crate::api::executor;
@@ -515,7 +515,7 @@ fn probe_missing_rate_limit(
 
 fn probe_sql_injection(
     node: &Node,
-    run_result: &FlowRunResult,
+    _run_result: &FlowRunResult,
     base_url: &str,
 ) -> SecurityProbeResult {
     use crate::api::executor;

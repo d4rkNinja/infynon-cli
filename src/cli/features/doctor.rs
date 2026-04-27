@@ -36,7 +36,7 @@ pub fn cmd_doctor(pkg_file: Option<&str>) {
         if vers.len() > 1 {
             found_dupes = true;
             warnings += 1;
-            let name = key.splitn(2, ':').nth(1).unwrap_or("?");
+            let name = key.split_once(':').map(|x| x.1).unwrap_or("?");
             println!(
                 "     {} {} has {} versions: {}",
                 "⚠".bright_yellow(),

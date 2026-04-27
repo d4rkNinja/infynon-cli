@@ -296,12 +296,10 @@ fn convert_yaml_node(y: YamlNode) -> Node {
         .assertions
         .into_iter()
         .map(|a| {
-            let check_expr = if !matches!(a.check, serde_yaml::Value::Null) {
+            let check_expr: String = if !matches!(a.check, serde_yaml::Value::Null) {
                 yaml_assertion_to_expr(&a.check)
-            } else if let Some(s) = a.check_str {
-                s
             } else {
-                String::new()
+                a.check_str.unwrap_or_default()
             };
             let on_fail = match a.on_fail.as_deref().unwrap_or("stop") {
                 "continue" | "warn" => OnFail::Warn,
@@ -419,4 +417,3 @@ fn convert_yaml_flow(y: YamlFlow) -> Flow {
         base_url: y.base_url,
     }
 }
-

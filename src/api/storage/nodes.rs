@@ -1,7 +1,7 @@
 pub fn save_node_yaml(node: &Node) -> Result<PathBuf, String> {
     let dir = nodes_dir();
     let path = yaml_definition_path(&dir, &node.id)
-        .unwrap_or_else(|| dir.join(format!("{}.yaml", node.id)));
+        .unwrap_or_else(|| definition_path(&dir, &node.id, "yaml"));
     let save = node_to_yaml_save(node);
     let content = serde_yaml::to_string(&save)
         .map_err(|e| format!("Failed to serialize node as YAML: {}", e))?;
@@ -12,7 +12,7 @@ pub fn save_node_yaml(node: &Node) -> Result<PathBuf, String> {
 pub fn save_flow_yaml(flow: &Flow) -> Result<PathBuf, String> {
     let dir = flows_dir();
     let path = yaml_definition_path(&dir, &flow.id)
-        .unwrap_or_else(|| dir.join(format!("{}.yaml", flow.id)));
+        .unwrap_or_else(|| definition_path(&dir, &flow.id, "yaml"));
     let save = flow_to_yaml_save(flow);
     let content = serde_yaml::to_string(&save)
         .map_err(|e| format!("Failed to serialize flow as YAML: {}", e))?;
@@ -28,7 +28,7 @@ pub fn save_node(node: &Node) -> Result<PathBuf, String> {
         return save_node_yaml(node);
     }
     let dir = nodes_dir();
-    let path = dir.join(format!("{}.toml", node.id));
+    let path = definition_path(&dir, &node.id, "toml");
     let content =
         toml::to_string_pretty(node).map_err(|e| format!("Failed to serialize node: {}", e))?;
     fs::write(&path, content).map_err(|e| format!("Failed to write node file: {}", e))?;
@@ -39,7 +39,7 @@ pub fn load_node(id: &str) -> Result<Node, String> {
     if let Some(path) = existing_definition_path(&nodes_dir(), id) {
         return load_node_from_path(&path);
     }
-    load_node_from_path(&nodes_dir().join(format!("{}.toml", id)))
+    load_node_from_path(&definition_path(&nodes_dir(), id, "toml"))
 }
 
 pub fn load_node_from_path(path: &Path) -> Result<Node, String> {

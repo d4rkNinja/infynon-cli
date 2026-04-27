@@ -47,13 +47,7 @@ fn parse_package_json(path: &str) -> Vec<LockedPackage> {
     for key in &["dependencies", "devDependencies", "peerDependencies"] {
         if let Some(deps) = json.get(key).and_then(|d| d.as_object()) {
             for (name, version) in deps {
-                let ver = version
-                    .as_str()
-                    .unwrap_or("")
-                    .trim_start_matches('^')
-                    .trim_start_matches('~')
-                    .to_string();
-                if !ver.is_empty() && ver != "*" {
+                if let Some(ver) = version.as_str().and_then(exact_manifest_version) {
                     out.push(LockedPackage {
                         name: name.clone(),
                         version: ver,
@@ -79,9 +73,9 @@ fn parse_yarn_lock(path: &str) -> Vec<LockedPackage> {
             let entry = line.trim_end_matches(':').trim_matches('"');
             // Handle scoped packages: @scope/name@version
             // The name is everything up to the LAST '@' (skipping leading '@' for scoped pkgs)
-            let name = if entry.starts_with('@') {
+            let name = if let Some(stripped) = entry.strip_prefix('@') {
                 // Scoped: find the last '@' after position 0
-                if let Some(pos) = entry[1..].rfind('@') {
+                if let Some(pos) = stripped.rfind('@') {
                     entry[..pos + 1].to_string()
                 } else {
                     // No version separator — use entire entry as name
@@ -133,9 +127,15 @@ fn parse_pnpm_lock(path: &str) -> Vec<LockedPackage> {
         }
         if in_packages && line.trim().ends_with(':') {
             let entry = line.trim().trim_end_matches(':').trim_start_matches('/');
-            if let Some(at_pos) = entry.rfind('@') {
-                let name = &entry[..at_pos];
-                let version = &entry[at_pos + 1..];
+            let package_part = entry.split('(').next().unwrap_or(entry);
+            let at_pos = if let Some(stripped) = package_part.strip_prefix('@') {
+                stripped.rfind('@').map(|pos| pos + 1)
+            } else {
+                package_part.rfind('@')
+            };
+            if let Some(at_pos) = at_pos {
+                let name = &package_part[..at_pos];
+                let version = &package_part[at_pos + 1..];
                 if !name.is_empty() && !version.is_empty() {
                     out.push(LockedPackage {
                         name: name.to_string(),
@@ -149,4 +149,3 @@ fn parse_pnpm_lock(path: &str) -> Vec<LockedPackage> {
     }
     out
 }
-

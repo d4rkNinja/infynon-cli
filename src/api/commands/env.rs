@@ -1,11 +1,11 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use owo_colors::OwoColorize;
 
 use crate::tui::logger::Logger;
 
 fn env_file_path() -> PathBuf {
-    Path::new(".infynon").join(".env")
+    crate::api::variables::project_dotenv_path()
 }
 
 /// Parse a .env file into an ordered list of (key, value) pairs.
@@ -25,7 +25,7 @@ fn read_env_file() -> Vec<(String, Option<String>)> {
                 (line.to_string(), None)
             } else if let Some(eq) = trimmed.find('=') {
                 let key = trimmed[..eq].trim().to_string();
-                let value = trimmed[eq + 1..].to_string();
+                let value = crate::api::variables::parse_dotenv_value(&trimmed[eq + 1..]);
                 (key, Some(value))
             } else {
                 (trimmed.to_string(), Some(String::new()))
@@ -36,7 +36,7 @@ fn read_env_file() -> Vec<(String, Option<String>)> {
 
 fn write_env_file(entries: &[(String, Option<String>)]) -> std::io::Result<()> {
     let path = env_file_path();
-    std::fs::create_dir_all(path.parent().unwrap())?;
+    crate::utils::ensure_parent_dir(&path)?;
     let mut content = String::new();
     for (key, val) in entries {
         match val {

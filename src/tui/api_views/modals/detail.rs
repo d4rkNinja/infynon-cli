@@ -95,7 +95,7 @@ pub(super) fn render_step_detail_modal(f: &mut Frame, app: &ApiApp, area: Rect) 
     // ── Extracted variables ────────────────────────────────────────────────
     if !step.extracted.is_empty() {
         lines.push(section_header("Extracted Variables", w as usize));
-        let key_w = ((w as usize) / 3).max(8).min(24);
+        let key_w = ((w as usize) / 3).clamp(8, 24);
         for (k, v) in &step.extracted {
             lines.push(Line::from(vec![
                 Span::raw("  "),
@@ -111,7 +111,7 @@ pub(super) fn render_step_detail_modal(f: &mut Frame, app: &ApiApp, area: Rect) 
     }
 
     // ── Request body (pretty JSON, responsive line limit) ────────────────
-    let req_max_lines = ((h as usize) / 4).max(6).min(20);
+    let req_max_lines = ((h as usize) / 4).clamp(6, 20);
     if let Some(req_body) = &step.request_body {
         if !req_body.is_empty() {
             lines.push(section_header("Request Body", w as usize));
@@ -143,7 +143,7 @@ pub(super) fn render_step_detail_modal(f: &mut Frame, app: &ApiApp, area: Rect) 
     }
 
     // ── Response body (pretty JSON, responsive line limit) ───────────────
-    let resp_max_lines = ((h as usize) / 2).max(8).min(40);
+    let resp_max_lines = ((h as usize) / 2).clamp(8, 40);
     if let Some(resp_body) = &step.response_body {
         if !resp_body.is_empty() {
             lines.push(section_header("Response Body", w as usize));

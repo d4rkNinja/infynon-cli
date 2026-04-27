@@ -35,6 +35,7 @@ pub fn update_note(
     update_note_details(id, title, body, status, None, None, None, None, None)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn update_note_details(
     id: &str,
     title: Option<&str>,
@@ -239,4 +240,3 @@ pub fn merge_remote_notes(remote: Vec<TraceNote>) -> Result<usize, String> {
 }
 
 // ─── Knowledge Graph local storage ──────────────────────────────────────────
-

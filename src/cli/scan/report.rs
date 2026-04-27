@@ -1,4 +1,4 @@
-use crate::engine::{reporter, scanner};
+use crate::engine::reporter;
 use owo_colors::OwoColorize;
 
 pub fn severity_colored(sev: &str) -> String {

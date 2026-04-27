@@ -1,6 +1,5 @@
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
-use std::sync::OnceLock;
 
 const BATCH_URL: &str = "https://api.osv.dev/v1/querybatch";
 const VULN_URL: &str = "https://api.osv.dev/v1/vulns";
@@ -104,6 +103,8 @@ pub struct OsvVulnDetail {
     pub references: Vec<OsvReference>,
     #[serde(default)]
     pub affected: Vec<OsvAffected>,
+    #[serde(default)]
+    pub database_specific: serde_json::Map<String, serde_json::Value>,
 }
 
 /// For Go modules, extract the required major version from the module path (/vN suffix).
@@ -111,8 +112,7 @@ pub struct OsvVulnDetail {
 fn go_module_major(pkg_name: &str) -> Option<u64> {
     let mut parts = pkg_name.rsplitn(2, '/');
     if let Some(last) = parts.next() {
-        if last.starts_with('v') {
-            let digits = &last[1..];
+        if let Some(digits) = last.strip_prefix('v') {
             if !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()) {
                 return digits.parse().ok();
             }
@@ -369,9 +369,9 @@ pub fn find_safest_candidate_vs(
             return Some((ver.to_string(), true));
         }
         // No clean version — return the one with fewest remaining CVEs
-        let min_count = tier.iter().map(|(_, c)| *c).min().unwrap();
-        let (ver, _) = tier.iter().find(|(_, c)| *c == min_count).unwrap();
-        Some((ver.to_string(), false))
+        tier.iter()
+            .min_by_key(|(_, count)| *count)
+            .map(|(ver, _)| (ver.to_string(), false))
     };
 
     // Prefer upgrades; only fall back to downgrades if all upgrades are vulnerable
@@ -392,15 +392,8 @@ pub fn find_safest_candidate_vs(
 
 // ── Shared HTTP client (reused across all calls) ─────────────────────────────
 
-static CLIENT: OnceLock<Client> = OnceLock::new();
-
 fn client() -> &'static Client {
-    CLIENT.get_or_init(|| {
-        Client::builder()
-            .timeout(std::time::Duration::from_secs(30))
-            .build()
-            .unwrap_or_default()
-    })
+    crate::utils::http_client()
 }
 
 // ── API calls ─────────────────────────────────────────────────────────────────
@@ -499,19 +492,24 @@ pub fn fetch_vuln_details_batch(ids: &[String]) -> Vec<(String, Result<OsvVulnDe
                 let c = client();
                 loop {
                     let id = {
-                        let mut iter = work.lock().unwrap();
+                        let mut iter = work.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
                         iter.next().cloned()
                     };
                     let Some(id) = id else { break };
 
                     let result = fetch_single_detail(c, &id);
-                    results.lock().unwrap().push((id, result));
+                    results
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner())
+                        .push((id, result));
                 }
             });
         }
     });
 
-    results.into_inner().unwrap()
+    results
+        .into_inner()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// Fetch full detail for a single vulnerability ID using the provided client.
@@ -542,9 +540,24 @@ pub fn fetch_vuln_detail(id: &str) -> Result<OsvVulnDetail, String> {
 
 /// Derive a simple severity label from OSV severity array or summary keywords.
 pub fn severity_label(detail: &OsvVulnDetail) -> &'static str {
+    if let Some(value) = detail
+        .database_specific
+        .get("severity")
+        .and_then(|value| value.as_str())
+        .and_then(severity_from_label)
+    {
+        return value;
+    }
+
     // CVSS score-based classification
     for s in &detail.severity {
         if let Some(score) = &s.score {
+            if let Some(value) = severity_from_label(score) {
+                return value;
+            }
+            if let Some(value) = severity_from_cvss_vector(score) {
+                return value;
+            }
             // CVSS v3 vector string contains a numeric base score
             let score_str = score.to_uppercase();
             if score_str.contains("CRITICAL") {
@@ -585,5 +598,118 @@ pub fn severity_label(detail: &OsvVulnDetail) -> &'static str {
         "LOW"
     } else {
         "INFORMATIONAL"
+    }
+}
+
+fn severity_from_label(value: &str) -> Option<&'static str> {
+    match value.trim().to_ascii_uppercase().as_str() {
+        "CRITICAL" => Some("CRITICAL"),
+        "HIGH" => Some("HIGH"),
+        "MEDIUM" | "MODERATE" => Some("MEDIUM"),
+        "LOW" => Some("LOW"),
+        _ => None,
+    }
+}
+
+fn severity_from_score(score: f64) -> &'static str {
+    if score >= 9.0 {
+        "CRITICAL"
+    } else if score >= 7.0 {
+        "HIGH"
+    } else if score >= 4.0 {
+        "MEDIUM"
+    } else {
+        "LOW"
+    }
+}
+
+fn severity_from_cvss_vector(vector: &str) -> Option<&'static str> {
+    let vector = vector.trim();
+    if !vector.starts_with("CVSS:3.") {
+        return None;
+    }
+
+    let mut av = None;
+    let mut ac = None;
+    let mut pr = None;
+    let mut ui = None;
+    let mut scope_changed = false;
+    let mut c = None;
+    let mut i = None;
+    let mut a = None;
+
+    for metric in vector.split('/') {
+        let Some((key, value)) = metric.split_once(':') else {
+            continue;
+        };
+        match key {
+            "AV" => {
+                av = Some(match value {
+                    "N" => 0.85,
+                    "A" => 0.62,
+                    "L" => 0.55,
+                    "P" => 0.20,
+                    _ => return None,
+                });
+            }
+            "AC" => {
+                ac = Some(match value {
+                    "L" => 0.77,
+                    "H" => 0.44,
+                    _ => return None,
+                });
+            }
+            "PR" => {
+                pr = Some(value);
+            }
+            "UI" => {
+                ui = Some(match value {
+                    "N" => 0.85,
+                    "R" => 0.62,
+                    _ => return None,
+                });
+            }
+            "S" => scope_changed = value == "C",
+            "C" => c = Some(cvss_impact_metric(value)?),
+            "I" => i = Some(cvss_impact_metric(value)?),
+            "A" => a = Some(cvss_impact_metric(value)?),
+            _ => {}
+        }
+    }
+
+    let pr = match (pr?, scope_changed) {
+        ("N", _) => 0.85,
+        ("L", true) => 0.68,
+        ("L", false) => 0.62,
+        ("H", true) => 0.50,
+        ("H", false) => 0.27,
+        _ => return None,
+    };
+    let iss = 1.0 - ((1.0 - c?) * (1.0 - i?) * (1.0 - a?));
+    let impact = if scope_changed {
+        7.52 * (iss - 0.029) - 3.25 * (iss - 0.02).powf(15.0)
+    } else {
+        6.42 * iss
+    };
+    if impact <= 0.0 {
+        return Some("LOW");
+    }
+
+    let exploitability = 8.22 * av? * ac? * pr * ui?;
+    let raw_score = if scope_changed {
+        (1.08 * (impact + exploitability)).min(10.0)
+    } else {
+        (impact + exploitability).min(10.0)
+    };
+    let rounded_up = (raw_score * 10.0).ceil() / 10.0;
+    Some(severity_from_score(rounded_up))
+}
+
+fn cvss_impact_metric(value: &str) -> Option<f64> {
+    match value {
+        "H" => Some(0.56),
+        "L" => Some(0.22),
+        "N" => Some(0.0),
+        _ => None,
     }
 }

@@ -5,7 +5,13 @@ use owo_colors::OwoColorize;
 use std::collections::HashMap;
 use std::time::Duration;
 
-pub(super) fn run_auto_fix(findings: &[reporter::ScanFinding]) {
+#[derive(Debug, Clone, Copy, Default)]
+pub(super) struct AutoFixSummary {
+    pub success_count: usize,
+    pub fail_count: usize,
+}
+
+pub(super) fn run_auto_fix(findings: &[reporter::ScanFinding]) -> AutoFixSummary {
     type Key = (String, String, String);
     let mut pkg_map: HashMap<Key, (&scanner::LockedPackage, Vec<String>, Vec<String>)> =
         HashMap::new();
@@ -24,7 +30,7 @@ pub(super) fn run_auto_fix(findings: &[reporter::ScanFinding]) {
             entry.2.push(suggested.clone());
         }
     }
-    let items: Vec<(String, String)> = pkg_map
+    let items: Vec<(String, crate::cli::PkgInvocation)> = pkg_map
         .values()
         .filter_map(|(pkg, confirmed, suggested)| {
             let best = if !confirmed.is_empty() {
@@ -34,12 +40,13 @@ pub(super) fn run_auto_fix(findings: &[reporter::ScanFinding]) {
             }?;
             Some((
                 format!("{} {} → {}", pkg.name, pkg.version, best),
-                upgrade_cmd(pkg, &best),
+                upgrade_invocation(pkg, &best),
             ))
         })
         .collect();
     if items.is_empty() {
-        return Logger::info("No packages have a known fixed or suggested version available.");
+        Logger::info("No packages have a known fixed or suggested version available.");
+        return AutoFixSummary::default();
     }
     println!(
         "\n  {} {}\n",
@@ -47,8 +54,8 @@ pub(super) fn run_auto_fix(findings: &[reporter::ScanFinding]) {
         format!("Upgrading {} package(s)...", items.len()).truecolor(160, 160, 180)
     );
     let (mut success_count, mut fail_count) = (0usize, 0usize);
-    for (label, cmd) in items {
-        run_fix_command(&label, &cmd, &mut success_count, &mut fail_count);
+    for (label, invocation) in items {
+        run_fix_command(&label, &invocation, &mut success_count, &mut fail_count);
     }
     println!(
         "\n  Auto-fix complete  {}  {}\n",
@@ -62,68 +69,85 @@ pub(super) fn run_auto_fix(findings: &[reporter::ScanFinding]) {
             "0 failed".truecolor(100, 100, 120).to_string()
         }
     );
+    AutoFixSummary {
+        success_count,
+        fail_count,
+    }
 }
 
 pub fn upgrade_cmd(pkg: &scanner::LockedPackage, fixed: &str) -> String {
+    upgrade_invocation(pkg, fixed).display()
+}
+
+fn upgrade_invocation(pkg: &scanner::LockedPackage, fixed: &str) -> crate::cli::PkgInvocation {
     let source = std::path::Path::new(&pkg.source)
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or(&pkg.source);
     match pkg.ecosystem.as_str() {
         "npm" => match source {
-            "yarn.lock" => format!("yarn add {}@{}", pkg.name, fixed),
-            "pnpm-lock.yaml" => format!("pnpm add {}@{}", pkg.name, fixed),
-            "bun.lockb" | "bun.lock" => format!("bun add {}@{}", pkg.name, fixed),
-            _ if std::path::Path::new("bun.lockb").exists() => {
-                format!("bun add {}@{}", pkg.name, fixed)
+            "yarn.lock" => invocation("yarn", &["add", &format!("{}@{}", pkg.name, fixed)]),
+            "pnpm-lock.yaml" => invocation("pnpm", &["add", &format!("{}@{}", pkg.name, fixed)]),
+            "bun.lockb" | "bun.lock" => {
+                invocation("bun", &["add", &format!("{}@{}", pkg.name, fixed)])
             }
-            _ => format!("npm install {}@{}", pkg.name, fixed),
+            _ if std::path::Path::new("bun.lockb").exists() => {
+                invocation("bun", &["add", &format!("{}@{}", pkg.name, fixed)])
+            }
+            _ => invocation("npm", &["install", &format!("{}@{}", pkg.name, fixed)]),
         },
-        "crates.io" => format!("cargo add {}@{}", pkg.name, fixed),
+        "crates.io" => invocation("cargo", &["add", &format!("{}@{}", pkg.name, fixed)]),
         "PyPI" => match source {
-            "uv.lock" => format!("uv add {}=={}", pkg.name, fixed),
-            "poetry.lock" => format!("poetry add {}=={}", pkg.name, fixed),
+            "uv.lock" => invocation("uv", &["add", &format!("{}=={}", pkg.name, fixed)]),
+            "poetry.lock" => invocation("poetry", &["add", &format!("{}=={}", pkg.name, fixed)]),
             _ if std::path::Path::new("uv.lock").exists() => {
-                format!("uv add {}=={}", pkg.name, fixed)
+                invocation("uv", &["add", &format!("{}=={}", pkg.name, fixed)])
             }
             _ if std::path::Path::new("poetry.lock").exists() => {
-                format!("poetry add {}=={}", pkg.name, fixed)
+                invocation("poetry", &["add", &format!("{}=={}", pkg.name, fixed)])
             }
-            _ => format!(
-                "{} install {}=={}",
-                crate::ecosystems::detector::resolve_binary("pip"),
-                pkg.name,
-                fixed
+            _ => invocation(
+                &crate::ecosystems::detector::resolve_binary("pip"),
+                &["install", &format!("{}=={}", pkg.name, fixed)],
             ),
         },
-        "Go" => format!(
-            "go get {}@{}",
-            pkg.name,
-            if fixed.starts_with('v') {
-                fixed.to_string()
-            } else {
-                format!("v{}", fixed)
-            }
+        "Go" => invocation(
+            "go",
+            &["get", &format!("{}@{}", pkg.name, go_version(fixed))],
         ),
-        "RubyGems" => format!(
-            "{} install {} -v {}",
-            crate::ecosystems::detector::resolve_binary("gem"),
-            pkg.name,
-            fixed
+        "RubyGems" => invocation(
+            &crate::ecosystems::detector::resolve_binary("gem"),
+            &["install", &pkg.name, "-v", fixed],
         ),
-        "Packagist" => format!("composer require {}:{}", pkg.name, fixed),
-        "NuGet" => format!("dotnet add package {} --version {}", pkg.name, fixed),
-        "Hex" => format!("mix deps.update {}", pkg.name),
-        "pub.dev" => format!(
-            "{} pub upgrade {}",
-            crate::ecosystems::detector::resolve_binary("dart"),
-            pkg.name
+        "Packagist" => invocation("composer", &["require", &format!("{}:{}", pkg.name, fixed)]),
+        "NuGet" => invocation("dotnet", &["add", "package", &pkg.name, "--version", fixed]),
+        "Hex" => invocation("mix", &["deps.update", &pkg.name]),
+        "Pub" | "pub.dev" => invocation(
+            &crate::ecosystems::detector::resolve_binary("dart"),
+            &["pub", "upgrade", &pkg.name],
         ),
-        _ => format!("upgrade {} to {}", pkg.name, fixed),
+        _ => invocation("echo", &[&format!("upgrade {} to {}", pkg.name, fixed)]),
     }
 }
 
-fn run_fix_command(label: &str, cmd: &str, success_count: &mut usize, fail_count: &mut usize) {
+fn invocation(program: &str, args: &[&str]) -> crate::cli::PkgInvocation {
+    crate::cli::PkgInvocation::from_args(program, args)
+}
+
+fn go_version(fixed: &str) -> String {
+    if fixed.starts_with('v') {
+        fixed.to_string()
+    } else {
+        format!("v{}", fixed)
+    }
+}
+
+fn run_fix_command(
+    label: &str,
+    invocation: &crate::cli::PkgInvocation,
+    success_count: &mut usize,
+    fail_count: &mut usize,
+) {
     let spinner = ProgressBar::new_spinner();
     spinner.set_style(
         ProgressStyle::with_template("  {spinner:.green}  {msg}")
@@ -134,9 +158,9 @@ fn run_fix_command(label: &str, cmd: &str, success_count: &mut usize, fail_count
     spinner.set_message(format!(
         "{} {}",
         label.bold(),
-        format!("({})", cmd).truecolor(100, 100, 120)
+        format!("({})", invocation.display()).truecolor(100, 100, 120)
     ));
-    match crate::cli::run_pkg_cmd(cmd) {
+    match invocation.output() {
         Ok(output) if output.status.success() => {
             spinner.finish_and_clear();
             *success_count += 1;

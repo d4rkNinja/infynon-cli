@@ -1,6 +1,6 @@
 {
   "name": "infynon",
-  "version": "0.2.0-beta.9.0.6",
+  "version": "0.2.0-beta.9.0.7",
   "description": "Package intelligence, API flow testing, and repo memory for AI-assisted backend teams.",
   "bin": {
     "infynon": "run.js",
@@ -16,7 +16,7 @@
     "preuninstall.js"
   ],
   "engines": {
-    "node": ">=14"
+    "node": ">=14.14"
   },
   "keywords": [
     "security",

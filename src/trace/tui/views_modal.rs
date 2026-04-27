@@ -203,7 +203,7 @@ fn draw_kg_entities(f: &mut ratatui::Frame, area: Rect, app: &mut App) {
                         Style::default().fg(Color::White),
                     ),
                     Span::styled(
-                        format!("{}", e.branch),
+                        e.branch.to_string(),
                         Style::default().fg(Color::DarkGray),
                     ),
                 ]))

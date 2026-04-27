@@ -181,14 +181,14 @@ pub fn write_pdf(findings: &[ScanFinding], path: &str) -> Result<(), String> {
         // Right-side meta
         layer.set_fill_color(Color::Rgb(Rgb::new(0.6, 0.6, 0.7, None)));
         layer.use_text(
-            &format!("Generated: {}", sys_time_readable()),
+            format!("Generated: {}", sys_time_readable()),
             8.0_f32,
             Mm(130.0),
             Mm(283.0),
             &reg,
         );
         layer.use_text(
-            &format!("Total Vulnerabilities: {}", findings.len()),
+            format!("Total Vulnerabilities: {}", findings.len()),
             8.0_f32,
             Mm(130.0),
             Mm(279.5),
@@ -222,7 +222,7 @@ pub fn write_pdf(findings: &[ScanFinding], path: &str) -> Result<(), String> {
         for &(label, count, ref color, x) in &items {
             layer.set_fill_color(Color::Rgb(color.clone()));
             layer.use_text(
-                &format!("{}: {}", label, count),
+                format!("{}: {}", label, count),
                 8.0_f32,
                 Mm(x),
                 Mm(ctx.y - 1.5),
@@ -270,7 +270,7 @@ pub fn write_pdf(findings: &[ScanFinding], path: &str) -> Result<(), String> {
             // Package name — starts after badge with clear gap
             layer.set_fill_color(Color::Rgb(Rgb::new(0.95, 0.95, 1.0, None)));
             layer.use_text(
-                &format!("{}. {} @ {}", i + 1, f.package.name, f.package.version),
+                format!("{}. {} @ {}", i + 1, f.package.name, f.package.version),
                 10.0_f32,
                 Mm(39.0),
                 Mm(ctx.y - 2.5),
@@ -310,7 +310,7 @@ pub fn write_pdf(findings: &[ScanFinding], path: &str) -> Result<(), String> {
             for (col, (label, val)) in chunk.iter().enumerate() {
                 let x = if col == 0 { 12.0_f32 } else { 110.0_f32 };
                 layer.set_fill_color(Color::Rgb(Rgb::new(0.5, 0.55, 0.7, None)));
-                layer.use_text(&format!("{}:", label), 7.5_f32, Mm(x), Mm(ctx.y), &bold);
+                layer.use_text(format!("{}:", label), 7.5_f32, Mm(x), Mm(ctx.y), &bold);
                 layer.set_fill_color(Color::Rgb(Rgb::new(0.85, 0.85, 0.9, None)));
                 let val_short: String = val.chars().take(45).collect();
                 layer.use_text(&val_short, 7.5_f32, Mm(x + 22.0), Mm(ctx.y), &reg);
@@ -404,7 +404,7 @@ impl<'a> PdfCtx<'a> {
             layer.use_text("INFYNON", 14.0, Mm(14.0), Mm(291.0), self.bold);
             layer.set_fill_color(Color::Rgb(Rgb::new(0.6, 0.6, 0.7, None)));
             layer.use_text(
-                &format!("Security Scan Report — continued (page {})", self.page_num),
+                format!("Security Scan Report — continued (page {})", self.page_num),
                 8.0,
                 Mm(42.0),
                 Mm(291.5),

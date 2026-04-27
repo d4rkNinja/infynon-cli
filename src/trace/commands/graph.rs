@@ -1,6 +1,7 @@
-fn execute_graph(action: GraphAction) {
+fn execute_graph(action: GraphAction) -> i32 {
     if let Err(e) = storage::ensure_kg_layout() {
-        return Logger::error(&e);
+        Logger::error(&e);
+        return EXIT_TRACE_STORAGE_ERROR;
     }
     match action {
         GraphAction::Entity { action } => execute_graph_entity(action),
@@ -26,15 +27,16 @@ fn execute_graph(action: GraphAction) {
         } => cmd_graph_import(&file, format.as_deref(), branch),
         GraphAction::Tui { branch } => {
             crate::trace::tui::run_kg(branch);
+            0
         }
     }
 }
 
 fn resolve_branch(branch: Option<String>) -> String {
-    branch.unwrap_or_else(|| storage::detect_current_branch())
+    branch.unwrap_or_else(storage::detect_current_branch)
 }
 
-fn execute_graph_entity(action: GraphEntityAction) {
+fn execute_graph_entity(action: GraphEntityAction) -> i32 {
     match action {
         GraphEntityAction::Add {
             name,
@@ -44,7 +46,10 @@ fn execute_graph_entity(action: GraphEntityAction) {
         } => {
             let kind = match EntityKind::from_str(&kind) {
                 Ok(v) => v,
-                Err(e) => return Logger::error(&e),
+                Err(e) => {
+                    Logger::error(&e);
+                    return EXIT_TRACE_INVALID_INPUT;
+                }
             };
             let mut metadata = HashMap::new();
             for pair in &meta {
@@ -67,24 +72,43 @@ fn execute_graph_entity(action: GraphEntityAction) {
                 Ok(()) => {
                     Logger::success(&format!("Added {} entity '{}'", kind.as_str(), name));
                     Logger::detail("Branch:", &branch);
+                    0
                 }
-                Err(e) => Logger::error(&e),
+                Err(e) => {
+                    Logger::error(&e);
+                    EXIT_TRACE_STORAGE_ERROR
+                }
             }
         }
         GraphEntityAction::Remove { id } => match storage::delete_entity(&id) {
-            Ok(()) => Logger::success(&format!("Removed entity '{}'", id)),
-            Err(e) => Logger::error(&e),
+            Ok(()) => {
+                Logger::success(&format!("Removed entity '{}'", id));
+                0
+            }
+            Err(e) => {
+                Logger::error(&e);
+                EXIT_TRACE_STORAGE_ERROR
+            }
         },
         GraphEntityAction::List { branch, kind } => {
             let branch = branch.or_else(|| Some(storage::detect_current_branch()));
-            let kind_filter = kind.as_deref().and_then(|k| EntityKind::from_str(k).ok());
+            let kind_filter = match kind.as_deref() {
+                Some(kind) => match EntityKind::from_str(kind) {
+                    Ok(parsed) => Some(parsed),
+                    Err(e) => {
+                        Logger::error(&e);
+                        return EXIT_TRACE_INVALID_INPUT;
+                    }
+                },
+                None => None,
+            };
             match storage::list_entities(branch.as_deref(), kind_filter) {
                 Ok(entities) => {
                     if entities.is_empty() {
                         Logger::info("No entities found.");
-                        return;
+                        return 0;
                     }
-                    println!("  {:<24} {:<14} {:<16} {}", "ID", "KIND", "BRANCH", "NAME");
+                    println!("  {:<24} {:<14} {:<16} NAME", "ID", "KIND", "BRANCH");
                     println!("  {}", "-".repeat(80));
                     for e in &entities {
                         println!(
@@ -95,8 +119,12 @@ fn execute_graph_entity(action: GraphEntityAction) {
                             e.name
                         );
                     }
+                    0
                 }
-                Err(e) => Logger::error(&e),
+                Err(e) => {
+                    Logger::error(&e);
+                    EXIT_TRACE_STORAGE_ERROR
+                }
             }
         }
     }
@@ -109,7 +137,7 @@ fn resolve_entity_id(name: &str, branch: &str) -> String {
     }
 }
 
-fn execute_graph_edge(action: GraphEdgeAction) {
+fn execute_graph_edge(action: GraphEdgeAction) -> i32 {
     match action {
         GraphEdgeAction::Add {
             from,
@@ -121,8 +149,15 @@ fn execute_graph_edge(action: GraphEdgeAction) {
         } => {
             let relation = match RelationType::from_str(&relation) {
                 Ok(v) => v,
-                Err(e) => return Logger::error(&e),
+                Err(e) => {
+                    Logger::error(&e);
+                    return EXIT_TRACE_INVALID_INPUT;
+                }
             };
+            if !(0.0..=1.0).contains(&weight) {
+                Logger::error("Invalid weight. Use a value between 0.0 and 1.0.");
+                return EXIT_TRACE_INVALID_INPUT;
+            }
             let branch = resolve_branch(branch);
             let source = resolve_entity_id(&from, &branch);
             let target = resolve_entity_id(&to, &branch);
@@ -146,28 +181,45 @@ fn execute_graph_edge(action: GraphEdgeAction) {
                         relation.as_str()
                     ));
                     Logger::detail("Branch:", &branch);
+                    0
                 }
-                Err(e) => Logger::error(&e),
+                Err(e) => {
+                    Logger::error(&e);
+                    EXIT_TRACE_STORAGE_ERROR
+                }
             }
         }
         GraphEdgeAction::Remove { id } => match storage::delete_edge(&id) {
-            Ok(()) => Logger::success(&format!("Removed edge '{}'", id)),
-            Err(e) => Logger::error(&e),
+            Ok(()) => {
+                Logger::success(&format!("Removed edge '{}'", id));
+                0
+            }
+            Err(e) => {
+                Logger::error(&e);
+                EXIT_TRACE_STORAGE_ERROR
+            }
         },
         GraphEdgeAction::List { branch, relation } => {
             let branch = branch.or_else(|| Some(storage::detect_current_branch()));
-            let rel_filter = relation
-                .as_deref()
-                .and_then(|r| RelationType::from_str(r).ok());
+            let rel_filter = match relation.as_deref() {
+                Some(relation) => match RelationType::from_str(relation) {
+                    Ok(parsed) => Some(parsed),
+                    Err(e) => {
+                        Logger::error(&e);
+                        return EXIT_TRACE_INVALID_INPUT;
+                    }
+                },
+                None => None,
+            };
             match storage::list_edges(branch.as_deref(), rel_filter) {
                 Ok(edges) => {
                     if edges.is_empty() {
                         Logger::info("No edges found.");
-                        return;
+                        return 0;
                     }
                     println!(
-                        "  {:<36} {:<18} {:<18} {:<16} {}",
-                        "ID", "SOURCE", "TARGET", "RELATION", "WEIGHT"
+                        "  {:<36} {:<18} {:<18} {:<16} WEIGHT",
+                        "ID", "SOURCE", "TARGET", "RELATION"
                     );
                     println!("  {}", "-".repeat(100));
                     for e in &edges {
@@ -180,18 +232,31 @@ fn execute_graph_edge(action: GraphEdgeAction) {
                             e.weight
                         );
                     }
+                    0
                 }
-                Err(e) => Logger::error(&e),
+                Err(e) => {
+                    Logger::error(&e);
+                    EXIT_TRACE_STORAGE_ERROR
+                }
             }
         }
     }
 }
 
-fn cmd_graph_show(branch: Option<String>, kind: Option<&str>) {
+fn cmd_graph_show(branch: Option<String>, kind: Option<&str>) -> i32 {
     let branch = resolve_branch(branch);
     match storage::load_graph(Some(&branch)) {
         Ok(graph) => {
-            let kind_filter = kind.and_then(|k| EntityKind::from_str(k).ok());
+            let kind_filter = match kind {
+                Some(kind) => match EntityKind::from_str(kind) {
+                    Ok(parsed) => Some(parsed),
+                    Err(e) => {
+                        Logger::error(&e);
+                        return EXIT_TRACE_INVALID_INPUT;
+                    }
+                },
+                None => None,
+            };
             let entities: Vec<_> = if let Some(kf) = kind_filter {
                 graph.entities.iter().filter(|e| e.kind == kf).collect()
             } else {
@@ -204,7 +269,7 @@ fn cmd_graph_show(branch: Option<String>, kind: Option<&str>) {
                 graph.edges.len()
             ));
             if !entities.is_empty() {
-                println!("\n  {:<24} {:<14} {}", "ID", "KIND", "NAME");
+                println!("\n  {:<24} {:<14} NAME", "ID", "KIND");
                 println!("  {}", "-".repeat(60));
                 for e in &entities {
                     println!("  {:<24} {:<14} {}", e.id, e.kind.as_str(), e.name);
@@ -222,12 +287,16 @@ fn cmd_graph_show(branch: Option<String>, kind: Option<&str>) {
                     );
                 }
             }
+            0
         }
-        Err(e) => Logger::error(&e),
+        Err(e) => {
+            Logger::error(&e);
+            EXIT_TRACE_STORAGE_ERROR
+        }
     }
 }
 
-fn cmd_graph_build(branch: Option<String>, _all_branches: bool) {
+fn cmd_graph_build(branch: Option<String>, _all_branches: bool) -> i32 {
     let branch = resolve_branch(branch);
     match storage::auto_build_graph(&branch) {
         Ok((ent_count, edge_count)) => {
@@ -235,19 +304,29 @@ fn cmd_graph_build(branch: Option<String>, _all_branches: bool) {
                 "Built graph for '{}': {} entities, {} edges",
                 branch, ent_count, edge_count
             ));
+            0
         }
-        Err(e) => Logger::error(&e),
+        Err(e) => {
+            Logger::error(&e);
+            EXIT_TRACE_STORAGE_ERROR
+        }
     }
 }
 
-fn cmd_graph_diff(branch_a: &str, branch_b: &str) {
+fn cmd_graph_diff(branch_a: &str, branch_b: &str) -> i32 {
     let graph_a = match storage::load_graph(Some(branch_a)) {
         Ok(g) => g,
-        Err(e) => return Logger::error(&e),
+        Err(e) => {
+            Logger::error(&e);
+            return EXIT_TRACE_STORAGE_ERROR;
+        }
     };
     let graph_b = match storage::load_graph(Some(branch_b)) {
         Ok(g) => g,
-        Err(e) => return Logger::error(&e),
+        Err(e) => {
+            Logger::error(&e);
+            return EXIT_TRACE_STORAGE_ERROR;
+        }
     };
 
     let ids_a: std::collections::HashSet<_> = graph_a.entities.iter().map(|e| &e.id).collect();
@@ -281,13 +360,17 @@ fn cmd_graph_diff(branch_a: &str, branch_b: &str) {
     for id in &edges_only_b {
         println!("      + {}", id);
     }
+    0
 }
 
-fn cmd_graph_path(from: &str, to: &str, branch: Option<String>) {
+fn cmd_graph_path(from: &str, to: &str, branch: Option<String>) -> i32 {
     let branch = resolve_branch(branch);
     let graph = match storage::load_graph(Some(&branch)) {
         Ok(g) => g,
-        Err(e) => return Logger::error(&e),
+        Err(e) => {
+            Logger::error(&e);
+            return EXIT_TRACE_STORAGE_ERROR;
+        }
     };
 
     let source_id = resolve_entity_id(from, &branch);
@@ -325,7 +408,7 @@ fn cmd_graph_path(from: &str, to: &str, branch: Option<String>) {
             path.reverse();
             Logger::success(&format!("Path found ({} hops):", path.len() - 1));
             println!("  {}", path.join(" -> "));
-            return;
+            return 0;
         }
         if let Some(neighbors) = adj.get(&current) {
             for neighbor in neighbors {
@@ -338,13 +421,17 @@ fn cmd_graph_path(from: &str, to: &str, branch: Option<String>) {
     }
 
     Logger::info(&format!("No path found between '{}' and '{}'", from, to));
+    0
 }
 
-fn cmd_graph_impact(entity: &str, branch: Option<String>) {
+fn cmd_graph_impact(entity: &str, branch: Option<String>) -> i32 {
     let branch = resolve_branch(branch);
     let graph = match storage::load_graph(Some(&branch)) {
         Ok(g) => g,
-        Err(e) => return Logger::error(&e),
+        Err(e) => {
+            Logger::error(&e);
+            return EXIT_TRACE_STORAGE_ERROR;
+        }
     };
 
     let start_id = resolve_entity_id(entity, &branch);
@@ -380,7 +467,7 @@ fn cmd_graph_impact(entity: &str, branch: Option<String>) {
     visited.remove(&start_id);
     if visited.is_empty() {
         Logger::info(&format!("No connected entities for '{}'", entity));
-        return;
+        return 0;
     }
 
     Logger::success(&format!(
@@ -388,20 +475,24 @@ fn cmd_graph_impact(entity: &str, branch: Option<String>) {
         entity,
         visited.len()
     ));
-    println!("  {:<24} {}", "ENTITY", "DEPTH");
+    println!("  {:<24} DEPTH", "ENTITY");
     println!("  {}", "-".repeat(40));
     let mut sorted: Vec<_> = visited.into_iter().collect();
     sorted.sort_by_key(|(_, d)| *d);
     for (id, depth) in &sorted {
         println!("  {:<24} {}", id, depth);
     }
+    0
 }
 
-fn cmd_graph_orphans(branch: Option<String>) {
+fn cmd_graph_orphans(branch: Option<String>) -> i32 {
     let branch = resolve_branch(branch);
     let graph = match storage::load_graph(Some(&branch)) {
         Ok(g) => g,
-        Err(e) => return Logger::error(&e),
+        Err(e) => {
+            Logger::error(&e);
+            return EXIT_TRACE_STORAGE_ERROR;
+        }
     };
 
     let mut connected: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -417,49 +508,74 @@ fn cmd_graph_orphans(branch: Option<String>) {
         .collect();
     if orphans.is_empty() {
         Logger::info("No orphan entities found.");
-        return;
+        return 0;
     }
     Logger::info(&format!("{} orphan entities:", orphans.len()));
-    println!("  {:<24} {:<14} {}", "ID", "KIND", "NAME");
+    println!("  {:<24} {:<14} NAME", "ID", "KIND");
     println!("  {}", "-".repeat(60));
     for e in &orphans {
         println!("  {:<24} {:<14} {}", e.id, e.kind.as_str(), e.name);
     }
+    0
 }
 
-fn cmd_graph_export(format: &str, branch: Option<String>, output: Option<&str>) {
+fn cmd_graph_export(format: &str, branch: Option<String>, output: Option<&str>) -> i32 {
     let branch = resolve_branch(branch);
     let graph = match storage::load_graph(Some(&branch)) {
         Ok(g) => g,
-        Err(e) => return Logger::error(&e),
+        Err(e) => {
+            Logger::error(&e);
+            return EXIT_TRACE_STORAGE_ERROR;
+        }
     };
 
     let content = match format.to_ascii_lowercase().as_str() {
         "json" => match storage::export_graph_json(&graph) {
             Ok(v) => v,
-            Err(e) => return Logger::error(&e),
+            Err(e) => {
+                Logger::error(&e);
+                return EXIT_TRACE_STORAGE_ERROR;
+            }
         },
         "dot" => match storage::export_graph_dot(&graph) {
             Ok(v) => v,
-            Err(e) => return Logger::error(&e),
+            Err(e) => {
+                Logger::error(&e);
+                return EXIT_TRACE_STORAGE_ERROR;
+            }
         },
-        other => return Logger::error(&format!("Unsupported format '{}'. Use json | dot.", other)),
+        other => {
+            Logger::error(&format!("Unsupported format '{}'. Use json | dot.", other));
+            return EXIT_TRACE_INVALID_INPUT;
+        }
     };
 
     match output {
         Some(path) => match std::fs::write(path, &content) {
-            Ok(()) => Logger::success(&format!("Exported graph to '{}'", path)),
-            Err(e) => Logger::error(&format!("Failed to write '{}': {}", path, e)),
+            Ok(()) => {
+                Logger::success(&format!("Exported graph to '{}'", path));
+                0
+            }
+            Err(e) => {
+                Logger::error(&format!("Failed to write '{}': {}", path, e));
+                EXIT_TRACE_STORAGE_ERROR
+            }
         },
-        None => println!("{}", content),
+        None => {
+            println!("{}", content);
+            0
+        }
     }
 }
 
-fn cmd_graph_import(file: &str, _format: Option<&str>, branch: Option<String>) {
+fn cmd_graph_import(file: &str, _format: Option<&str>, branch: Option<String>) -> i32 {
     let branch = resolve_branch(branch);
     let content = match std::fs::read_to_string(file) {
         Ok(v) => v,
-        Err(e) => return Logger::error(&format!("Failed to read '{}': {}", file, e)),
+        Err(e) => {
+            Logger::error(&format!("Failed to read '{}': {}", file, e));
+            return EXIT_TRACE_STORAGE_ERROR;
+        }
     };
     match storage::import_graph_json(&content, Some(&branch)) {
         Ok((ent_count, edge_count)) => {
@@ -467,7 +583,11 @@ fn cmd_graph_import(file: &str, _format: Option<&str>, branch: Option<String>) {
                 "Imported {} entities and {} edges into '{}'",
                 ent_count, edge_count, branch
             ));
+            0
         }
-        Err(e) => Logger::error(&e),
+        Err(e) => {
+            Logger::error(&e);
+            EXIT_TRACE_STORAGE_ERROR
+        }
     }
 }

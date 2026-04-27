@@ -9,7 +9,7 @@ pub fn cmd_node_export(id: &str, format: &str, base_url: Option<&str>) {
 
     let resolved_base = base_url
         .map(|s| s.to_string())
-        .or_else(|| super::env::env_base_url())
+        .or_else(super::env::env_base_url)
         .unwrap_or_else(|| "http://localhost:3000".to_string());
     let url = format!("{}{}", resolved_base, node.path);
 

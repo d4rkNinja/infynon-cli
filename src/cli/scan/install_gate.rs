@@ -5,18 +5,9 @@ use owo_colors::OwoColorize;
 use std::time::Duration;
 
 pub fn tool_to_osv_ecosystem(ecosystem: &str) -> String {
-    match ecosystem {
-        "pip" | "pip3" | "uv" | "poetry" => "PyPI".to_string(),
-        "yarn" | "pnpm" | "bun" => "npm".to_string(),
-        "cargo" => "crates.io".to_string(),
-        "go" => "Go".to_string(),
-        "gem" => "RubyGems".to_string(),
-        "composer" => "Packagist".to_string(),
-        "nuget" | "dotnet" => "NuGet".to_string(),
-        "hex" | "mix" => "Hex".to_string(),
-        "pub" | "dart" => "pub.dev".to_string(),
-        other => other.to_string(),
-    }
+    crate::ecosystems::catalog::canonical_osv_ecosystem(ecosystem)
+        .unwrap_or(ecosystem)
+        .to_string()
 }
 
 pub fn check_packages_before_install(
@@ -214,7 +205,7 @@ fn install_cmd_for_ecosystem(pkg: &str, fixed: &str, ecosystem: &str) -> String 
         "Packagist" | "composer" => format!("composer require {}:{}", pkg, fixed),
         "NuGet" | "nuget" => format!("dotnet add package {} --version {}", pkg, fixed),
         "Hex" | "hex" => format!("mix deps.update {}", pkg),
-        "pub.dev" | "pub" => format!(
+        "Pub" | "pub.dev" | "pub" => format!(
             "{} pub upgrade {}",
             crate::ecosystems::detector::resolve_binary("dart"),
             pkg

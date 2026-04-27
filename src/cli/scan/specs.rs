@@ -1,7 +1,7 @@
 pub fn parse_pkg_spec(spec: &str) -> (String, String) {
     let spec = spec.trim();
-    if spec.starts_with('@') {
-        if let Some(pos) = spec[1..].rfind('@') {
+    if let Some(stripped) = spec.strip_prefix('@') {
+        if let Some(pos) = stripped.rfind('@') {
             let pos = pos + 1;
             let name = spec[..pos].to_string();
             let version = spec[pos + 1..].to_string();

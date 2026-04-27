@@ -36,7 +36,7 @@ echo "  Platform: $OS $ARCH → $TARGET"
 
 # Get latest release tag
 echo "  Fetching latest release..."
-TAG=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+TAG=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/' || true)
 if [ -z "$TAG" ]; then
     echo "  [!!] Could not determine latest release. Building from source..."
     if ! command -v cargo &>/dev/null; then
@@ -63,19 +63,20 @@ URL="https://github.com/$REPO/releases/download/$TAG/$BINARY"
 
 echo "  Downloading $URL ..."
 TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
 curl -fsSL "$URL" -o "$TMP/infynon"
 chmod +x "$TMP/infynon"
 
 # Install
 echo "  Installing to $INSTALL_DIR ..."
-if [ -w "$INSTALL_DIR" ]; then
-    mv "$TMP/infynon" "$INSTALL_DIR/infynon"
+if mkdir -p "$INSTALL_DIR" 2>/dev/null && [ -w "$INSTALL_DIR" ]; then
+    install -m 755 "$TMP/infynon" "$INSTALL_DIR/infynon"
     ln -sf "$INSTALL_DIR/infynon" "$INSTALL_DIR/infynon-pkg"
 else
-    sudo mv "$TMP/infynon" "$INSTALL_DIR/infynon"
+    sudo install -d "$INSTALL_DIR"
+    sudo install -m 755 "$TMP/infynon" "$INSTALL_DIR/infynon"
     sudo ln -sf "$INSTALL_DIR/infynon" "$INSTALL_DIR/infynon-pkg"
 fi
-rm -rf "$TMP"
 
 echo ""
 echo "  [OK] infynon $TAG installed to $INSTALL_DIR/infynon"

@@ -184,7 +184,7 @@ pub fn cmd_import(
             .collect::<Vec<_>>()
             .join("-");
 
-        let nodes_map: HashMap<String, Node> =
+        let _nodes_map: HashMap<String, Node> =
             nodes.iter().map(|n| (n.id.clone(), n.clone())).collect();
         let all_nodes: Vec<Node> = nodes.clone();
 
@@ -226,8 +226,7 @@ fn build_node_from_operation(
         let clean_path = path_str
             .trim_matches('/')
             .replace('/', "-")
-            .replace('{', "")
-            .replace('}', "");
+            .replace(['{', '}'], "");
         format!("{}-{}", method, clean_path)
     };
 
@@ -338,7 +337,7 @@ fn get_first_2xx_code(operation: &serde_yaml::Value) -> Option<u16> {
 
 fn get_first_2xx_response_schema<'a>(
     operation: &'a serde_yaml::Value,
-    spec: &'a serde_yaml::Value,
+    _spec: &'a serde_yaml::Value,
     is_openapi3: bool,
 ) -> Option<&'a serde_yaml::Value> {
     let responses = operation.get("responses")?.as_mapping()?;

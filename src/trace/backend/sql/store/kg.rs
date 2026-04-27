@@ -25,6 +25,7 @@ fn kg_entity_from_row(
 }
 
 /// Parses raw column values into a `KgEdge`.
+#[allow(clippy::too_many_arguments)]
 fn kg_edge_from_row(
     id: String,
     source: String,

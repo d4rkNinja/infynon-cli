@@ -29,7 +29,7 @@ This package downloads the matching native binary for your OS and architecture.
 
 ```bash
 cargo install infynon                                          # Rust (crates.io)
-go install github.com/d4rkNinja/infynon-cli/go@latest          # Go
+go install github.com/d4rkNinja/infynon-cli/go/cmd/infynon@latest # Go
 curl -fsSL https://raw.githubusercontent.com/d4rkNinja/infynon-cli/main/scripts/install.sh | bash  # Linux/macOS
 ```
 

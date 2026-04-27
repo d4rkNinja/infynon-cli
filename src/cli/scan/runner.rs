@@ -8,7 +8,7 @@ pub fn run_scan(
     fix_level: Option<crate::cli::scan::FixLevel>,
     pkg_file: Option<&str>,
     agent: bool,
-) {
+) -> i32 {
     if !agent {
         println!();
         Logger::title("INFYNON Package Scanner", "blue");
@@ -28,7 +28,7 @@ pub fn run_scan(
             );
         }
         Logger::error("No packages found in selected lock/manifest files.");
-        return;
+        return 2;
     }
     if !agent {
         let mut sources: Vec<String> = packages.iter().map(|pkg| pkg.source.clone()).collect();

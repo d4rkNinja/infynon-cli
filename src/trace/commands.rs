@@ -58,10 +58,7 @@ pub fn execute(action: TraceAction) -> i32 {
             crate::trace::tui::run();
             0
         }
-        TraceAction::Graph { action } => {
-            execute_graph(action);
-            0
-        }
+        TraceAction::Graph { action } => execute_graph(action),
     }
 }
 

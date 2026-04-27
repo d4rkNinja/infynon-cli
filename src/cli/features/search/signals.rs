@@ -1,8 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 
-use super::matching::{levenshtein, normalize_pkg_name};
-
 pub(super) fn signal_has(signal: &str, needle: &str) -> bool {
     signal.split(',').any(|value| value.trim() == needle)
 }

@@ -8,7 +8,9 @@ pub fn package_risks() -> Result<Vec<PackageRisk>, String> {
         .map(|pkg| {
             (
                 pkg.name.clone(),
-                map_osv_ecosystem(&pkg.ecosystem).to_string(),
+                crate::ecosystems::catalog::canonical_osv_ecosystem(&pkg.ecosystem)
+                    .unwrap_or(&pkg.ecosystem)
+                    .to_string(),
                 pkg.version.clone(),
             )
         })
@@ -44,18 +46,3 @@ pub fn package_risks() -> Result<Vec<PackageRisk>, String> {
     out.sort_by(|a, b| b.severity.cmp(&a.severity).then(a.package.cmp(&b.package)));
     Ok(out)
 }
-
-fn map_osv_ecosystem(eco: &str) -> &'static str {
-    match eco {
-        "pip" | "uv" | "poetry" => "PyPI",
-        "cargo" => "crates.io",
-        "go" => "Go",
-        "composer" => "Packagist",
-        "gem" => "RubyGems",
-        "nuget" => "NuGet",
-        "hex" => "Hex",
-        "pub" => "Pub",
-        _ => "npm",
-    }
-}
-

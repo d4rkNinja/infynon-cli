@@ -1,6 +1,10 @@
 pub fn save_run_result(result: &FlowRunResult) -> Result<PathBuf, String> {
     let dir = runs_dir();
-    let filename = format!("{}__{}.json", result.flow_id, result.run_id);
+    let filename = format!(
+        "{}__{}.json",
+        crate::utils::safe_file_stem(&result.flow_id),
+        crate::utils::safe_file_stem(&result.run_id)
+    );
     let path = dir.join(&filename);
     let content = serde_json::to_string_pretty(result)
         .map_err(|e| format!("Failed to serialize run result: {}", e))?;
@@ -11,7 +15,7 @@ pub fn save_run_result(result: &FlowRunResult) -> Result<PathBuf, String> {
 /// Load the N most recent run results for a given flow.
 pub fn load_recent_runs(flow_id: &str, limit: usize) -> Vec<FlowRunResult> {
     let dir = runs_dir();
-    let prefix = format!("{}_", flow_id);
+    let prefix = format!("{}_", crate::utils::safe_file_stem(flow_id));
     let mut results = Vec::new();
 
     if let Ok(entries) = fs::read_dir(&dir) {

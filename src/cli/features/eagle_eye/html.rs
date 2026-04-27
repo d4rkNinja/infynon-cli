@@ -33,9 +33,7 @@ pub(super) fn build_eagle_eye_html(findings: &[ScanFinding], config: &EagleEyeCo
     )
 }
 
-fn group_findings_by_project<'a>(
-    findings: &'a [ScanFinding],
-) -> BTreeMap<String, Vec<&'a ScanFinding>> {
+fn group_findings_by_project(findings: &[ScanFinding]) -> BTreeMap<String, Vec<&ScanFinding>> {
     let mut grouped = BTreeMap::new();
     for finding in findings {
         grouped

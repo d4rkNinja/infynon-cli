@@ -158,8 +158,7 @@ fn create_node_from_ai(description: &str) -> Node {
         title_case(&method.to_lowercase()),
         path.trim_matches('/')
             .replace('/', " ")
-            .replace('{', "")
-            .replace('}', "")
+            .replace(['{', '}'], "")
     );
 
     let mut node = Node::new(&id, &name, &method, &path);
@@ -212,7 +211,7 @@ fn infer_path(desc: &str) -> String {
     // Look for /path-like pattern
     if let Some(pos) = desc.find('/') {
         let end = desc[pos..]
-            .find(|c: char| c == ' ' || c == '"' || c == '\'')
+            .find([' ', '"', '\''])
             .unwrap_or(desc.len() - pos);
         return desc[pos..pos + end].to_string();
     }
@@ -233,8 +232,7 @@ fn infer_path(desc: &str) -> String {
 fn path_to_id(path: &str) -> String {
     path.trim_matches('/')
         .replace('/', "-")
-        .replace('{', "")
-        .replace('}', "")
+        .replace(['{', '}'], "")
         .to_lowercase()
 }
 

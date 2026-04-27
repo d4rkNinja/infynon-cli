@@ -1,6 +1,5 @@
 use crate::trace::types::{
-    EntityKind, KgEdge, KgEntity, NoteStatus, PackageRisk, RelationType, SyncRun, TraceLayer,
-    TraceNote, TraceScope, TraceSource,
+    EntityKind, KgEdge, KgEntity, PackageRisk, RelationType, SyncRun, TraceNote, TraceSource,
 };
 use mysql::{params, prelude::FromValue, prelude::Queryable, Row};
 use postgres::Client;

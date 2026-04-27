@@ -4,8 +4,6 @@
 const https = require("https");
 const fs = require("fs");
 const path = require("path");
-const os = require("os");
-const { execSync } = require("child_process");
 
 const REPO = "d4rkNinja/infynon-cli";
 const VERSION = require("./package.json").version;
@@ -33,25 +31,28 @@ function downloadFile(url, dest, redirects) {
   }
 
   return new Promise(function (resolve, reject) {
-    const file = fs.createWriteStream(dest);
     https
       .get(url, { headers: { "User-Agent": "infynon-npm-installer" } }, function (res) {
         if (res.statusCode === 301 || res.statusCode === 302) {
-          file.close();
-          fs.unlinkSync(dest);
           return downloadFile(res.headers.location, dest, redirects + 1)
             .then(resolve)
             .catch(reject);
         }
         if (res.statusCode !== 200) {
-          file.close();
-          fs.unlinkSync(dest);
+          res.resume();
           return reject(new Error("Download failed with status " + res.statusCode + " from " + url));
         }
-        res.pipe(file);
+        const file = fs.createWriteStream(dest);
+        file.on("error", function (err) {
+          file.close(function () {
+            fs.unlink(dest, function () {});
+            reject(err);
+          });
+        });
         file.on("finish", function () {
           file.close(resolve);
         });
+        res.pipe(file);
       })
       .on("error", function (err) {
         fs.unlink(dest, function () {});
@@ -87,7 +88,7 @@ async function main() {
   } catch (err) {
     console.error("[infynon] Download failed: " + err.message);
     console.error("[infynon] You can install manually: https://github.com/" + REPO + "/releases/tag/" + tag);
-    process.exit(0); // non-fatal
+    process.exit(1);
   }
 
   // Make executable on Unix
@@ -100,5 +101,5 @@ async function main() {
 
 main().catch(function (err) {
   console.error("[infynon] Unexpected error during install:", err.message);
-  process.exit(0); // non-fatal — don't break npm install
+  process.exit(1);
 });

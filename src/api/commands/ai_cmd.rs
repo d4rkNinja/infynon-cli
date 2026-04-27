@@ -137,7 +137,7 @@ pub fn cmd_ai_complete(flow_id: &str) {
         let mut best_edge: Option<Edge> = None;
 
         for flow_node in &flow_nodes {
-            let suggestions = ai::suggest_next_nodes(flow_node, &[orphan.clone()]);
+            let suggestions = ai::suggest_next_nodes(flow_node, std::slice::from_ref(orphan));
             if let Some(s) = suggestions.into_iter().next() {
                 if s.confidence > best_score {
                     best_score = s.confidence;
@@ -497,7 +497,7 @@ pub fn cmd_ai_branch(node_id: &str) {
     };
 
     // Generate conditional branches based on common status codes
-    let branches = vec![
+    let branches = [
         (
             format!(
                 "status == {}",

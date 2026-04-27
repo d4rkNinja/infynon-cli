@@ -1,5 +1,4 @@
 use crate::engine::{osv, scanner};
-use crate::tui::logger::Logger;
 
 pub(super) fn run_agent_scan(
     packages: &[scanner::LockedPackage],
@@ -42,7 +41,7 @@ pub(super) fn run_agent_scan(
         }
         if let Some(detail) = detail_map.get(&vuln_id) {
             let severity = osv::severity_label(detail);
-            if !fix_level.map_or(true, |level| level.matches(severity)) {
+            if !fix_level.is_none_or(|level| level.matches(severity)) {
                 continue;
             }
             match severity {
@@ -59,7 +58,7 @@ pub(super) fn run_agent_scan(
             );
             let (fixed, verified) = match raw_fixed {
                 Some(ref value) => osv::find_safest_candidate_vs(
-                    &[value.clone()],
+                    std::slice::from_ref(value),
                     &packages[pkg_idx].name,
                     &packages[pkg_idx].ecosystem,
                     &packages[pkg_idx].version,
@@ -100,6 +99,6 @@ pub(super) fn exit_error(message: &str) -> ! {
 }
 
 fn exit_json(code: i32, payload: serde_json::Value) -> ! {
-    println!("{}", serde_json::to_string_pretty(&payload).unwrap());
+    crate::utils::print_json_pretty(&payload);
     std::process::exit(code);
 }

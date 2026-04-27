@@ -13,17 +13,17 @@ pub(super) fn send_eagle_eye_email(config: &EagleEyeConfig, findings: &[ScanFind
     );
     let html = build_eagle_eye_html(findings, config);
 
-    crate::utils::send_smtp_email(
-        &config.smtp.host,
-        config.smtp.port,
-        &config.smtp.username,
-        &password,
-        config.smtp.tls,
-        &config.from,
-        &config.recipients,
-        &subject,
-        &html,
-    );
+    crate::utils::send_smtp_email(crate::utils::SmtpEmail {
+        host: &config.smtp.host,
+        port: config.smtp.port,
+        username: &config.smtp.username,
+        password: &password,
+        tls: config.smtp.tls,
+        from: &config.from,
+        recipients: &config.recipients,
+        subject: &subject,
+        html_body: &html,
+    });
 
     for recipient in &config.recipients {
         Logger::success(&format!("Alert email sent to {}", recipient));

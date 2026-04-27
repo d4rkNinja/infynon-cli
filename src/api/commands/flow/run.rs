@@ -105,13 +105,7 @@ fn run_flow_once(
         print_flow_run_header(&flow, &base_url, &initial_context);
     }
 
-    let on_prompt: Box<
-        dyn Fn(
-                &str,
-                &[crate::api::types::PromptInput],
-            ) -> std::collections::HashMap<String, serde_json::Value>
-            + Send,
-    > = if no_input {
+    let on_prompt: Box<crate::api::executor::PromptCallback> = if no_input {
         Box::new(crate::api::commands::node::make_noninteractive_prompt())
     } else {
         Box::new(crate::api::commands::node::make_cli_prompt())
@@ -120,7 +114,7 @@ fn run_flow_once(
     let on_step = if human_output {
         Some(Box::new(|step: &crate::api::types::StepResult| {
             let icon = if step.passed { "PASS" } else { "FAIL" };
-            let status = step
+            let _status = step
                 .status_code
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| "ERR".to_string());
@@ -231,11 +225,7 @@ fn is_flow_definition_error(message: &str) -> bool {
 fn render_single_record(record: &FlowRunRecord, format: &str) {
     match format.trim().to_ascii_lowercase().as_str() {
         "json" => {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&record_to_json(record, "infynon.weave.run.v1"))
-                    .unwrap()
-            );
+            crate::utils::print_json_pretty(&record_to_json(record, "infynon.weave.run.v1"));
         }
         "markdown" => println!("{}", record_to_markdown(record)),
         "junit" => println!("{}", record_to_junit(record)),
@@ -266,7 +256,7 @@ fn render_run_suite(records: &[FlowRunRecord], format: &str) {
                     .map(|record| record_to_json(record, "infynon.weave.run.v1"))
                     .collect::<Vec<_>>(),
             });
-            println!("{}", serde_json::to_string_pretty(&payload).unwrap());
+            crate::utils::print_json_pretty(&payload);
         }
         "markdown" => {
             let mut out = String::new();
@@ -431,12 +421,14 @@ fn save_run_report_fixed(result: &crate::api::types::FlowRunResult, format: &str
 
     match format.to_lowercase().as_str() {
         "markdown" | "md" => {
-            let path = format!("reports/{}-{}.md", result.flow_id, ts);
+            let safe_flow_id = crate::utils::safe_file_stem(&result.flow_id);
+            let path = format!("reports/{}-{}.md", safe_flow_id, ts);
             std::fs::write(&path, &md).ok();
             println!("  Report saved: {}", path);
         }
         "pdf" => {
-            let path = format!("reports/{}-{}.pdf", result.flow_id, ts);
+            let safe_flow_id = crate::utils::safe_file_stem(&result.flow_id);
+            let path = format!("reports/{}-{}.pdf", safe_flow_id, ts);
             if let Err(e) = write_run_pdf(result, &path) {
                 Logger::error(&format!("Could not save PDF report: {}", e));
             } else {
@@ -444,8 +436,9 @@ fn save_run_report_fixed(result: &crate::api::types::FlowRunResult, format: &str
             }
         }
         "both" => {
-            let md_path = format!("reports/{}-{}.md", result.flow_id, ts);
-            let pdf_path = format!("reports/{}-{}.pdf", result.flow_id, ts);
+            let safe_flow_id = crate::utils::safe_file_stem(&result.flow_id);
+            let md_path = format!("reports/{}-{}.md", safe_flow_id, ts);
+            let pdf_path = format!("reports/{}-{}.pdf", safe_flow_id, ts);
             std::fs::write(&md_path, &md).ok();
             if let Err(e) = write_run_pdf(result, &pdf_path) {
                 Logger::error(&format!(
@@ -479,7 +472,7 @@ fn write_run_pdf(result: &crate::api::types::FlowRunResult, path: &str) -> Resul
 
     for line in build_run_report_lines(result) {
         if y < 18.0 {
-            (page, layer) = doc.add_page(Mm(210.0), Mm(297.0), &format!("Page {}", page_num + 1));
+            (page, layer) = doc.add_page(Mm(210.0), Mm(297.0), format!("Page {}", page_num + 1));
             page_num += 1;
             y = 272.0;
             write_pdf_header(result, &doc, page, layer, &bold);

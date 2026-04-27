@@ -28,5 +28,5 @@ fn parses_colon_version_specs() {
 fn maps_tool_names_to_osv_ecosystems() {
     assert_eq!(tool_to_osv_ecosystem("pip"), "PyPI");
     assert_eq!(tool_to_osv_ecosystem("cargo"), "crates.io");
-    assert_eq!(tool_to_osv_ecosystem("pub"), "pub.dev");
+    assert_eq!(tool_to_osv_ecosystem("pub"), "Pub");
 }

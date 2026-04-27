@@ -5,9 +5,16 @@ fn parse_cargo_lock(path: &str) -> Vec<LockedPackage> {
     };
     let mut name: Option<String> = None;
     let mut version: Option<String> = None;
-    for line in content.lines() {
-        let line = line.trim();
-        if line == "[[package]]" {
+    let mut source: Option<String> = None;
+    let flush = |out: &mut Vec<LockedPackage>,
+                 name: &mut Option<String>,
+                 version: &mut Option<String>,
+                 source: &mut Option<String>| {
+        if source
+            .as_deref()
+            .map(|value| value.starts_with("registry+"))
+            .unwrap_or(false)
+        {
             if let (Some(n), Some(v)) = (name.take(), version.take()) {
                 out.push(LockedPackage {
                     name: n,
@@ -16,20 +23,24 @@ fn parse_cargo_lock(path: &str) -> Vec<LockedPackage> {
                     source: path.to_string(),
                 });
             }
+        }
+        *name = None;
+        *version = None;
+        *source = None;
+    };
+    for line in content.lines() {
+        let line = line.trim();
+        if line == "[[package]]" {
+            flush(&mut out, &mut name, &mut version, &mut source);
         } else if let Some(val) = line.strip_prefix("name = ") {
             name = Some(val.trim_matches('"').to_string());
         } else if let Some(val) = line.strip_prefix("version = ") {
             version = Some(val.trim_matches('"').to_string());
+        } else if let Some(val) = line.strip_prefix("source = ") {
+            source = Some(val.trim_matches('"').to_string());
         }
     }
-    if let (Some(n), Some(v)) = (name, version) {
-        out.push(LockedPackage {
-            name: n,
-            version: v,
-            ecosystem: "crates.io".to_string(),
-            source: path.to_string(),
-        });
-    }
+    flush(&mut out, &mut name, &mut version, &mut source);
     out
 }
 
@@ -254,7 +265,7 @@ fn parse_pubspec_lock(path: &str) -> Vec<LockedPackage> {
                     out.push(LockedPackage {
                         name: name.clone(),
                         version,
-                        ecosystem: "pub.dev".to_string(),
+                        ecosystem: "Pub".to_string(),
                         source: path.to_string(),
                     });
                 }

@@ -66,7 +66,7 @@ fn render_env_panel(f: &mut Frame, app: &mut ApiApp, area: Rect) {
         .split(inner);
 
     // Header row with KEY / VALUE columns
-    let key_w = (splits[0].width as usize / 3).max(10).min(30);
+    let key_w = (splits[0].width as usize / 3).clamp(10, 30);
     let sep_w = splits[0].width.saturating_sub(4) as usize;
     let header = Paragraph::new(vec![
         Line::from(vec![
@@ -252,7 +252,7 @@ fn render_flow_context_panel(f: &mut Frame, app: &ApiApp, area: Rect) {
         }
         Some(run) => {
             // Header with column labels
-            let var_w = (panel_w / 3).max(8).min(22);
+            let var_w = (panel_w / 3).clamp(8, 22);
             lines.push(Line::from(vec![
                 Span::styled(
                     format!("  {:<w$}", "VARIABLE", w = var_w),
@@ -387,7 +387,7 @@ fn render_context_panel(f: &mut Frame, run: &FlowRunResult, area: Rect) {
             Style::default().fg(DIM),
         )]));
     } else {
-        let var_w = (panel_w / 3).max(8).min(20);
+        let var_w = (panel_w / 3).clamp(8, 20);
         // Sort alphabetically
         let mut sorted: Vec<_> = run.final_context.iter().collect();
         sorted.sort_by_key(|(k, _)| k.as_str());

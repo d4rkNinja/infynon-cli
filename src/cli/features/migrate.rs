@@ -35,8 +35,14 @@ pub fn cmd_migrate(from: &str, to: &str) {
     }
 
     enum MigrateStep {
-        Delete { desc: String, path: String },
-        Run { desc: String, cmd: String },
+        Delete {
+            desc: String,
+            path: String,
+        },
+        Run {
+            desc: String,
+            invocation: crate::cli::PkgInvocation,
+        },
     }
     impl MigrateStep {
         fn desc(&self) -> &str {
@@ -47,7 +53,7 @@ pub fn cmd_migrate(from: &str, to: &str) {
         fn display_cmd(&self) -> String {
             match self {
                 Self::Delete { path, .. } => format!("delete {}", path),
-                Self::Run { cmd, .. } => cmd.clone(),
+                Self::Run { invocation, .. } => invocation.display(),
             }
         }
     }
@@ -74,17 +80,17 @@ pub fn cmd_migrate(from: &str, to: &str) {
                 path: "node_modules".into(),
             });
         }
-        let install_cmd = match to {
-            "npm" => "npm install",
-            "yarn" => "yarn install",
-            "pnpm" => "pnpm install",
-            "bun" => "bun install",
-            _ => "",
+        let invocation = match to {
+            "npm" => Some(crate::cli::PkgInvocation::from_args("npm", &["install"])),
+            "yarn" => Some(crate::cli::PkgInvocation::from_args("yarn", &["install"])),
+            "pnpm" => Some(crate::cli::PkgInvocation::from_args("pnpm", &["install"])),
+            "bun" => Some(crate::cli::PkgInvocation::from_args("bun", &["install"])),
+            _ => None,
         };
-        if !install_cmd.is_empty() {
+        if let Some(invocation) = invocation {
             steps.push(MigrateStep::Run {
                 desc: format!("Install with {}", to),
-                cmd: install_cmd.to_string(),
+                invocation,
             });
         }
     }
@@ -107,36 +113,46 @@ pub fn cmd_migrate(from: &str, to: &str) {
         match to {
             "uv" => {
                 let cmd = if dep_file == "requirements.txt" {
-                    "uv pip install -r requirements.txt"
+                    crate::cli::PkgInvocation::from_args(
+                        "uv",
+                        &["pip", "install", "-r", "requirements.txt"],
+                    )
                 } else {
-                    "uv pip install ."
+                    crate::cli::PkgInvocation::from_args("uv", &["pip", "install", "."])
                 };
                 steps.push(MigrateStep::Run {
                     desc: "Install with uv".into(),
-                    cmd: cmd.into(),
+                    invocation: cmd,
                 });
             }
             "poetry" => {
                 if !Path::new("pyproject.toml").exists() {
                     steps.push(MigrateStep::Run {
                         desc: "Initialize poetry".into(),
-                        cmd: "poetry init --no-interaction".into(),
+                        invocation: crate::cli::PkgInvocation::from_args(
+                            "poetry",
+                            &["init", "--no-interaction"],
+                        ),
                     });
                 }
                 steps.push(MigrateStep::Run {
                     desc: "Install with poetry".into(),
-                    cmd: "poetry install".into(),
+                    invocation: crate::cli::PkgInvocation::from_args("poetry", &["install"]),
                 });
             }
             "pip" => {
+                let pip = crate::ecosystems::detector::resolve_binary("pip");
                 let cmd = if dep_file == "requirements.txt" {
-                    "pip install -r requirements.txt"
+                    crate::cli::PkgInvocation::from_args(
+                        &pip,
+                        &["install", "-r", "requirements.txt"],
+                    )
                 } else {
-                    "pip install ."
+                    crate::cli::PkgInvocation::from_args(&pip, &["install", "."])
                 };
                 steps.push(MigrateStep::Run {
                     desc: "Install with pip".into(),
-                    cmd: cmd.into(),
+                    invocation: cmd,
                 });
             }
             _ => {}
@@ -183,10 +199,10 @@ pub fn cmd_migrate(from: &str, to: &str) {
                     Err(e) => println!("  {}  {} — {}", "✘".bright_red(), desc.bold(), e),
                 }
             }
-            MigrateStep::Run { desc, cmd } => {
+            MigrateStep::Run { desc, invocation } => {
                 let sp = spinner();
                 sp.set_message(desc.clone());
-                let result = crate::cli::run_pkg_cmd(cmd);
+                let result = invocation.output();
                 sp.finish_and_clear();
                 match result {
                     Ok(out) if out.status.success() => {

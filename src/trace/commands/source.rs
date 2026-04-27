@@ -113,6 +113,7 @@ fn cmd_source_add_redis(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn cmd_source_add_sql(
     id: &str,
     engine: &str,
@@ -175,8 +176,8 @@ fn cmd_source_list() -> i32 {
                 return 0;
             }
             println!(
-                "  {:<18} {:<10} {:<8} {:<16} {}",
-                "ID", "KIND", "DEFAULT", "USER", "URL"
+                "  {:<18} {:<10} {:<8} {:<16} URL",
+                "ID", "KIND", "DEFAULT", "USER"
             );
             println!("  {}", "-".repeat(80));
             for source in cfg.sources {

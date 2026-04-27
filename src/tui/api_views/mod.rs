@@ -10,10 +10,10 @@ mod runner;
 mod sidebar;
 
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
+    layout::{Constraint, Direction, Layout},
+    style::Style,
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Clear, Paragraph},
+    widgets::{Block, BorderType, Borders},
     Frame,
 };
 

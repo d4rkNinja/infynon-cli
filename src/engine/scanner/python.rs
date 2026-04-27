@@ -9,12 +9,14 @@ fn parse_requirements_txt(path: &str) -> Vec<LockedPackage> {
             continue;
         }
         if let Some((name, version)) = line.split_once("==") {
-            out.push(LockedPackage {
-                name: name.trim().to_string(),
-                version: version.trim().to_string(),
-                ecosystem: "PyPI".to_string(),
-                source: path.to_string(),
-            });
+            if let Some(version) = exact_manifest_version(version) {
+                out.push(LockedPackage {
+                    name: name.trim().to_string(),
+                    version,
+                    ecosystem: "PyPI".to_string(),
+                    source: path.to_string(),
+                });
+            }
         }
     }
     out
@@ -131,10 +133,9 @@ fn parse_pyproject_toml(path: &str) -> Vec<LockedPackage> {
         }
 
         // ── Poetry: [tool.poetry.dependencies] key = "version" ──
-        if current_section == "tool.poetry.dependencies"
-            || current_section == "tool.poetry.dev-dependencies"
-        {
-            if trimmed.contains('=') && !trimmed.starts_with('#') {
+        if (current_section == "tool.poetry.dependencies"
+            || current_section == "tool.poetry.dev-dependencies")
+            && trimmed.contains('=') && !trimmed.starts_with('#') {
                 let parts: Vec<&str> = trimmed.splitn(2, '=').collect();
                 if parts.len() == 2 {
                     let name = parts[0].trim().to_string();
@@ -151,8 +152,7 @@ fn parse_pyproject_toml(path: &str) -> Vec<LockedPackage> {
                     } else {
                         raw
                     };
-                    let version = strip_version_prefix(ver_str);
-                    if !name.is_empty() && !version.is_empty() && version != "*" {
+                    if let Some(version) = exact_manifest_version(ver_str) {
                         out.push(LockedPackage {
                             name,
                             version,
@@ -162,7 +162,6 @@ fn parse_pyproject_toml(path: &str) -> Vec<LockedPackage> {
                     }
                 }
             }
-        }
     }
     // Deduplicate by name (keep first occurrence)
     let mut seen = HashSet::new();
@@ -172,22 +171,6 @@ fn parse_pyproject_toml(path: &str) -> Vec<LockedPackage> {
 
 /// Strip leading version specifier characters and return only the version string.
 /// Handles `>=`, `==`, `~=`, `!=`, `>`, `<`, `^`, `~` and takes the first segment before any comma.
-fn strip_version_prefix(s: &str) -> String {
-    s.trim_start_matches(">=")
-        .trim_start_matches("==")
-        .trim_start_matches("~=")
-        .trim_start_matches("!=")
-        .trim_start_matches('>')
-        .trim_start_matches('<')
-        .trim_start_matches('^')
-        .trim_start_matches('~')
-        .split(',')
-        .next()
-        .unwrap_or("")
-        .trim()
-        .to_string()
-}
-
 /// Parse PEP 621 dependency strings from a comma-separated or newline-separated
 /// list of quoted entries, e.g. `"requests>=2.28.0", "click>=8.0"`
 fn parse_pep621_dep_list(input: &str) -> Vec<(String, String)> {
@@ -213,9 +196,10 @@ fn parse_pep621_dep_list(input: &str) -> Vec<(String, String)> {
             }
         };
         let name = name_part.trim().to_string();
-        let version = strip_version_prefix(rest);
-        if !name.is_empty() {
-            deps.push((name, version));
+        if let Some(version) = exact_manifest_version(rest) {
+            if !name.is_empty() {
+                deps.push((name, version));
+            }
         }
     }
     deps
@@ -260,4 +244,3 @@ fn parse_uv_lock(path: &str) -> Vec<LockedPackage> {
     // uv.lock is TOML, similar structure to poetry.lock
     parse_poetry_lock(path) // reuse same [[package]] parser, same format
 }
-

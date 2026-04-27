@@ -23,6 +23,33 @@ pub(crate) fn format_pkg_cmd(program: &str, args: &[String]) -> String {
         .join(" ")
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct PkgInvocation {
+    pub program: String,
+    pub args: Vec<String>,
+}
+
+impl PkgInvocation {
+    pub(crate) fn new(program: impl Into<String>, args: Vec<String>) -> Self {
+        Self {
+            program: program.into(),
+            args,
+        }
+    }
+
+    pub(crate) fn from_args(program: &str, args: &[&str]) -> Self {
+        Self::new(program, args.iter().map(|arg| arg.to_string()).collect())
+    }
+
+    pub(crate) fn display(&self) -> String {
+        format_pkg_cmd(&self.program, &self.args)
+    }
+
+    pub(crate) fn output(&self) -> std::io::Result<std::process::Output> {
+        make_pkg_command(&self.program, &self.args)?.output()
+    }
+}
+
 /// Build a direct process invocation for a package-manager binary and its argument list.
 fn make_pkg_command(program: &str, args: &[String]) -> std::io::Result<std::process::Command> {
     use std::process::Command;
@@ -33,9 +60,26 @@ fn make_pkg_command(program: &str, args: &[String]) -> std::io::Result<std::proc
             "empty program",
         ));
     }
-    let mut c = Command::new(program);
+    let resolved_program = crate::ecosystems::detector::resolve_binary(program);
+    #[cfg(windows)]
+    if is_windows_command_script(&resolved_program) {
+        let shell = std::env::var_os("COMSPEC").unwrap_or_else(|| "cmd.exe".into());
+        let mut c = Command::new(shell);
+        c.arg("/C").arg(&resolved_program).args(args);
+        return Ok(c);
+    }
+    let mut c = Command::new(resolved_program);
     c.args(args);
     Ok(c)
+}
+
+#[cfg(windows)]
+fn is_windows_command_script(program: &str) -> bool {
+    std::path::Path::new(program)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.eq_ignore_ascii_case("cmd") || ext.eq_ignore_ascii_case("bat"))
+        .unwrap_or(false)
 }
 
 pub(crate) fn proxy_pkg_invocation(
@@ -52,16 +96,6 @@ pub(crate) fn proxy_pkg_invocation(
         }
         _ => (actual_binary.to_string(), args.to_vec()),
     }
-}
-
-/// Run a package-manager command and capture its output (for fix/clean/migrate).
-pub(crate) fn run_pkg_cmd(cmd: &str) -> std::io::Result<std::process::Output> {
-    #[cfg(windows)]
-    let (program, args): (&str, Vec<String>) = ("cmd", vec!["/C".to_string(), cmd.to_string()]);
-    #[cfg(not(windows))]
-    let (program, args): (&str, Vec<String>) = ("sh", vec!["-c".to_string(), cmd.to_string()]);
-
-    make_pkg_command(program, &args)?.output()
 }
 
 /// Run a package-manager command with inherited stdio (for proxy installs).

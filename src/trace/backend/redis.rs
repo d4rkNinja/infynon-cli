@@ -1,6 +1,5 @@
 use crate::trace::types::{
-    EntityKind, KgEdge, KgEntity, NoteStatus, PackageRisk, RelationType, SyncRun, TraceLayer,
-    TraceNote, TraceScope, TraceSource,
+    EntityKind, KgEdge, KgEntity, PackageRisk, RelationType, SyncRun, TraceNote, TraceSource,
 };
 use redis::{Commands, Connection};
 use std::collections::HashMap;

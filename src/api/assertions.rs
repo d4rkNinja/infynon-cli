@@ -62,6 +62,16 @@ fn eval_inner(
         }
 
         // body.<path> exists / not exists
+        ["body", "exists"] => {
+            let exists = !body.is_null();
+            (exists, exists.to_string(), None)
+        }
+
+        ["body", "not", "exists"] => {
+            let missing = body.is_null();
+            (missing, (!missing).to_string(), None)
+        }
+
         [subject, "exists"] if subject.starts_with("body.") => {
             let path = &subject["body.".len()..];
             let val = json_path(body, path);
@@ -218,7 +228,7 @@ fn value_eq(val: &Value, rhs: &str) -> bool {
             }
         }
         Value::Null => rhs == "null",
-        _ => val.to_string() == rhs,
+        _ => *val == rhs,
     }
 }
 
@@ -288,6 +298,13 @@ mod tests {
     fn test_body_exists() {
         let body = json!({"cart_id": "abc"});
         let r = evaluate("body.cart_id exists", 200, &body, &empty_headers());
+        assert!(r.passed);
+    }
+
+    #[test]
+    fn test_root_body_exists() {
+        let body = json!({"cart_id": "abc"});
+        let r = evaluate("body exists", 200, &body, &empty_headers());
         assert!(r.passed);
     }
 

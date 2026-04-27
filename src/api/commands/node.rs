@@ -7,7 +7,7 @@ use serde_json::Value;
 use crate::api::ai;
 use crate::api::executor;
 use crate::api::storage;
-use crate::api::types::{Assertion, Edge, Extraction, Node, OnFail, PromptInput};
+use crate::api::types::{Assertion, Extraction, Node, OnFail, PromptInput};
 use crate::api::variables;
 use crate::tui::logger::Logger;
 

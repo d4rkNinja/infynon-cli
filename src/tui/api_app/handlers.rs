@@ -298,7 +298,7 @@ impl super::app_state::ApiApp {
                 .iter()
                 .position(|v| *v == self.runner_subview)
                 .unwrap_or(0);
-            self.runner_subview = all[(idx + 1) % all.len()].clone();
+            self.runner_subview = all[(idx + 1) % all.len()];
             return;
         }
 

@@ -9,7 +9,7 @@ use ratatui::{
 use crate::tui::api_app::ApiApp;
 use crate::tui::theme::*;
 
-use super::{dashboard::render_no_flows_hint, truncate};
+use super::truncate;
 
 // ── Nodes view (redesigned Node Library + Node Inspector) ─────────────────────
 
@@ -209,7 +209,7 @@ fn calc_library_scroll(selected: usize, _total: usize) -> u16 {
 }
 
 /// Render the empty state for the Node Library panel.
-fn render_empty_library(f: &mut Frame, app: &ApiApp, search: &str, area: Rect) {
+fn render_empty_library(f: &mut Frame, _app: &ApiApp, search: &str, area: Rect) {
     let lines = if !search.is_empty() {
         vec![
             Line::raw(""),

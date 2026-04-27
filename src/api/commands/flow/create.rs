@@ -108,7 +108,7 @@ fn create_flow_from_ai(id: &str, name: &str, description: &str) -> Flow {
             } else {
                 format!(
                     "  [carries: {}]",
-                    edge.carry.join(", ").truecolor(160, 160, 180).to_string()
+                    edge.carry.join(", ").truecolor(160, 160, 180)
                 )
             }
         );

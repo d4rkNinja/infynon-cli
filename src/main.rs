@@ -1,6 +1,4 @@
 #![allow(dead_code)]
-#![allow(unused_variables)]
-#![allow(unused_imports)]
 
 mod api;
 mod cli;
@@ -40,10 +38,8 @@ fn main() {
             eprintln!("Fatal Package Manager error: {}", e);
             std::process::exit(1);
         }
-    } else {
-        if let Err(e) = cli::run_root() {
-            eprintln!("Fatal INFYNON error: {}", e);
-            std::process::exit(1);
-        }
+    } else if let Err(e) = cli::run_root() {
+        eprintln!("Fatal INFYNON error: {}", e);
+        std::process::exit(1);
     }
 }

@@ -12,6 +12,7 @@ mod pubdev;
 mod pypi;
 mod rubygems;
 
+#[cfg(test)]
 pub(super) use go::escape_go_module_path;
 
 pub(super) fn search_backend(

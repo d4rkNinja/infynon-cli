@@ -2,28 +2,21 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::Instant;
 
 use chrono::Utc;
-use reqwest::blocking::{Client, RequestBuilder};
+use reqwest::blocking::RequestBuilder;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use serde_json::Value;
 
 use crate::api::assertions;
 use crate::api::types::{
-    Assertion, Edge, Extraction, FlowRunResult, Node, OnFail, PromptInput, StepResult,
+    Assertion, Extraction, FlowRunResult, Node, OnFail, PromptInput, StepResult,
 };
 use crate::api::variables;
 
-// ── HTTP client ───────────────────────────────────────────────────────────────
+pub type PromptValues = HashMap<String, Value>;
+pub type PromptCallback = dyn Fn(&str, &[PromptInput]) -> PromptValues + Send;
+pub type StepCallback = dyn Fn(&StepResult);
 
-fn http_client() -> &'static Client {
-    static CLIENT: std::sync::OnceLock<Client> = std::sync::OnceLock::new();
-    CLIENT.get_or_init(|| {
-        Client::builder()
-            .timeout(std::time::Duration::from_secs(30))
-            .user_agent("infynon-api-tester/1.0")
-            .build()
-            .expect("Failed to build HTTP client")
-    })
-}
+// ── HTTP client ───────────────────────────────────────────────────────────────
 
 // ── Prompt input helpers ──────────────────────────────────────────────────────
 
@@ -105,9 +98,9 @@ pub fn execute_node(
     node: &Node,
     context: &HashMap<String, Value>,
     base_url: &str,
-    on_prompt: Option<&(dyn Fn(&str, &[PromptInput]) -> HashMap<String, Value> + Send)>,
+    on_prompt: Option<&PromptCallback>,
 ) -> StepResult {
-    let client = http_client();
+    let client = crate::utils::http_client();
 
     // Collect prompt inputs — merge declared prompt_inputs with auto-detected
     // unresolved {var} placeholders, then skip any already present in context/env.
@@ -264,10 +257,10 @@ pub struct FlowExecuteOptions {
     /// Pre-seeded context variables injected before the first node runs (e.g. from --set flags).
     pub initial_context: HashMap<String, Value>,
     /// Called after each step so callers (TUI, CLI) can show live progress.
-    pub on_step: Option<Box<dyn Fn(&StepResult)>>,
+    pub on_step: Option<Box<StepCallback>>,
     /// Called before a node fires if that node has prompt_inputs.
     /// Receives the node ID and the list of inputs; must return a map of var → value.
-    pub on_prompt: Option<Box<dyn Fn(&str, &[PromptInput]) -> HashMap<String, Value> + Send>>,
+    pub on_prompt: Option<Box<PromptCallback>>,
 }
 
 /// Execute an entire flow, threading context through edges.
@@ -280,16 +273,16 @@ pub fn execute_flow(
     let started_at = Utc::now();
     let run_id = format!("{}", started_at.timestamp_millis());
 
-    let mut context: HashMap<String, Value> = opts.initial_context.clone();
+    let mut final_context: HashMap<String, Value> = opts.initial_context.clone();
     let mut steps: Vec<StepResult> = Vec::new();
     let mut overall_passed = true;
 
     // BFS execution following edges
-    let mut current_nodes: VecDeque<String> = VecDeque::new();
-    current_nodes.push_back(flow.entry.clone());
+    let mut current_nodes: VecDeque<(String, HashMap<String, Value>)> = VecDeque::new();
+    current_nodes.push_back((flow.entry.clone(), opts.initial_context.clone()));
     let mut visited: std::collections::HashSet<String> = std::collections::HashSet::new();
 
-    while let Some(node_id) = current_nodes.pop_front() {
+    while let Some((node_id, context)) = current_nodes.pop_front() {
         if visited.contains(&node_id) {
             continue;
         }
@@ -330,9 +323,12 @@ pub fn execute_flow(
             cb(&step);
         }
 
-        // Merge extracted variables into context
+        // Build the context successors receive. `edge.carry` is applied per edge
+        // below so branch-local variables do not leak across unrelated steps.
+        let mut next_source_context = context.clone();
         for (k, v) in &step.extracted {
-            context.insert(k.clone(), v.clone());
+            next_source_context.insert(k.clone(), v.clone());
+            final_context.insert(k.clone(), v.clone());
         }
 
         // Check if we should stop (only consider enabled assertions)
@@ -372,7 +368,9 @@ pub fn execute_flow(
             }
 
             if !visited.contains(&edge.to) {
-                current_nodes.push_back(edge.to.clone());
+                let mut successor_context = HashMap::new();
+                variables::carry_context(&next_source_context, &mut successor_context, &edge.carry);
+                current_nodes.push_back((edge.to.clone(), successor_context));
             }
         }
     }
@@ -388,7 +386,7 @@ pub fn execute_flow(
         steps,
         passed: overall_passed,
         base_url: opts.base_url,
-        final_context: context,
+        final_context,
     }
 }
 

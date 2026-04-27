@@ -5,7 +5,6 @@ fn handle_form(app: &mut App, code: KeyCode) {
     match code {
         KeyCode::Esc => {
             app.mode = AppMode::Browse;
-            return;
         }
         KeyCode::Tab => {
             let next = form.active_field.next();
@@ -53,7 +52,7 @@ fn handle_form(app: &mut App, code: KeyCode) {
             }
             let layer: TraceLayer = match layer_s.parse() {
                 Ok(v) => v,
-                Err(e) => {
+                Err(_e) => {
                     app.err(format!(
                         "Invalid layer '{}'. Use canonical | team | user",
                         layer_s
@@ -233,7 +232,6 @@ fn handle_kg_entity_form(app: &mut App, code: KeyCode) {
     match code {
         KeyCode::Esc => {
             app.mode = AppMode::Browse;
-            return;
         }
         KeyCode::Tab => {
             form.active_field = form.active_field.next();
@@ -330,7 +328,6 @@ fn handle_kg_edge_form(app: &mut App, code: KeyCode) {
     match code {
         KeyCode::Esc => {
             app.mode = AppMode::Browse;
-            return;
         }
         KeyCode::Tab => {
             form.active_field = form.active_field.next();

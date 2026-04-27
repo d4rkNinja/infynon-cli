@@ -202,10 +202,6 @@ impl BodyEditor {
         }
     }
 
-    pub fn to_string(&self) -> String {
-        self.lines.join("\n")
-    }
-
     // Current line length
     pub fn current_line_len(&self) -> usize {
         self.lines
@@ -216,6 +212,12 @@ impl BodyEditor {
 }
 
 // ── Prompt modal ──────────────────────────────────────────────────────────────
+
+impl std::fmt::Display for BodyEditor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.lines.join("\n"))
+    }
+}
 
 pub struct PromptModal {
     pub node_id: String,

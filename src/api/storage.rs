@@ -9,19 +9,19 @@ use crate::api::types::{
 };
 
 pub fn nodes_dir() -> PathBuf {
-    let dir = PathBuf::from(".infynon/api/nodes");
+    let dir = crate::utils::project_infynon_path(&["api", "nodes"]);
     fs::create_dir_all(&dir).ok();
     dir
 }
 
 pub fn flows_dir() -> PathBuf {
-    let dir = PathBuf::from(".infynon/api/flows");
+    let dir = crate::utils::project_infynon_path(&["api", "flows"]);
     fs::create_dir_all(&dir).ok();
     dir
 }
 
 pub fn runs_dir() -> PathBuf {
-    let dir = PathBuf::from(".infynon/api/runs");
+    let dir = crate::utils::project_infynon_path(&["api", "runs"]);
     fs::create_dir_all(&dir).ok();
     dir
 }
@@ -42,17 +42,33 @@ fn detect_project_yaml() -> bool {
 }
 
 fn existing_definition_path(dir: &Path, id: &str) -> Option<PathBuf> {
+    let safe_stem = crate::utils::safe_file_stem(id);
     ["yaml", "yml", "toml"]
         .into_iter()
-        .map(|ext| dir.join(format!("{}.{}", id, ext)))
+        .map(|ext| dir.join(format!("{}.{}", safe_stem, ext)))
         .find(|path| path.exists())
+        .or_else(|| {
+            if crate::utils::is_portable_file_stem(id) {
+                ["yaml", "yml", "toml"]
+                    .into_iter()
+                    .map(|ext| dir.join(format!("{}.{}", id, ext)))
+                    .find(|path| path.exists())
+            } else {
+                None
+            }
+        })
 }
 
 fn yaml_definition_path(dir: &Path, id: &str) -> Option<PathBuf> {
+    let safe_stem = crate::utils::safe_file_stem(id);
     ["yaml", "yml"]
         .into_iter()
-        .map(|ext| dir.join(format!("{}.{}", id, ext)))
+        .map(|ext| dir.join(format!("{}.{}", safe_stem, ext)))
         .find(|path| path.exists())
+}
+
+fn definition_path(dir: &Path, id: &str, ext: &str) -> PathBuf {
+    dir.join(format!("{}.{}", crate::utils::safe_file_stem(id), ext))
 }
 
 include!("storage/yaml_load.rs");

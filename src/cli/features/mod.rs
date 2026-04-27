@@ -31,11 +31,7 @@ pub(crate) use shared::{
 
 use crate::engine::{registry, scanner};
 use crate::tui::logger::Logger;
-use dialoguer::Select;
-use indicatif::{ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
-use std::sync::OnceLock;
-use std::time::Duration;

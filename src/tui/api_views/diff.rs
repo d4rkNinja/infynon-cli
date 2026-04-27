@@ -115,7 +115,7 @@ fn render_run_column(
     )]));
 
     // Responsive node ID width
-    let node_w = (panel_w / 3).max(8).min(24);
+    let node_w = (panel_w / 3).clamp(8, 24);
 
     // Per-step list
     for step in &run.steps {

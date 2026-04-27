@@ -11,21 +11,7 @@
 ///   NuGet     → api.nuget.org
 ///   Hex       → hex.pm
 ///   pub.dev   → pub.dev
-use reqwest::blocking::Client;
 use serde::Deserialize;
-use std::time::Duration;
-
-fn client() -> Client {
-    let ua = format!(
-        "infynon/{} (https://github.com/d4rkNinja/infynon-cli)",
-        env!("CARGO_PKG_VERSION")
-    );
-    Client::builder()
-        .timeout(Duration::from_secs(10))
-        .user_agent(ua)
-        .build()
-        .unwrap_or_default()
-}
 
 /// Resolve the latest version for a package in the given OSV ecosystem string.
 /// `ecosystem` matches the OSV ecosystem field (e.g. "npm", "PyPI", "crates.io").
@@ -58,7 +44,7 @@ pub fn fetch_latest_version(name: &str, ecosystem: &str) -> Option<String> {
         "Hex" | "hex" | "mix" => hex_latest(name),
 
         // ── Dart / Flutter ───────────────────────────────────────────────────
-        "pub.dev" | "pub" | "dart" => pubdev_latest(name),
+        "Pub" | "pub.dev" | "pub" | "dart" => pubdev_latest(name),
 
         // Unknown ecosystem — cannot resolve latest
         _ => None,
@@ -76,7 +62,12 @@ struct NpmLatest {
 
 fn npm_latest(name: &str) -> Option<String> {
     let url = format!("https://registry.npmjs.org/{}/latest", urlenc(name));
-    let r: NpmLatest = client().get(&url).send().ok()?.json().ok()?;
+    let r: NpmLatest = crate::utils::http_client()
+        .get(&url)
+        .send()
+        .ok()?
+        .json()
+        .ok()?;
     Some(r.version)
 }
 
@@ -95,7 +86,12 @@ struct PypiInfo {
 
 fn pypi_latest(name: &str) -> Option<String> {
     let url = format!("https://pypi.org/pypi/{}/json", name);
-    let r: PypiRoot = client().get(&url).send().ok()?.json().ok()?;
+    let r: PypiRoot = crate::utils::http_client()
+        .get(&url)
+        .send()
+        .ok()?
+        .json()
+        .ok()?;
     Some(r.info.version)
 }
 
@@ -115,7 +111,12 @@ struct CrateInfo {
 
 fn crates_latest(name: &str) -> Option<String> {
     let url = format!("https://crates.io/api/v1/crates/{}", name);
-    let r: CratesRoot = client().get(&url).send().ok()?.json().ok()?;
+    let r: CratesRoot = crate::utils::http_client()
+        .get(&url)
+        .send()
+        .ok()?
+        .json()
+        .ok()?;
     Some(r.krate.newest_version)
 }
 
@@ -132,7 +133,12 @@ struct GoLatest {
 fn go_latest(name: &str) -> Option<String> {
     // module paths may contain capital letters → use escaped path
     let url = format!("https://proxy.golang.org/{}/@latest", name.to_lowercase());
-    let r: GoLatest = client().get(&url).send().ok()?.json().ok()?;
+    let r: GoLatest = crate::utils::http_client()
+        .get(&url)
+        .send()
+        .ok()?
+        .json()
+        .ok()?;
     Some(r.version)
 }
 
@@ -147,7 +153,12 @@ struct GemInfo {
 
 fn rubygems_latest(name: &str) -> Option<String> {
     let url = format!("https://rubygems.org/api/v1/gems/{}.json", name);
-    let r: GemInfo = client().get(&url).send().ok()?.json().ok()?;
+    let r: GemInfo = crate::utils::http_client()
+        .get(&url)
+        .send()
+        .ok()?
+        .json()
+        .ok()?;
     Some(r.version)
 }
 
@@ -168,7 +179,12 @@ fn packagist_latest(name: &str) -> Option<String> {
     // name must be vendor/package format
     let (vendor, pkg) = name.split_once('/')?;
     let url = format!("https://repo.packagist.org/p2/{}/{}.json", vendor, pkg);
-    let r: PackagistRoot = client().get(&url).send().ok()?.json().ok()?;
+    let r: PackagistRoot = crate::utils::http_client()
+        .get(&url)
+        .send()
+        .ok()?
+        .json()
+        .ok()?;
     let versions = r.packages.values().next()?;
     // First entry is latest stable
     let ver = versions
@@ -192,7 +208,12 @@ fn nuget_latest(name: &str) -> Option<String> {
         "https://api.nuget.org/v3-flatcontainer/{}/index.json",
         name.to_lowercase()
     );
-    let r: NugetIndex = client().get(&url).send().ok()?.json().ok()?;
+    let r: NugetIndex = crate::utils::http_client()
+        .get(&url)
+        .send()
+        .ok()?
+        .json()
+        .ok()?;
     // Stable versions don't contain '-' (which marks pre-release)
     let stable: Vec<_> = r.versions.iter().filter(|v| !v.contains('-')).collect();
     stable.last().map(|s| s.to_string())
@@ -209,7 +230,12 @@ struct HexPackage {
 
 fn hex_latest(name: &str) -> Option<String> {
     let url = format!("https://hex.pm/api/packages/{}", name);
-    let r: HexPackage = client().get(&url).send().ok()?.json().ok()?;
+    let r: HexPackage = crate::utils::http_client()
+        .get(&url)
+        .send()
+        .ok()?
+        .json()
+        .ok()?;
     r.latest_stable_version
 }
 
@@ -228,7 +254,12 @@ struct PubVersion {
 
 fn pubdev_latest(name: &str) -> Option<String> {
     let url = format!("https://pub.dev/api/packages/{}", name);
-    let r: PubPackage = client().get(&url).send().ok()?.json().ok()?;
+    let r: PubPackage = crate::utils::http_client()
+        .get(&url)
+        .send()
+        .ok()?
+        .json()
+        .ok()?;
     Some(r.latest.version)
 }
 

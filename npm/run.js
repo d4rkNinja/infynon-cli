@@ -30,4 +30,8 @@ if (result.error) {
   process.exit(1);
 }
 
+if (result.signal) {
+  process.kill(process.pid, result.signal);
+}
+
 process.exit(result.status !== null ? result.status : 1);

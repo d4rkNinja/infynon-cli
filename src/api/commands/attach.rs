@@ -67,7 +67,7 @@ pub fn cmd_attach(
                 .any(|e| e.from == from_id && e.to == to_id);
             if !already {
                 flow.edges.push(edge.clone());
-                if let Ok(_) = storage::save_flow(&flow) {
+                if storage::save_flow(&flow).is_ok() {
                     attached_to.push(flow.name.clone());
                 }
             }

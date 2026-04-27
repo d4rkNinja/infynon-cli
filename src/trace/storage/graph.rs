@@ -301,6 +301,7 @@ pub fn auto_build_graph(branch: &str) -> Result<(usize, usize), String> {
             "--no-merges",
             "-100",
             branch,
+            "--",
         ])
         .output()
         .map_err(|e| format!("failed to run git log: {}", e))?;

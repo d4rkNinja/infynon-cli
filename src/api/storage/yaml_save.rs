@@ -82,8 +82,6 @@ struct YamlSaveIncomingStep {
 
 // ── YAML save helpers ─────────────────────────────────────────────────────────
 
-/// Returns true if the project uses YAML for nodes or flows.
-
 fn node_to_yaml_save(node: &Node) -> YamlSaveNode {
     let body = node
         .body_json
@@ -183,4 +181,3 @@ fn flow_to_yaml_save(flow: &Flow) -> YamlSaveFlow {
         steps,
     }
 }
-

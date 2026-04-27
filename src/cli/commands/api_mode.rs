@@ -7,7 +7,7 @@ use crate::tui::logger::Logger;
 pub fn execute_api_command(action: ApiCommands) {
     if let Err(message) = crate::cli::validate::validate_api_command(&action) {
         Logger::error(&message);
-        return;
+        std::process::exit(2);
     }
     match action {
         ApiCommands::Tui { flow_id } => super::tui::run_api_tui(flow_id.as_deref()),

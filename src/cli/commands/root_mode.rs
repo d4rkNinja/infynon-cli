@@ -19,7 +19,7 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
 
     if let Err(message) = crate::cli::validate::validate_pkg_args(&args) {
         Logger::error(&message);
-        return Ok(());
+        std::process::exit(2);
     }
 
     if let Some(command) = args.command.take() {
@@ -53,6 +53,7 @@ fn route_pkg_command(args: PkgArgs, command: PkgCommands) -> Result<(), InfynonE
             pkg_file,
         } => {
             let machine_output = args.machine_output();
+            let has_fix = fix.is_some();
             let format = output
                 .as_deref()
                 .map(|value| match value.to_ascii_lowercase().as_str() {
@@ -60,12 +61,15 @@ fn route_pkg_command(args: PkgArgs, command: PkgCommands) -> Result<(), InfynonE
                     "both" => OutputFormat::Both,
                     _ => OutputFormat::Markdown,
                 });
-            run_scan(
+            let code = run_scan(
                 format,
                 fix.map(|value| FixLevel::from_str(&value)),
                 pkg_file.or(args.pkg_file).as_deref(),
                 machine_output,
             );
+            if code != 0 && (machine_output || has_fix) {
+                std::process::exit(code);
+            }
         }
         PkgCommands::Audit { pkg_file } => {
             features::cmd_audit_deep(pkg_file.or(args.pkg_file).as_deref())
@@ -108,7 +112,10 @@ fn route_pkg_command(args: PkgArgs, command: PkgCommands) -> Result<(), InfynonE
             features::cmd_search(&query, ecosystem.as_deref())
         }
         PkgCommands::Fix { auto: _, pkg_file } => {
-            features::cmd_fix_auto(pkg_file.or(args.pkg_file).as_deref())
+            let code = features::cmd_fix_auto(pkg_file.or(args.pkg_file).as_deref());
+            if code != 0 {
+                std::process::exit(code);
+            }
         }
         PkgCommands::Clean { pkg_file } => {
             features::cmd_clean(pkg_file.or(args.pkg_file).as_deref())

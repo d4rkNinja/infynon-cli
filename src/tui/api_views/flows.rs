@@ -309,9 +309,7 @@ fn draw_connection(
         // Carry label beside vertical line
         if !carry.is_empty() && src_by + 1 < inner.bottom() {
             let carry_str = carry.join(",");
-            let label_max = (inner.right().saturating_sub(src_cx + 2) as usize)
-                .min(12)
-                .max(4);
+            let label_max = (inner.right().saturating_sub(src_cx + 2) as usize).clamp(4, 12);
             let carry_label = truncate(&carry_str, label_max);
             let label_x =
                 (src_cx + 2).min(inner.right().saturating_sub(carry_label.len() as u16 + 2));
@@ -371,7 +369,7 @@ fn draw_connection(
             if !carry.is_empty() && (right_x - left_x) > 4 {
                 let carry_str = carry.join(",");
                 let avail = (right_x - left_x - 2) as usize;
-                let carry_label = truncate(&carry_str, avail.min(14).max(4));
+                let carry_label = truncate(&carry_str, avail.clamp(4, 14));
                 let label_start = left_x + 1;
                 let label_w = carry_label.len() as u16;
                 if label_start + label_w < right_x {
@@ -495,7 +493,7 @@ fn render_graph_sidebar(f: &mut Frame, app: &ApiApp, flow: &crate::api::types::F
                 Style::default().fg(DIMMER),
             )]));
             for ext in &node.extractions {
-                let name_max = (inner_w / 3).max(6).min(14);
+                let name_max = (inner_w / 3).clamp(6, 14);
                 let from_max = inner_w.saturating_sub(name_max + 5).max(6);
                 lines.push(Line::from(vec![
                     Span::styled(

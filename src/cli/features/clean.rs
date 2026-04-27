@@ -2,6 +2,31 @@ use super::doctor::{collect_source, find_unused_deps};
 use super::*;
 
 pub fn cmd_clean(pkg_file: Option<&str>) {
+    if let Some(file) = pkg_file {
+        let path = Path::new(file);
+        if let Some(parent) = path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+        {
+            let original_dir = std::env::current_dir().ok();
+            if let Err(err) = std::env::set_current_dir(parent) {
+                return Logger::error(&format!(
+                    "Could not use pkg-file directory '{}': {}",
+                    parent.display(),
+                    err
+                ));
+            }
+            cmd_clean_current_dir();
+            if let Some(dir) = original_dir {
+                let _ = std::env::set_current_dir(dir);
+            }
+            return;
+        }
+    }
+    cmd_clean_current_dir();
+}
+
+fn cmd_clean_current_dir() {
     use std::io::{self, Write};
 
     println!();
@@ -47,22 +72,26 @@ pub fn cmd_clean(pkg_file: Option<&str>) {
 
     // Generate and execute uninstall commands
     for (name, eco) in &unused {
-        let cmd = match eco.as_str() {
+        let invocation = match eco.as_str() {
             "npm" => {
                 if Path::new("yarn.lock").exists() {
-                    format!("yarn remove {}", name)
+                    crate::cli::PkgInvocation::from_args("yarn", &["remove", name])
                 } else if Path::new("pnpm-lock.yaml").exists() {
-                    format!("pnpm remove {}", name)
+                    crate::cli::PkgInvocation::from_args("pnpm", &["remove", name])
                 } else {
-                    format!("npm uninstall {}", name)
+                    crate::cli::PkgInvocation::from_args("npm", &["uninstall", name])
                 }
             }
-            "cargo" => format!("cargo remove {}", name),
-            "pip" => format!("pip uninstall -y {}", name),
+            "cargo" => crate::cli::PkgInvocation::from_args("cargo", &["remove", name]),
+            "pip" => crate::cli::PkgInvocation::from_args(
+                &crate::ecosystems::detector::resolve_binary("pip"),
+                &["uninstall", "-y", name],
+            ),
             _ => continue,
         };
+        let cmd = invocation.display();
 
-        let result = crate::cli::run_pkg_cmd(&cmd);
+        let result = invocation.output();
         match result {
             Ok(out) if out.status.success() => {
                 println!(

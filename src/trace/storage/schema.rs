@@ -3,73 +3,82 @@ pub fn supported_schema_sql() -> String {
 }
 
 pub fn sql_schema_for(kind: SourceKind) -> String {
-    let (id_auto, ts_default, index_prefix) = match kind {
+    let (id_auto, ts_default, index_prefix, pk_text, indexed_text, text_type) = match kind {
         SourceKind::Postgres => (
             "BIGSERIAL PRIMARY KEY",
             "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP",
             "CREATE INDEX IF NOT EXISTS",
+            "TEXT",
+            "TEXT",
+            "TEXT",
         ),
         SourceKind::Mysql => (
             "BIGINT PRIMARY KEY AUTO_INCREMENT",
             "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP",
             "CREATE INDEX",
+            "VARCHAR(191)",
+            "VARCHAR(191)",
+            "TEXT",
         ),
         _ => (
             "INTEGER PRIMARY KEY AUTOINCREMENT",
             "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP",
             "CREATE INDEX IF NOT EXISTS",
+            "TEXT",
+            "TEXT",
+            "TEXT",
         ),
     };
     let mut sql = format!(
         "
 CREATE TABLE IF NOT EXISTS trace_sources (
-  id TEXT PRIMARY KEY,
-  kind TEXT NOT NULL,
-  url TEXT NOT NULL,
+  id {pk_text} PRIMARY KEY,
+  kind {indexed_text} NOT NULL,
+  url {text_type} NOT NULL,
   enabled BOOLEAN NOT NULL DEFAULT TRUE,
-  owner_user TEXT NULL,
-  database_name TEXT NULL,
-  namespace TEXT NULL,
-  username TEXT NULL,
-  password_env TEXT NULL,
-  notes TEXT NULL,
+  owner_user {indexed_text} NULL,
+  database_name {indexed_text} NULL,
+  namespace {indexed_text} NULL,
+  username {indexed_text} NULL,
+  password_env {indexed_text} NULL,
+  notes {text_type} NULL,
   created_at {ts_default}
 );
 
 CREATE TABLE IF NOT EXISTS trace_notes (
-  id TEXT PRIMARY KEY,
-  title TEXT NOT NULL,
-  body TEXT NOT NULL,
-  layer TEXT NOT NULL,
-  scope TEXT NOT NULL,
-  target TEXT NOT NULL,
-  files_json TEXT NOT NULL,
-  tags_json TEXT NOT NULL,
+  id {pk_text} PRIMARY KEY,
+  title {text_type} NOT NULL,
+  body {text_type} NOT NULL,
+  layer {indexed_text} NOT NULL,
+  scope {indexed_text} NOT NULL,
+  target {indexed_text} NOT NULL,
+  files_json {text_type} NOT NULL,
+  tags_json {text_type} NOT NULL,
   related_pr BIGINT NULL,
-  author TEXT NOT NULL,
-  actor TEXT NULL,
-  status TEXT NOT NULL,
+  author {indexed_text} NOT NULL,
+  actor {indexed_text} NULL,
+  status {indexed_text} NOT NULL,
   created_at TIMESTAMP NOT NULL,
   updated_at TIMESTAMP NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS trace_sync_runs (
   id {id_auto},
-  timestamp TEXT NOT NULL,
-  direction TEXT NOT NULL,
-  source_id TEXT NULL,
-  summary TEXT NOT NULL
+  timestamp {indexed_text} NOT NULL,
+  direction {indexed_text} NOT NULL,
+  source_id {indexed_text} NULL,
+  summary {text_type} NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS trace_package_findings (
   id {id_auto},
-  package_name TEXT NOT NULL,
-  version TEXT NOT NULL,
-  ecosystem TEXT NOT NULL,
-  severity TEXT NOT NULL,
-  vulnerability_id TEXT NOT NULL,
-  source_file TEXT NOT NULL,
-  installed_by TEXT NULL,
+  package_name {indexed_text} NOT NULL,
+  version {indexed_text} NOT NULL,
+  ecosystem {indexed_text} NOT NULL,
+  severity {indexed_text} NOT NULL,
+  vulnerability_id {indexed_text} NOT NULL,
+  source_file {text_type} NOT NULL,
+  installed_by {indexed_text} NULL,
   observed_at {ts_default}
 );
 "
@@ -95,23 +104,23 @@ CREATE INDEX idx_trace_notes_status ON trace_notes(status);\n",
     sql.push_str(&format!(
         "
 CREATE TABLE IF NOT EXISTS trace_kg_entities (
-  id TEXT PRIMARY KEY,
-  kind TEXT NOT NULL,
-  name TEXT NOT NULL,
-  metadata_json TEXT NOT NULL DEFAULT '{{}}',
-  branch TEXT NOT NULL DEFAULT 'main',
+  id {pk_text} PRIMARY KEY,
+  kind {indexed_text} NOT NULL,
+  name {indexed_text} NOT NULL,
+  metadata_json {text_type} NOT NULL,
+  branch {indexed_text} NOT NULL DEFAULT 'main',
   created_at TIMESTAMP NOT NULL,
   updated_at TIMESTAMP NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS trace_kg_edges (
-  id TEXT PRIMARY KEY,
-  source_entity TEXT NOT NULL,
-  target_entity TEXT NOT NULL,
-  relation TEXT NOT NULL,
+  id {pk_text} PRIMARY KEY,
+  source_entity {indexed_text} NOT NULL,
+  target_entity {indexed_text} NOT NULL,
+  relation {indexed_text} NOT NULL,
   weight REAL NOT NULL DEFAULT 1.0,
-  branch TEXT NOT NULL DEFAULT 'main',
-  evidence TEXT NOT NULL DEFAULT '',
+  branch {indexed_text} NOT NULL DEFAULT 'main',
+  evidence {text_type} NOT NULL,
   created_at TIMESTAMP NOT NULL
 );
 "
@@ -192,4 +201,3 @@ trace:kg:index:relation:{relation} -> set(edge_id)
 "#;
     schema.trim().to_string()
 }
-

@@ -283,7 +283,7 @@ cargo install infynon
 ### Go
 
 ```bash
-go install github.com/d4rkNinja/infynon-cli/go@latest
+go install github.com/d4rkNinja/infynon-cli/go/cmd/infynon@latest
 ```
 
 ### Linux / macOS

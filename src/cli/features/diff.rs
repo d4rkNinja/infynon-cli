@@ -160,7 +160,7 @@ fn diff_npm(client: &reqwest::blocking::Client, package: &str, v1: &str, v2: &st
             }
         }
         for (k, v2) in &s2 {
-            if s1.get(k).map_or(false, |v1| v1 != v2) {
+            if s1.get(k).is_some_and(|v1| v1 != v2) {
                 println!("     {} {} (changed)", "~".bright_yellow(), k.bold());
             }
         }
@@ -278,7 +278,7 @@ fn print_deps_diff(label: &str, old: &HashMap<String, String>, new: &HashMap<Str
     let removed: Vec<&String> = old.keys().filter(|k| !new.contains_key(*k)).collect();
     let changed: Vec<&String> = new
         .keys()
-        .filter(|k| old.get(*k).map_or(false, |v| v != &new[*k]))
+        .filter(|k| old.get(*k).is_some_and(|v| v != &new[*k]))
         .collect();
     if added.is_empty() && removed.is_empty() && changed.is_empty() {
         return;

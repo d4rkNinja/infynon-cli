@@ -115,7 +115,7 @@ fn render_live_execution(f: &mut Frame, app: &ApiApp, area: Rect) {
             let m_color = method_color(&step.method);
 
             // Line 1: step number + icon + node_id + method badge + status code + url
-            let w = (area.width as usize / 4).max(8).min(24);
+            let w = (area.width as usize / 4).clamp(8, 24);
             let line1 = Line::from(vec![
                 Span::styled(format!("{:>2}. ", idx + 1), Style::default().fg(DIMMER)),
                 Span::styled(
@@ -367,7 +367,7 @@ fn render_latency_profiler(f: &mut Frame, app: &ApiApp, area: Rect) {
     lines.push(Line::raw(""));
     lines.push(Line::from(vec![
         Span::styled(
-            format!("  \u{2500}\u{2500} Summary \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}"),
+            "  \u{2500}\u{2500} Summary \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}".to_string(),
             Style::default().fg(DIMMER),
         ),
     ]));

@@ -9,7 +9,7 @@ use ratatui::{
 use crate::tui::api_app::ApiApp;
 use crate::tui::theme::*;
 
-use super::{rounded_block, truncate};
+use super::truncate;
 
 // ── Dashboard view ────────────────────────────────────────────────────────────
 
@@ -57,7 +57,7 @@ fn render_flow_list(f: &mut Frame, app: &ApiApp, area: Rect) {
             let node_suffix = if node_count == 1 { " node " } else { " nodes" };
 
             // Line 1: status icon + flow name + node count
-            let w = (area.width as usize / 3).max(12).min(28);
+            let w = (area.width as usize / 3).clamp(12, 28);
             let line1 = Line::from(vec![
                 Span::styled("  ", Style::default()),
                 Span::styled(
@@ -194,7 +194,7 @@ fn render_quick_stats(f: &mut Frame, app: &ApiApp, area: Rect) {
         let filled = if total == 0 {
             0
         } else {
-            (pass_pct as usize * bar_width) / 100
+            (pass_pct * bar_width) / 100
         };
         let empty = bar_width.saturating_sub(filled);
         let bar_color = if pass_pct == 100 {
@@ -282,8 +282,6 @@ fn render_quick_stats(f: &mut Frame, app: &ApiApp, area: Rect) {
 
     let title = if app.flow_running {
         " \u{27F3} Stats "
-    } else if app.last_run.is_some() {
-        " Stats "
     } else {
         " Stats "
     };

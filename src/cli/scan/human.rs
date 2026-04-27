@@ -8,16 +8,20 @@ pub(super) fn run_human_scan(
     packages: &[scanner::LockedPackage],
     output: Option<crate::cli::scan::OutputFormat>,
     fix_level: Option<&crate::cli::scan::FixLevel>,
-) {
+) -> i32 {
     let tuples = queue_packages(packages);
     let results = match osv::batch_query(&tuples) {
         Ok(value) => value,
-        Err(err) => return Logger::error(&format!("Vulnerability DB error: {}", err)),
+        Err(err) => {
+            Logger::error(&format!("Vulnerability DB error: {}", err));
+            return 2;
+        }
     };
     let (unique_ids, vuln_to_packages) = collect_vuln_ids(&results);
     if unique_ids.is_empty() {
         println!();
-        return Logger::success("No known vulnerabilities found for your dependency tree!");
+        Logger::success("No known vulnerabilities found for your dependency tree!");
+        return 0;
     }
     let detail_map = fetch_detail_map(&unique_ids);
     let mut findings = build_findings(packages, &vuln_to_packages, &detail_map, fix_level);
@@ -30,9 +34,14 @@ pub(super) fn run_human_scan(
             .iter()
             .any(|finding| finding.fixed_version.is_some() || finding.suggested_version.is_some())
     {
-        crate::cli::scan::autofix::run_auto_fix(&findings);
+        let summary = crate::cli::scan::autofix::run_auto_fix(&findings);
+        if summary.fail_count > 0 {
+            write_reports(&findings, output);
+            return 3;
+        }
     }
     write_reports(&findings, output);
+    0
 }
 
 fn queue_packages(packages: &[scanner::LockedPackage]) -> Vec<(String, String, String)> {
@@ -113,7 +122,7 @@ fn build_findings(
         .filter_map(|(id, pkg_idx)| {
             let detail = details.get(id)?;
             let severity = osv::severity_label(detail);
-            if !fix_level.map_or(true, |level| level.matches(severity)) {
+            if !fix_level.is_none_or(|level| level.matches(severity)) {
                 return None;
             }
             Some(reporter::ScanFinding {

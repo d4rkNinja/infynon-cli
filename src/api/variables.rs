@@ -20,10 +20,10 @@ struct DotenvCache {
 static DOTENV_CACHE: Mutex<Option<DotenvCache>> = Mutex::new(None);
 
 fn get_dotenv() -> HashMap<String, String> {
-    let env_path = std::path::Path::new(".infynon/.env");
+    let env_path = project_dotenv_path();
     let fallback = std::path::Path::new(".env");
     let path = if env_path.exists() {
-        env_path
+        env_path.as_path()
     } else {
         fallback
     };
@@ -60,18 +60,29 @@ fn parse_dotenv_file(path: &std::path::Path) -> HashMap<String, String> {
         }
         if let Some(eq_pos) = line.find('=') {
             let key = line[..eq_pos].trim().to_string();
-            let mut val = line[eq_pos + 1..].trim().to_string();
-            if (val.starts_with('"') && val.ends_with('"'))
-                || (val.starts_with('\'') && val.ends_with('\''))
-            {
-                val = val[1..val.len() - 1].to_string();
-            }
+            let val = parse_dotenv_value(&line[eq_pos + 1..]);
             if !key.is_empty() {
                 map.insert(key, val);
             }
         }
     }
     map
+}
+
+pub fn project_dotenv_path() -> std::path::PathBuf {
+    crate::utils::project_infynon_path(&[".env"])
+}
+
+pub fn parse_dotenv_value(raw: &str) -> String {
+    let val = raw.trim();
+    if val.len() >= 2
+        && ((val.starts_with('"') && val.ends_with('"'))
+            || (val.starts_with('\'') && val.ends_with('\'')))
+    {
+        val[1..val.len() - 1].to_string()
+    } else {
+        val.to_string()
+    }
 }
 
 /// Look up an environment variable: first from .infynon/.env, then process env.
@@ -96,7 +107,7 @@ pub fn load_env_context() -> HashMap<String, serde_json::Value> {
         .into_iter()
         .map(|(k, v)| {
             let val = serde_json::from_str::<serde_json::Value>(&v)
-                .unwrap_or_else(|_| serde_json::Value::String(v));
+                .unwrap_or(serde_json::Value::String(v));
             (k, val)
         })
         .collect()
@@ -110,8 +121,7 @@ fn substitute_env_pass(s: &str) -> String {
         if bytes[i] == b'{' {
             if let Some(close) = s[i..].find('}') {
                 let inner = &s[i + 1..i + close];
-                if inner.starts_with('$') {
-                    let env_name = &inner[1..];
+                if let Some(env_name) = inner.strip_prefix('$') {
                     if let Some(val) = lookup_env_var(env_name) {
                         output.push_str(&val);
                     } else {
@@ -168,44 +178,54 @@ pub fn substitute_str(template: &str, context: &HashMap<String, Value>) -> Strin
 /// - For fields that are exactly `{var}` we do type-aware replacement so that
 ///   integers/booleans stay as their proper JSON types.
 pub fn substitute_body(body_json: &str, context: &HashMap<String, Value>) -> Value {
-    // Start with naive string substitution for string-embedded placeholders
-    // (e.g. "Bearer {token}")
-    // Handle {$ENV_VAR} in body
-    let mut substituted = substitute_env_pass(body_json);
+    match serde_json::from_str::<Value>(body_json) {
+        Ok(value) => substitute_json_value(value, context),
+        Err(_) => Value::String(substitute_str(body_json, context)),
+    }
+}
 
-    for (key, val) in context {
-        let placeholder = format!("\"{{{}}}\"", key);
-        // Replace JSON string placeholder "  {var}  " with the raw JSON value
-        // when the entire string value is just the placeholder.
-        match val {
-            Value::String(s) => {
-                // String values: substitute in-place (keep quotes)
-                let str_placeholder = format!("{{{}}}", key);
-                substituted = substituted.replace(&str_placeholder, s);
-            }
-            Value::Number(_) | Value::Bool(_) | Value::Null => {
-                // Non-string values: replace the quoted placeholder with the raw value
-                let raw = val.to_string();
-                substituted = substituted.replace(&placeholder, &raw);
-            }
-            _ => {
-                // Arrays/objects: replace quoted placeholder with raw JSON
-                let raw = val.to_string();
-                substituted = substituted.replace(&placeholder, &raw);
+fn substitute_json_value(value: Value, context: &HashMap<String, Value>) -> Value {
+    match value {
+        Value::String(s) => {
+            let env_resolved = substitute_env_pass(&s);
+            if let Some(key) = exact_placeholder_key(&env_resolved) {
+                context
+                    .get(key)
+                    .cloned()
+                    .unwrap_or(Value::String(env_resolved))
+            } else {
+                Value::String(substitute_str(&env_resolved, context))
             }
         }
+        Value::Array(values) => Value::Array(
+            values
+                .into_iter()
+                .map(|value| substitute_json_value(value, context))
+                .collect(),
+        ),
+        Value::Object(map) => Value::Object(
+            map.into_iter()
+                .map(|(key, value)| (key, substitute_json_value(value, context)))
+                .collect(),
+        ),
+        other => other,
     }
+}
 
-    // Also do a pass for any remaining {var} inside strings
-    for (key, val) in context {
-        let str_placeholder = format!("{{{}}}", key);
-        if substituted.contains(&str_placeholder) {
-            substituted = substituted.replace(&str_placeholder, &value_to_str(val));
+fn exact_placeholder_key(value: &str) -> Option<&str> {
+    if value.starts_with('{') && value.ends_with('}') && value.len() > 2 {
+        let key = &value[1..value.len() - 1];
+        if key
+            .chars()
+            .next()
+            .map(|c| c == '_' || c.is_ascii_alphabetic())
+            .unwrap_or(false)
+            && key.chars().all(|c| c == '_' || c.is_ascii_alphanumeric())
+        {
+            return Some(key);
         }
     }
-
-    // Parse the result; fall back to a JSON string if it fails
-    serde_json::from_str(&substituted).unwrap_or_else(|_| Value::String(substituted))
+    None
 }
 
 /// Substitute placeholders in a path string (e.g. `/users/{user_id}`).
@@ -250,7 +270,7 @@ pub fn parse_set_vars(set_vars: &[(String, String)]) -> HashMap<String, Value> {
     set_vars
         .iter()
         .map(|(k, v)| {
-            let val = serde_json::from_str::<Value>(v).unwrap_or_else(|_| Value::String(v.clone()));
+            let val = serde_json::from_str::<Value>(v).unwrap_or(Value::String(v.clone()));
             (k.clone(), val)
         })
         .collect()
@@ -294,5 +314,15 @@ mod tests {
         assert_eq!(result["product_id"], json!(99));
         assert_eq!(result["active"], json!(true));
         assert_eq!(result["name"], json!("test-user"));
+    }
+
+    #[test]
+    fn substitute_body_escapes_string_values() {
+        let mut ctx: HashMap<String, Value> = HashMap::new();
+        ctx.insert("name".to_string(), json!("quote \" and newline\n"));
+
+        let result = substitute_body(r#"{"name": "{name}"}"#, &ctx);
+
+        assert_eq!(result["name"], json!("quote \" and newline\n"));
     }
 }
