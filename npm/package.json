@@ -1,6 +1,6 @@
 ﻿{
   "name": "infynon",
-  "version": "0.2.0-beta.9.0.9",
+  "version": "0.2.0-beta.9.0.10",
   "description": "Thin npm installer for the proprietary INFYNON CLI binary releases.",
   "bin": {
     "infynon": "run.js",
