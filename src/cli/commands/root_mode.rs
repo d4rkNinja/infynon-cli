@@ -33,6 +33,7 @@ pub fn execute_pkg_mode() -> Result<(), InfynonError> {
 }
 
 pub fn execute_root_mode() -> Result<(), InfynonError> {
+    crate::ninja::commands::ensure_first_run_identity_prompt();
     let args = RootArgs::parse();
     match args.command {
         None => Logger::splash_root(),
@@ -41,6 +42,11 @@ pub fn execute_root_mode() -> Result<(), InfynonError> {
         Some(RootCommands::Trace { action }) => {
             std::process::exit(crate::trace::commands::execute(action))
         }
+        Some(RootCommands::Workspace { action }) => super::execute_workspace_command(action),
+        Some(RootCommands::Task { action }) => super::execute_task_command(action),
+        Some(RootCommands::Soul { action }) => super::execute_soul_command(action),
+        Some(RootCommands::Ninja { action }) => super::execute_ninja_command(action),
+        Some(RootCommands::Coding { action }) => super::execute_coding_command(action),
     }
     Ok(())
 }

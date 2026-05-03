@@ -1,8 +1,10 @@
 use crate::cli::args::{
     AiAction, ApiCommands, AssertionAction, EnvAction, FlowAction, NodeAction, PkgArgs,
-    PkgCommands, PromptAction,
+    PkgCommands, PromptAction, TaskAction, WorkspaceAction,
 };
+use regex::Regex;
 use std::path::Path;
+use std::sync::OnceLock;
 
 pub fn validate_pkg_args(args: &PkgArgs) -> Result<(), String> {
     validate_optional_severity(args.strict.as_deref(), "--strict")?;
@@ -57,6 +59,380 @@ pub fn validate_api_command(action: &ApiCommands) -> Result<(), String> {
             validate_spec_extension(spec)?;
             validate_optional_url(base_url.as_deref(), "--base-url")?;
             validate_optional_non_empty(prefix.as_deref(), "--prefix")
+        }
+    }
+}
+
+pub fn validate_workspace_action(action: &WorkspaceAction) -> Result<(), String> {
+    match action {
+        WorkspaceAction::Create {
+            name,
+            mutate,
+            folder_name,
+            path,
+            description,
+            lite_model,
+            lite_thinking,
+            frontier_model,
+            frontier_thinking,
+            highest_frontier_model,
+            highest_frontier_thinking,
+            super_lite_model,
+            super_lite_thinking,
+            ..
+        } => {
+            validate_portable_name(name, "workspace name")?;
+            validate_mutate(*mutate)?;
+            validate_optional_portable_name(folder_name.as_deref(), "folder name")?;
+            validate_optional_directory_path(path.as_deref(), "--path")?;
+            validate_optional_non_empty(description.as_deref(), "--description")?;
+            validate_workspace_folder_pair(folder_name.as_deref(), path.as_deref())?;
+            validate_workspace_models([
+                (
+                    "--lite-model",
+                    lite_model.as_deref(),
+                    "--lite-thinking",
+                    lite_thinking.as_deref(),
+                ),
+                (
+                    "--frontier-model",
+                    frontier_model.as_deref(),
+                    "--frontier-thinking",
+                    frontier_thinking.as_deref(),
+                ),
+                (
+                    "--highest-frontier-model",
+                    highest_frontier_model.as_deref(),
+                    "--highest-frontier-thinking",
+                    highest_frontier_thinking.as_deref(),
+                ),
+                (
+                    "--super-lite-model",
+                    super_lite_model.as_deref(),
+                    "--super-lite-thinking",
+                    super_lite_thinking.as_deref(),
+                ),
+            ])
+        }
+        WorkspaceAction::List => Ok(()),
+        WorkspaceAction::Show { name } => validate_portable_name(name, "workspace name"),
+        WorkspaceAction::AgentRootShow => Ok(()),
+        WorkspaceAction::AgentRootSet { mutate, path } => {
+            validate_mutate(*mutate)?;
+            validate_directory_path(path, "--path")
+        }
+        WorkspaceAction::Update {
+            name,
+            mutate,
+            folder_name,
+            path,
+            description,
+            default,
+            lite_model,
+            lite_thinking,
+            frontier_model,
+            frontier_thinking,
+            highest_frontier_model,
+            highest_frontier_thinking,
+            super_lite_model,
+            super_lite_thinking,
+            ..
+        } => {
+            validate_portable_name(name, "workspace name")?;
+            validate_mutate(*mutate)?;
+            validate_optional_portable_name(folder_name.as_deref(), "folder name")?;
+            validate_optional_directory_path(path.as_deref(), "--path")?;
+            validate_optional_non_empty(description.as_deref(), "--description")?;
+            validate_workspace_folder_pair(folder_name.as_deref(), path.as_deref())?;
+            validate_workspace_models([
+                (
+                    "--lite-model",
+                    lite_model.as_deref(),
+                    "--lite-thinking",
+                    lite_thinking.as_deref(),
+                ),
+                (
+                    "--frontier-model",
+                    frontier_model.as_deref(),
+                    "--frontier-thinking",
+                    frontier_thinking.as_deref(),
+                ),
+                (
+                    "--highest-frontier-model",
+                    highest_frontier_model.as_deref(),
+                    "--highest-frontier-thinking",
+                    highest_frontier_thinking.as_deref(),
+                ),
+                (
+                    "--super-lite-model",
+                    super_lite_model.as_deref(),
+                    "--super-lite-thinking",
+                    super_lite_thinking.as_deref(),
+                ),
+            ])?;
+            if folder_name.is_none()
+                && path.is_none()
+                && description.is_none()
+                && !default
+                && lite_model.is_none()
+                && lite_thinking.is_none()
+                && frontier_model.is_none()
+                && frontier_thinking.is_none()
+                && highest_frontier_model.is_none()
+                && highest_frontier_thinking.is_none()
+                && super_lite_model.is_none()
+                && super_lite_thinking.is_none()
+            {
+                return Err(
+                    "Workspace update requires at least one change flag or `--default`."
+                        .to_string(),
+                );
+            }
+            Ok(())
+        }
+        WorkspaceAction::AddFolder {
+            name,
+            mutate,
+            folder_name,
+            path,
+        } => {
+            validate_portable_name(name, "workspace name")?;
+            validate_mutate(*mutate)?;
+            validate_portable_name(folder_name, "folder name")?;
+            validate_directory_path(path, "--path")
+        }
+        WorkspaceAction::RemoveFolder {
+            name,
+            mutate,
+            folder_name,
+        } => {
+            validate_portable_name(name, "workspace name")?;
+            validate_mutate(*mutate)?;
+            validate_portable_name(folder_name, "folder name")
+        }
+        WorkspaceAction::Remove { name, mutate } => {
+            validate_portable_name(name, "workspace name")?;
+            validate_mutate(*mutate)
+        }
+    }
+}
+
+pub fn validate_task_action(action: &TaskAction) -> Result<(), String> {
+    match action {
+        TaskAction::Create {
+            id,
+            mutate,
+            workspace,
+            folder_name,
+            agent,
+            model,
+            thinking,
+            prompt,
+            command,
+            pid,
+            session_id,
+            notes,
+            result,
+            blocked_by,
+            blocked_reason,
+            status,
+            ..
+        } => {
+            validate_uuid_v4(id, "task id")?;
+            validate_mutate(*mutate)?;
+            validate_optional_portable_name(workspace.as_deref(), "workspace name")?;
+            validate_optional_portable_name(folder_name.as_deref(), "folder name")?;
+            validate_optional_non_empty(agent.as_deref(), "--agent")?;
+            validate_optional_non_empty(model.as_deref(), "--model")?;
+            validate_optional_workspace_thinking(thinking.as_deref(), "--thinking")?;
+            validate_optional_non_empty(prompt.as_deref(), "--prompt")?;
+            validate_optional_non_empty(command.as_deref(), "--command")?;
+            validate_optional_non_empty(session_id.as_deref(), "--session-id")?;
+            validate_optional_non_empty(notes.as_deref(), "--notes")?;
+            validate_optional_non_empty(result.as_deref(), "--result")?;
+            validate_optional_uuid_v4(blocked_by.as_deref(), "--blocked-by")?;
+            validate_optional_non_empty(blocked_reason.as_deref(), "--blocked-reason")?;
+            validate_blocked_pair(blocked_by.as_deref(), blocked_reason.as_deref())?;
+            validate_optional_pid(*pid)?;
+            validate_task_status(status)
+        }
+        TaskAction::List {
+            workspace,
+            status,
+            agent,
+        } => {
+            validate_optional_portable_name(workspace.as_deref(), "workspace name")?;
+            validate_optional_task_status(status.as_deref())?;
+            validate_optional_non_empty(agent.as_deref(), "--agent")
+        }
+        TaskAction::Show { id } | TaskAction::Remove { id, .. } => validate_uuid_v4(id, "task id"),
+        TaskAction::Update {
+            id,
+            mutate,
+            workspace,
+            folder_name,
+            agent,
+            model,
+            thinking,
+            prompt,
+            command,
+            pid,
+            session_id,
+            notes,
+            result,
+            blocked_by,
+            blocked_reason,
+            status,
+            parent_task_id,
+            ..
+        } => {
+            validate_uuid_v4(id, "task id")?;
+            validate_mutate(*mutate)?;
+            validate_optional_portable_name(workspace.as_deref(), "workspace name")?;
+            validate_optional_portable_name(folder_name.as_deref(), "folder name")?;
+            validate_optional_non_empty(agent.as_deref(), "--agent")?;
+            validate_optional_non_empty(model.as_deref(), "--model")?;
+            validate_optional_workspace_thinking(thinking.as_deref(), "--thinking")?;
+            validate_optional_non_empty(prompt.as_deref(), "--prompt")?;
+            validate_optional_non_empty(command.as_deref(), "--command")?;
+            validate_optional_non_empty(session_id.as_deref(), "--session-id")?;
+            validate_optional_non_empty(notes.as_deref(), "--notes")?;
+            validate_optional_non_empty(result.as_deref(), "--result")?;
+            validate_optional_uuid_v4(blocked_by.as_deref(), "--blocked-by")?;
+            validate_optional_non_empty(blocked_reason.as_deref(), "--blocked-reason")?;
+            validate_blocked_pair(blocked_by.as_deref(), blocked_reason.as_deref())?;
+            validate_optional_pid(*pid)?;
+            validate_optional_task_status(status.as_deref())?;
+            validate_optional_uuid_v4(parent_task_id.as_deref(), "parent task id")?;
+            if workspace.is_none()
+                && folder_name.is_none()
+                && agent.is_none()
+                && model.is_none()
+                && thinking.is_none()
+                && prompt.is_none()
+                && command.is_none()
+                && pid.is_none()
+                && session_id.is_none()
+                && notes.is_none()
+                && result.is_none()
+                && blocked_by.is_none()
+                && blocked_reason.is_none()
+                && status.is_none()
+                && parent_task_id.is_none()
+            {
+                return Err("Task update requires at least one change flag.".to_string());
+            }
+            Ok(())
+        }
+        TaskAction::Start {
+            id,
+            mutate,
+            pid,
+            session_id,
+        } => {
+            validate_uuid_v4(id, "task id")?;
+            validate_mutate(*mutate)?;
+            validate_optional_pid(*pid)?;
+            validate_optional_non_empty(session_id.as_deref(), "--session-id")
+        }
+        TaskAction::Resume {
+            id,
+            mutate,
+            session_id,
+            prompt,
+        } => {
+            validate_uuid_v4(id, "task id")?;
+            validate_mutate(*mutate)?;
+            validate_optional_non_empty(session_id.as_deref(), "--session-id")?;
+            validate_optional_non_empty(prompt.as_deref(), "--prompt")
+        }
+        TaskAction::Kill {
+            id,
+            mutate,
+            pid,
+            reason,
+            ..
+        } => {
+            validate_uuid_v4(id, "task id")?;
+            validate_mutate(*mutate)?;
+            validate_optional_pid(*pid)?;
+            validate_optional_non_empty(reason.as_deref(), "--reason")
+        }
+        TaskAction::Complete {
+            id,
+            mutate,
+            notes,
+            result,
+            close_terminal,
+            keep_terminal,
+            ..
+        } => {
+            validate_uuid_v4(id, "task id")?;
+            validate_mutate(*mutate)?;
+            validate_optional_non_empty(notes.as_deref(), "--notes")?;
+            validate_optional_non_empty(result.as_deref(), "--result")?;
+            validate_terminal_close_flags(*close_terminal, *keep_terminal)
+        }
+        TaskAction::Fail {
+            id,
+            mutate,
+            reason,
+            result,
+            close_terminal,
+            keep_terminal,
+            ..
+        } => {
+            validate_uuid_v4(id, "task id")?;
+            validate_mutate(*mutate)?;
+            validate_optional_non_empty(reason.as_deref(), "--reason")?;
+            validate_optional_non_empty(result.as_deref(), "--result")?;
+            validate_terminal_close_flags(*close_terminal, *keep_terminal)?;
+            if reason.is_none() && result.is_none() {
+                return Err("Task fail requires `--reason` or `--result`.".to_string());
+            }
+            Ok(())
+        }
+        TaskAction::Note { id, mutate, text } | TaskAction::Result { id, mutate, text } => {
+            validate_uuid_v4(id, "task id")?;
+            validate_mutate(*mutate)?;
+            validate_non_empty(text, "--text")
+        }
+        TaskAction::Fork {
+            new_id,
+            from,
+            mutate,
+            workspace,
+            folder_name,
+            agent,
+            model,
+            thinking,
+            prompt,
+            notes,
+            result,
+            session_id,
+            blocked_by,
+            blocked_reason,
+            status,
+        } => {
+            validate_uuid_v4(new_id, "new task id")?;
+            validate_uuid_v4(from, "source task id")?;
+            if new_id == from {
+                return Err("Fork target id must be different from source task id.".to_string());
+            }
+            validate_mutate(*mutate)?;
+            validate_optional_portable_name(workspace.as_deref(), "workspace name")?;
+            validate_optional_portable_name(folder_name.as_deref(), "folder name")?;
+            validate_optional_non_empty(agent.as_deref(), "--agent")?;
+            validate_optional_non_empty(model.as_deref(), "--model")?;
+            validate_optional_workspace_thinking(thinking.as_deref(), "--thinking")?;
+            validate_optional_non_empty(prompt.as_deref(), "--prompt")?;
+            validate_optional_non_empty(notes.as_deref(), "--notes")?;
+            validate_optional_non_empty(result.as_deref(), "--result")?;
+            validate_optional_non_empty(session_id.as_deref(), "--session-id")?;
+            validate_optional_uuid_v4(blocked_by.as_deref(), "--blocked-by")?;
+            validate_optional_non_empty(blocked_reason.as_deref(), "--blocked-reason")?;
+            validate_blocked_pair(blocked_by.as_deref(), blocked_reason.as_deref())?;
+            validate_task_status(status)
         }
     }
 }
@@ -425,5 +801,161 @@ fn validate_non_empty(value: &str, label: &str) -> Result<(), String> {
         Err(format!("{} cannot be empty.", label))
     } else {
         Ok(())
+    }
+}
+
+fn validate_mutate(mutate: bool) -> Result<(), String> {
+    if mutate {
+        Ok(())
+    } else {
+        Err("Mutating commands require `--mutate`.".to_string())
+    }
+}
+
+fn validate_optional_task_status(value: Option<&str>) -> Result<(), String> {
+    if let Some(value) = value {
+        validate_task_status(value)
+    } else {
+        Ok(())
+    }
+}
+
+fn validate_task_status(value: &str) -> Result<(), String> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "draft" | "queued" | "running" | "blocked" | "completed" | "failed" | "killed" => {
+            Ok(())
+        }
+        _ => Err(
+            "Task status must be one of: draft | queued | running | blocked | completed | failed | killed."
+                .to_string(),
+        ),
+    }
+}
+
+fn validate_optional_pid(pid: Option<u32>) -> Result<(), String> {
+    if let Some(pid) = pid {
+        if pid == 0 {
+            return Err("`--pid` must be greater than zero.".to_string());
+        }
+    }
+    Ok(())
+}
+
+fn validate_terminal_close_flags(close_terminal: bool, keep_terminal: bool) -> Result<(), String> {
+    if close_terminal && keep_terminal {
+        Err("Use either `--close-terminal` or `--keep-terminal`, not both.".to_string())
+    } else {
+        Ok(())
+    }
+}
+
+fn validate_optional_directory_path(value: Option<&str>, label: &str) -> Result<(), String> {
+    if let Some(value) = value {
+        validate_directory_path(value, label)?;
+    }
+    Ok(())
+}
+
+fn validate_optional_portable_name(value: Option<&str>, label: &str) -> Result<(), String> {
+    if let Some(value) = value {
+        validate_portable_name(value, label)?;
+    }
+    Ok(())
+}
+
+fn validate_portable_name(value: &str, label: &str) -> Result<(), String> {
+    validate_id(value, label)?;
+    if !crate::utils::is_portable_file_stem(value) {
+        return Err(format!(
+            "{} must use only ASCII letters, digits, '-' or '_'.",
+            label
+        ));
+    }
+    Ok(())
+}
+
+fn validate_directory_path(value: &str, label: &str) -> Result<(), String> {
+    validate_non_empty(value, label)?;
+    let path = Path::new(value);
+    if !path.is_absolute() {
+        return Err(format!("{} must be an absolute path.", label));
+    }
+    if !path.exists() {
+        return Err(format!("{} '{}' does not exist.", label, value));
+    }
+    if !path.is_dir() {
+        return Err(format!("{} '{}' must be a directory.", label, value));
+    }
+    Ok(())
+}
+
+fn validate_workspace_folder_pair(
+    folder_name: Option<&str>,
+    path: Option<&str>,
+) -> Result<(), String> {
+    match (folder_name, path) {
+        (Some(_), Some(_)) | (None, None) => Ok(()),
+        _ => Err("`--folder-name` and `--path` must be provided together.".to_string()),
+    }
+}
+
+fn validate_workspace_models<const N: usize>(
+    entries: [(&str, Option<&str>, &str, Option<&str>); N],
+) -> Result<(), String> {
+    for (model_flag, model_value, thinking_flag, thinking_value) in entries {
+        validate_optional_non_empty(model_value, model_flag)?;
+        validate_optional_workspace_thinking(thinking_value, thinking_flag)?;
+        if model_value.is_none() && thinking_value.is_some() {
+            return Err(format!(
+                "{} requires {} to be provided as well.",
+                thinking_flag, model_flag
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_optional_workspace_thinking(value: Option<&str>, flag: &str) -> Result<(), String> {
+    if let Some(value) = value {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "auto" | "low" | "medium" | "high" | "xhigh" => Ok(()),
+            _ => Err(format!(
+                "{} must be one of: auto | low | medium | high | xhigh.",
+                flag
+            )),
+        }
+    } else {
+        Ok(())
+    }
+}
+
+fn validate_optional_uuid_v4(value: Option<&str>, label: &str) -> Result<(), String> {
+    if let Some(value) = value {
+        validate_uuid_v4(value, label)?;
+    }
+    Ok(())
+}
+
+fn validate_uuid_v4(value: &str, label: &str) -> Result<(), String> {
+    static UUID_V4_RE: OnceLock<Regex> = OnceLock::new();
+    let trimmed = value.trim();
+    let re = UUID_V4_RE.get_or_init(|| {
+        Regex::new(r"(?i)^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+            .expect("valid uuid v4 regex")
+    });
+    if re.is_match(trimmed) {
+        Ok(())
+    } else {
+        Err(format!("{} must be a valid UUIDv4.", label))
+    }
+}
+
+fn validate_blocked_pair(
+    blocked_by: Option<&str>,
+    blocked_reason: Option<&str>,
+) -> Result<(), String> {
+    match (blocked_by, blocked_reason) {
+        (Some(_), Some(_)) | (None, None) => Ok(()),
+        _ => Err("`--blocked-by` and `--blocked-reason` must be provided together.".to_string()),
     }
 }

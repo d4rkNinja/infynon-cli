@@ -267,6 +267,29 @@ infynon weave <subcommand>
 infynon trace <subcommand>
 ```
 
+Internal coding-agent orchestration is documented in [docs/ninja-coding.md](docs/ninja-coding.md). That flow uses `src/ninja/agent-commands.json` for Codex, Claude, and Gemini launch templates, including task-start prompts, foreground terminal launch, background processes, the saved INFYNON agent root folder, forwarded args, and the current agent model guide.
+
+Agent root setup:
+
+```bash
+infynon workspace agent-root-show
+infynon workspace agent-root-set --mutate --path D:/Codeverse/infynon-agent
+infynon coding tui
+infynon coding codex
+```
+
+If the agent root is not configured, `infynon coding codex|claude|gemini` stops and returns the setup command instead of opening an agent in the wrong folder.
+
+`infynon coding tui` opens the workspace/task control plane with forms for creating, updating, starting, completing, failing, killing, and removing tasks, plus workspace folder, workspace delete, model-slot, and agent-root management.
+
+Creating a Codex, Claude, or Gemini task now launches that agent immediately from the task workspace folder unless the task is explicitly queued or blocked. Codex task launch passes the full task prompt into the interactive session so it starts working instead of opening an idle terminal.
+
+Completing or failing a task closes its recorded agent terminal by default when INFYNON has a PID. Pass `--keep-terminal` only when you want to leave that terminal open.
+
+Foreground `infynon coding codex|claude|gemini` launches open the agent in a new terminal, then best-effort close the original shell process that ran the command to avoid duplicate terminals. Background launches and the TUI do not close the caller terminal.
+
+That close behavior is intentionally scoped to foreground coding-agent bootstrap only. It does not run for `infynon coding tui`, `--background true`, or task lifecycle launches such as `infynon task start`.
+
 ## Install
 
 ### npm

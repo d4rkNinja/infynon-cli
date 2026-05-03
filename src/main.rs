@@ -8,6 +8,7 @@ mod ecosystems;
 mod engine;
 mod error;
 mod models;
+mod ninja;
 mod trace;
 mod tui;
 mod utils;

@@ -1,7 +1,5 @@
 # INFYNON Command Reference
 
-This document explains what each command area is for and when to use each major command.
-
 Claude Code companion:
 [d4rkNinja/code-guardian](https://github.com/d4rkNinja/code-guardian)
 
@@ -19,8 +17,16 @@ Top-level command areas:
   Use this when you want to model, run, validate, or probe API flows.
 - `infynon trace`
   Use this when you want to store, retrieve, sync, or inspect repo memory and provenance.
+- `infynon workspace`
+  Use this when you want user-global workspace definitions under `~/.infynon`.
+- `infynon task`
+  Use this when you want user-global task tracking with agent, model, prompt, and pid metadata.
+- `infynon soul`
+  Use this when you want to inspect or update the user-global soul profile under `~/.infynon/soul.md`.
 
 If you use Claude Code with Trace, pair it with `code-guardian` so handoff context can be pulled before work and updated again after the task.
+
+Internal coding-agent bootstrap details are documented in `docs/ninja-coding.md`. The hidden `coding` launcher reads templates from `src/ninja/agent-commands.json`, supports `--background true|false`, `--cwd <path>`, and appends trailing args after `--`.
 
 ## Package Intelligence
 
@@ -36,6 +42,260 @@ Contract-focused flags available across `pkg` workflows:
   Disable prompts and fail when an install would otherwise require a decision.
 
 Machine-readable and exit-code details for `pkg` and `trace` are documented in `docs/contracts.md`.
+
+## Workspace
+
+```bash
+infynon workspace <subcommand>
+```
+
+Workspace commands store user-global metadata in `~/.infynon/ninja.yml` and `~/.infynon/workspaces/<workspace>/config.json`; output is JSON only.
+
+```bash
+infynon workspace create app --mutate --default
+infynon workspace create docs --mutate --folder-name docs-site --path D:/Codeverse/docs
+infynon workspace create api --mutate --folder-name server --path D:/Codeverse/api --lite-model gpt-5.4-mini --frontier-model gpt-5.5
+infynon workspace add-folder docs --mutate --folder-name api --path D:/Codeverse/api
+infynon workspace remove-folder docs --mutate --folder-name api
+infynon workspace remove docs --mutate
+infynon workspace agent-root-show
+infynon workspace agent-root-set --mutate --path D:/Codeverse/infynon-agent
+infynon workspace list
+infynon workspace show app
+infynon workspace update app --mutate --path D:/Codeverse/app --description "Primary app workspace"
+```
+
+Use these commands to manage user-global workspace metadata and folder mappings.
+
+`agent-root-set` stores the user-global INFYNON agent root in `~/.infynon/ninja.yml` and creates or updates workspace `infynon-agent` with folder `root`. It does not change the default project workspace for new tasks. Coding launchers use the agent root by default for `infynon coding codex`, `infynon coding claude`, and `infynon coding gemini`. If it is not configured, an AI should ask the user for the absolute folder path, save it with `agent-root-set`, and only then launch an agent.
+
+`workspace remove <name> --mutate` deletes a workspace only when no saved tasks still reference it. Remove or reassign those tasks first, then delete the workspace.
+
+Agent root setup flow:
+
+```bash
+infynon workspace agent-root-show
+infynon workspace agent-root-set --mutate --path D:/Codeverse/infynon-agent
+infynon coding codex
+```
+
+When the root is missing, `infynon coding ...` returns a JSON error with the setup command instead of opening Codex, Claude, or Gemini in the wrong folder.
+
+Validation rules:
+
+- names and folder names must use only ASCII letters, digits, `-`, and `_`
+- mutating commands require `--mutate`
+- `--path` must be an existing absolute directory
+- `--folder-name` and `--path` must be provided together on create/update
+- workspace model slots are fixed to `lite_model`, `frontier_model`, `highest_frontier_model`, and `super_lite_model`
+- each model slot carries a thinking level; default is `auto`
+- thinking values allowed: `auto`, `low`, `medium`, `high`, `xhigh`
+- `remove-folder` is blocked if any task in that workspace still references that folder name
+- `update` requires at least one actual change flag
+
+## Soul
+
+```bash
+infynon soul <subcommand>
+```
+
+Soul commands manage user-global profile context in `~/.infynon/soul.md`.
+Soul command output is JSON only.
+
+```bash
+infynon soul show
+infynon soul update --text "# Soul Profile..."
+Get-Content .\profile.md | infynon soul update
+infynon soul update --file D:/Codeverse/profile.md
+```
+
+`show` prints the full soul file path, content, blank status, and suggested collection structure. `update` replaces the soul profile from `--text`, `--file`, or piped stdin.
+
+When `soul.md` is blank, `infynon coding codex|claude|gemini` appends the internal `onboarduser-prompt.md` instructions to the bootstrap system prompt so the agent collects stable user context and saves it with `infynon soul update`. When `soul.md` has content, onboarding instructions are not appended.
+
+The soul profile is for stable global user context only:
+
+- name
+- purpose
+- profession
+- current projects
+- skills
+- goals
+- communication style
+- answer style
+- decision preferences
+- coding preferences
+- global constraints
+
+Do not store workspace-specific rules in `soul.md`. Put workspace-specific information in workspace config, project files, task notes, or task results.
+
+## Task
+
+```bash
+infynon task <subcommand>
+```
+
+Task commands store user-global metadata in `~/.infynon/ninja.yml` and `~/.infynon/tasks/<task-id>/`.
+Agent command templates live in `~/.infynon/agent-commands.json`.
+Task command output is JSON only.
+
+When creating a task for a workspace, pass the workspace name with `--workspace <workspace-name>`. If a folder is required, first verify it exists in the workspace config and pass `--folder-name <folder-name>`.
+
+```bash
+infynon task create 550e8400-e29b-41d4-a716-446655440000 --mutate --workspace app --agent ninja --model gpt-5.5 --prompt "Ship the API patch" --folder-name backend
+infynon task create 550e8400-e29b-41d4-a716-446655440004 --mutate --workspace app --agent codex --model gpt-5.5 --prompt "Review the API patch" --folder-name backend --status running
+infynon task create 550e8400-e29b-41d4-a716-446655440001 --mutate --workspace app --model gpt-5.5 --thinking high --prompt "Ship the API patch" --result "initial notes"
+infynon task create 550e8400-e29b-41d4-a716-446655440002 --mutate --workspace docs --command "pnpm docs:build" --status queued
+infynon task create 550e8400-e29b-41d4-a716-446655440003 --mutate --workspace docs --blocked-by 550e8400-e29b-41d4-a716-446655440002 --blocked-reason "Waiting for API worker"
+infynon task list
+infynon task list --workspace app
+infynon task list --status running
+infynon task list --agent planner
+infynon task show 550e8400-e29b-41d4-a716-446655440000
+infynon task update 550e8400-e29b-41d4-a716-446655440000 --mutate --model gpt-5.4 --notes "waiting on review"
+infynon task update 550e8400-e29b-41d4-a716-446655440000 --mutate --thinking medium --result "updated summary"
+infynon task update 550e8400-e29b-41d4-a716-446655440000 --mutate --blocked-by 550e8400-e29b-41d4-a716-446655440002 --blocked-reason "Waiting for backend output"
+infynon task note 550e8400-e29b-41d4-a716-446655440000 --mutate --text "handoff ready for worker"
+infynon task result 550e8400-e29b-41d4-a716-446655440000 --mutate --text "context packaged"
+infynon task fork 550e8400-e29b-41d4-a716-446655440010 --from 550e8400-e29b-41d4-a716-446655440000 --mutate --agent worker-ui --status queued --prompt "Ship the UI slice"
+infynon task fork 550e8400-e29b-41d4-a716-446655440011 --from 550e8400-e29b-41d4-a716-446655440000 --mutate --blocked-by 550e8400-e29b-41d4-a716-446655440002 --blocked-reason "Waiting for backend output"
+infynon task start 550e8400-e29b-41d4-a716-446655440000 --mutate --pid 4242
+infynon task resume 550e8400-e29b-41d4-a716-446655440000 --mutate --session-id abc123 --prompt "Continue with the next failing test"
+infynon task complete 550e8400-e29b-41d4-a716-446655440000 --mutate --result "merged to main"
+infynon task complete 550e8400-e29b-41d4-a716-446655440000 --mutate --result "merged to main" --close-terminal
+infynon task complete 550e8400-e29b-41d4-a716-446655440000 --mutate --result "merged to main" --keep-terminal
+infynon task fail 550e8400-e29b-41d4-a716-446655440000 --mutate --reason "review blocked by missing dependency"
+infynon task kill 550e8400-e29b-41d4-a716-446655440000 --mutate --pid 4242 --reason "stuck process" --force
+infynon task remove 550e8400-e29b-41d4-a716-446655440002 --mutate
+```
+
+What each one is for:
+
+- `create`
+  Creates a task record plus a markdown tracker file named like `<task-id>-<workspace>-<folder>.md`. If `--agent` is `codex`, `claude`, or `gemini`, INFYNON also checks `~/.infynon/agent-commands.json` and runs the configured `task.create` command when it is non-empty. If the task is created with `--status running`, or if a Codex/Claude/Gemini task would otherwise be created as draft, INFYNON immediately writes the task-start prompt and runs the configured `task.start` hook, so assignment and launch happen in one command. Use `--status queued` or blocked fields when you want to create without launching.
+- `list`
+  Filters task summaries by workspace, status, or agent.
+- `show`
+  Prints the full JSON definition for one task.
+- `update`
+  Changes saved metadata, rewrites the markdown tracker file, and runs the configured `task.update` template command when available.
+- `note`
+  Appends a handoff or coordination note to the markdown tracker and runs the configured `task.note` template command when available.
+- `result`
+  Appends a result update to the markdown tracker and runs the configured `task.result` template command when available.
+- `fork`, `start`, `resume`, `complete`, `fail`, `kill`, and `remove`
+  Manage task lineage, running state, same-session follow-up, successful completion, failed completion, process termination, and deletion.
+
+Each task directory contains:
+
+- `task.json`
+  Machine-readable task state.
+- `<task-id>-<workspace>-<folder>.md`
+  Fixed-format tracking file for AI-readable task context.
+
+The agent template file has `codex`, `claude`, and `gemini` sections. Each section can define `open`, `bootstrap`, and task hooks for `create`, `start`, `note`, `update`, `result`, `complete`, `fail`, `kill`, and `remove`. If a task hook is an empty string, INFYNON uses the built-in task state update and reports `mode: "built_in"` instead of shelling out.
+
+Supported placeholders inside agent command templates:
+
+- `{task_id}`
+- `{task_full_name}`
+- `{workspace}`
+- `{folder_name}`
+- `{agent}`
+- `{model}`
+- `{thinking}`
+- `{status}`
+- `{prompt}`
+- `{session_id}`
+- `{quoted_prompt}`
+- `{quoted_session_id}`
+- `{task_json_path}`
+- `{task_markdown_path}`
+- `{task_start_system_prompt_path}`
+- `{task_start_system_prompt}`
+- `{task_command_guide}`
+- `{task_lifecycle_guide}`
+- `{task_working_directory}`
+
+When `task.start` runs, INFYNON writes a task-specific prompt to `~/.infynon/ninja/task-start-systemprompt-<task-id>.md`. Agent templates can pass `{task_start_system_prompt_path}` to Codex, Claude, Gemini, or another runner. INFYNON resolves the task workspace folder, opens a new terminal in that folder, records the opened terminal pid when available, and starts the agent command there. If the task has no explicit model, INFYNON assigns one from the workspace model slots based on thinking level. The prompt tells the started agent to use the current task id, inspect code/config/tests from the working directory, update notes/results, complete the task with a non-empty result, verify terminal status, and close the terminal/session. Codex task starts pass the rendered task prompt as the initial interactive prompt as well as using `model_instructions_file`, so Codex starts work instead of opening an idle TUI.
+
+`task.complete` and `task.fail` close the recorded task terminal by default when the task has a PID. Pass `--keep-terminal` only when the terminal must stay open for inspection.
+
+Current Codex, Claude, and Gemini model names and one-line capability guidance are maintained in `docs/ninja-coding.md#current-agent-model-guide`.
+
+If an agent task hook fails, INFYNON returns command guidance in the error so an AI can recover with commands like:
+
+```bash
+infynon task show <task-id>
+infynon task note <task-id> --mutate --text "note"
+infynon task result <task-id> --mutate --text "result"
+infynon task complete <task-id> --mutate --result "final result"
+infynon task fail <task-id> --mutate --reason "reason"
+```
+
+Template commands run through:
+
+- Windows: `powershell -NoProfile -Command`
+- macOS and Linux: `sh -lc`
+
+Hidden coding launches are separate from task hooks:
+
+```bash
+infynon coding tui
+infynon coding codex --background false --cwd D:/Codeverse/app -- --model gpt-5.5
+infynon coding claude --background true --cwd D:/Codeverse/app -- --verbose
+infynon coding gemini --background false -- --debug
+```
+
+`infynon coding tui` opens an isolated workspace/task management TUI. It uses form actions to run the existing workspace/task commands internally and renders human-readable results instead of JSON. Use `Tab` to switch lists, `n` to create, `u` to update, `g` to set agent root, workspace `a`/`x`/`d` to add folder/remove folder/delete workspace, and task `s`/`m`/`o`/`p`/`c`/`f`/`k`/`d` to start/resume/note/result/complete/fail/kill/remove.
+
+`--background false` opens a new terminal with the selected interactive bootstrap command and best-effort closes the original shell process that ran `infynon coding <agent>`. `--background true` starts the selected non-interactive bootstrap command without opening a terminal. The launcher never hardcodes Codex, Claude, or Gemini startup strings; it renders templates from `src/ninja/agent-commands.json` and appends trailing args.
+
+The original-shell close behavior is intentionally narrow:
+
+- Applies only to foreground `infynon coding codex|claude|gemini`.
+- Does not apply to `infynon coding tui`.
+- Does not apply to background launches.
+- Does not apply to task hook launches such as `infynon task start` or `infynon task resume`.
+- Runs after the new agent terminal is opened and is best-effort across Windows, macOS, and Linux.
+
+The markdown file stores:
+
+- task id
+- task full name
+- parent task id
+- blocked by task id
+- blocked reason
+- task name
+- workspace name
+- folder name
+- model name
+- thinking power
+- task status
+- start time
+- end time
+- pid
+- command
+- task description
+- task notes
+- task results
+
+Validation rules:
+
+- task ids must always be valid UUIDv4 values
+- workspace names and folder names must use only ASCII letters, digits, `-`, and `_`
+- mutating commands require `--mutate`
+- `--thinking` must be one of: `auto`, `low`, `medium`, `high`, `xhigh`
+- `--blocked-by` and `--blocked-reason` must be provided together
+- `--blocked-by` must point to an existing task id and cannot point to the current task id
+- `--pid` must be greater than zero
+- started agent tasks should have a recorded pid when INFYNON opens the terminal
+- `complete` requires a non-empty final result, either already stored or passed with `--result`
+- `update` requires at least one actual change flag
+- `kill` requires an explicit or previously recorded pid
+- `fork` target id must differ from the source task id
+- if a workspace is selected, the task folder must exist in that workspace config
+- terminal tasks (`completed`, `failed`, `killed`) cannot be started, completed again, or killed again
 
 ### `scan`
 
@@ -503,37 +763,6 @@ infynon trace graph import <file> [--branch <branch>]
 infynon trace graph tui [--branch <branch>]
 ```
 
-What each one is for:
-
-- `graph build`
-  Auto-populates the knowledge graph from git history and existing trace notes.
-- `graph entity add`
-  Creates a new entity (file, package, person, decision, vulnerability, endpoint, module, pr, branch, note).
-- `graph entity list`
-  Lists entities with optional branch and kind filters.
-- `graph entity remove`
-  Deletes an entity and all its connected edges.
-- `graph edge add`
-  Creates a relationship between two entities.
-- `graph edge list`
-  Lists edges with optional branch and relation filters.
-- `graph edge remove`
-  Deletes an edge.
-- `graph show`
-  Displays the knowledge graph for a branch.
-- `graph path`
-  Finds the shortest path between two entities.
-- `graph impact`
-  Shows all entities reachable from a starting entity.
-- `graph orphans`
-  Lists entities with no connections.
-- `graph diff`
-  Compares knowledge graphs between two branches.
-- `graph export`
-  Exports the graph to JSON or Graphviz DOT format.
-- `graph import`
-  Imports a graph from a JSON file.
-- `graph tui`
-  Opens the interactive knowledge graph terminal UI.
+Graph commands build, inspect, connect, diff, import, export, and browse Trace entities and relationships. Use `graph tui` for interactive inspection and `graph export --format json|dot` for artifacts.
 
 For deeper Trace usage, see `docs/trace.md`.

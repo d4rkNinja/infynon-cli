@@ -114,6 +114,10 @@ impl Logger {
         Self::cont(
             "Redis or SQL-backed memory for teams, agents, package ownership, and retrieval.",
         );
+        Self::row("4", "workspace", "User-global workspace registry");
+        Self::cont("Manage ~/.infynon workspaces, defaults, paths, and folder mappings.");
+        Self::row("5", "task", "User-global task orchestration");
+        Self::cont("Track agent, model, prompt, pid, status, and kill/complete task lifecycle.");
 
         Self::divider();
         Self::section(">", "Style Guide");
@@ -134,6 +138,14 @@ impl Logger {
         Self::cmd_row(
             "infynon trace overview",
             "Show Trace commands and backend guidance",
+        );
+        Self::cmd_row(
+            "infynon workspace create app --mutate",
+            "Create a user-global workspace entry",
+        );
+        Self::cmd_row(
+            "infynon task create build-api --mutate",
+            "Create a user-global task entry",
         );
 
         Self::divider();

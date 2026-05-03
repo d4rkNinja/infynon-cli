@@ -1,4 +1,4 @@
-use crate::cli::args::ApiCommands;
+use crate::cli::args::{ApiCommands, NinjaAction, SoulAction, TaskAction, WorkspaceAction};
 use crate::trace::cli::TraceAction;
 use clap::{Parser, Subcommand};
 
@@ -30,5 +30,30 @@ pub enum RootCommands {
     Trace {
         #[command(subcommand)]
         action: TraceAction,
+    },
+    #[command(name = "workspace")]
+    Workspace {
+        #[command(subcommand)]
+        action: WorkspaceAction,
+    },
+    #[command(name = "task")]
+    Task {
+        #[command(subcommand)]
+        action: TaskAction,
+    },
+    #[command(name = "soul")]
+    Soul {
+        #[command(subcommand)]
+        action: SoulAction,
+    },
+    #[command(name = "ninja", hide = true)]
+    Ninja {
+        #[command(subcommand)]
+        action: NinjaAction,
+    },
+    #[command(name = "coding", hide = true)]
+    Coding {
+        #[command(subcommand)]
+        action: NinjaAction,
     },
 }

@@ -200,9 +200,23 @@ Claude Code companion:
 - docs home: [cli.infynon.com/docs](https://cli.infynon.com/docs)
 - root README: `README.md`
 - command reference: `docs/commands.md`
+- internal coding-agent orchestration, saved agent root, and current Codex/Claude/Gemini model guide: `docs/ninja-coding.md`
 - Trace guide: `docs/trace.md`
 - Weave guide: `docs/weave.md`
 - Claude Code companion: [d4rkNinja/code-guardian](https://github.com/d4rkNinja/code-guardian)
+
+Agent root setup:
+
+```bash
+infynon workspace agent-root-show
+infynon workspace agent-root-set --mutate --path D:/Codeverse/infynon-agent
+infynon coding tui
+infynon coding codex
+```
+
+`infynon coding tui` provides form-driven workspace and task management with human-readable results, including workspace delete, folder management, task lifecycle actions, and model-slot edits.
+
+Creating a Codex, Claude, or Gemini task starts that agent immediately unless the task is explicitly queued or blocked. Completing or failing a task closes its recorded agent terminal by default when INFYNON has a PID; pass `--keep-terminal` only when the terminal must stay open.
 
 ## Comparison Blogs
 
