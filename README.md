@@ -1,4 +1,4 @@
-﻿# INFYNON CLI
+# INFYNON CLI
 
 INFYNON is distributed here as prebuilt binaries, install scripts, and thin package wrappers.
 
@@ -47,4 +47,3 @@ go install github.com/d4rkNinja/infynon-cli/go/cmd/infynon@latest
 ## Verify downloads
 
 Every GitHub Release includes `checksums.txt` so users can validate downloaded binaries before running them.
-

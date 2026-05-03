@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 "use strict";
 
 const https = require("https");
@@ -96,4 +96,3 @@ main().catch(function (err) {
   console.error("[infynon] Unexpected error during install:", err.message);
   process.exit(1);
 });
-

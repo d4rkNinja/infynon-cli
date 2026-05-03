@@ -1,4 +1,4 @@
-﻿package installer
+package installer
 
 import (
 	"fmt"
@@ -160,4 +160,3 @@ func Main() {
 	}
 	fmt.Println("[infynon] Run: infynon --help")
 }
-

@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 "use strict";
 
 const path = require("path");
@@ -35,4 +35,3 @@ if (result.signal) {
 }
 
 process.exit(result.status !== null ? result.status : 1);
-

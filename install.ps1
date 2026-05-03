@@ -1,4 +1,4 @@
-﻿$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Stop"
 
 $repo = "d4rkNinja/infynon-cli"
 $installDir = "$env:USERPROFILE\.infynon\bin"
@@ -26,4 +26,3 @@ if ($userPath -notlike "*$installDir*") {
 }
 
 Write-Host "[infynon] Installed $tag to $installDir\infynon.exe"
-

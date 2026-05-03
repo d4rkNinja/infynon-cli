@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 REPO="d4rkNinja/infynon-cli"
@@ -44,4 +44,3 @@ else
 fi
 
 echo "[infynon] Installed $tag to $INSTALL_DIR/infynon"
-
