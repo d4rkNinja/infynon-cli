@@ -1,6 +1,6 @@
 # INFYNON CLI
 
-INFYNON is a security-first command-line tool for teams that need dependency visibility, API workflow validation, and durable repository context in one place.
+INFYNON is a security-first command-line tool for teams that need dependency visibility, API workflow validation, durable repository context, and bounded AI task execution in one place.
 
 This repository is the public distribution channel for INFYNON CLI. It contains installers, package-manager wrappers, user documentation, release checksums, and prebuilt binaries. The proprietary Rust source code is not included.
 
@@ -12,14 +12,16 @@ Modern development teams move across package managers, API surfaces, and AI-assi
 - package audit, explanation, remediation, and monitoring workflows
 - multi-step API flows that need shared state, runtime prompts, and repeatable validation
 - repository memory for handoffs, branch context, package ownership, and provenance
+- GCCD task contracts that turn vague AI work requests into executable, bounded, and verifiable task briefs
 
-INFYNON is organized around three command areas:
+INFYNON is organized around four command areas:
 
 | Area | Command | Purpose |
 |---|---|---|
 | Package intelligence | `infynon pkg` | Scan dependencies, inspect risk, explain packages, audit projects, and support safer install workflows. |
 | API flow testing | `infynon weave` | Model, execute, and validate multi-step API flows from the terminal. |
 | Repository memory | `infynon trace` | Store, retrieve, and inspect structured repo context, notes, ownership, and handoff history. |
+| Agent task contracts | `infynon task` | Create structured GCCD task briefs for AI agents so work has a clear goal, boundaries, context, and completion criteria. |
 
 ## Install
 
@@ -56,7 +58,19 @@ infynon pkg audit
 infynon weave flow run checkout
 infynon trace init
 infynon trace tui
+infynon task create task_001 --mutate --workspace . --prompt "Ship the settings API patch"
 ```
+
+## GCCD Task Contracts
+
+INFYNON tasks are not stored as loose prompts. Task creation can normalize work into a GCCD contract:
+
+- Goal: the outcome the task must produce
+- Context: the project, files, APIs, or prior decisions the agent needs to know
+- Constraints: boundaries the agent must respect
+- Done When: the checks that prove the task is complete
+
+This keeps parent and child agent work reviewable. A child task can be handed to an agent with clear scope instead of an open-ended instruction. See the [GCCD Task Contracts](docs/gccd.md) guide for examples and validation rules.
 
 ## Release Assets
 
@@ -76,6 +90,7 @@ Every release publishes these assets:
 - [Overview](docs/overview.md)
 - [Install Guide](docs/install.md)
 - [Command Guide](docs/commands.md)
+- [GCCD Task Contracts](docs/gccd.md)
 - [Verification Guide](docs/verification.md)
 
 ## Repository Contents

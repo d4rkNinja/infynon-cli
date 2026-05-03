@@ -1,6 +1,6 @@
 # INFYNON Overview
 
-INFYNON is a production CLI for package intelligence, API flow validation, and repository memory. It is built for teams that work quickly across dependency updates, backend API changes, and AI-assisted development tasks where context needs to remain inspectable after the work moves on.
+INFYNON is a production CLI for package intelligence, API flow validation, repository memory, and bounded AI task execution. It is built for teams that work quickly across dependency updates, backend API changes, and AI-assisted development tasks where context needs to remain inspectable after the work moves on.
 
 ## Product Areas
 
@@ -43,6 +43,18 @@ Typical uses:
 - track branch, file, and package context
 - preserve useful context for AI-assisted coding sessions
 
+### Agent task contracts
+
+`infynon task` turns AI work requests into GCCD task contracts. GCCD means Goal, Context, Constraints, and Done When. The format gives an agent enough structure to execute the task without losing the boundaries that matter to the repository.
+
+Typical uses:
+
+- create task briefs from plain prompts
+- preserve the goal, context, constraints, and completion criteria for review
+- pass bounded work to AI agents
+- define stricter child-agent work packages
+- make retries and handoffs inspectable
+
 ## Distribution Model
 
 INFYNON is distributed as prebuilt binaries through GitHub Releases. This public repository includes installation scripts, package-manager wrappers, release checksums, and documentation.
@@ -72,4 +84,5 @@ INFYNON is designed to be run locally by developers and automation. It should be
 
 - [Install Guide](install.md)
 - [Command Guide](commands.md)
+- [GCCD Task Contracts](gccd.md)
 - [Verification Guide](verification.md)

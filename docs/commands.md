@@ -1,6 +1,6 @@
 # INFYNON Command Guide
 
-INFYNON is organized into command areas. Each area supports a different part of the development workflow: package risk, API behavior, and repository context.
+INFYNON is organized into command areas. Each area supports a different part of the development workflow: package risk, API behavior, repository context, and bounded agent task execution.
 
 Use the built-in help for the exact command surface available in your installed version:
 
@@ -9,6 +9,7 @@ infynon --help
 infynon pkg --help
 infynon weave --help
 infynon trace --help
+infynon task --help
 ```
 
 ## Package Intelligence: `infynon pkg`
@@ -89,6 +90,53 @@ Use this area when:
 - you want context available for later AI-assisted work
 - you need a terminal interface for inspecting repo memory
 
+## Agent Task Contracts: `infynon task`
+
+Use `infynon task` when AI work needs a clear execution contract instead of a loose prompt. INFYNON uses GCCD to keep task instructions bounded and reviewable:
+
+- Goal: the outcome the task must produce
+- Context: the project, files, APIs, or decisions the agent needs to know
+- Constraints: boundaries the agent must respect
+- Done When: the checks that prove the task is complete
+
+Common entry points:
+
+```bash
+infynon task --help
+infynon task create --help
+infynon task create task_001 --mutate --workspace . --prompt "Build the settings API patch"
+```
+
+Example GCCD brief:
+
+```text
+Goal:
+Build a settings page for business profile management.
+
+Context:
+- Workspace: ./apps/web
+- Existing business profile API already exists.
+- Fields: name, timezone, currency, and theme.
+
+Constraints:
+- Use existing UI components.
+- Do not change auth logic.
+- Do not modify unrelated routes.
+
+Done When:
+- Settings page renders correctly.
+- User can update allowed fields.
+- Validation errors are shown.
+- Build and typecheck pass.
+```
+
+Use this area when:
+
+- an agent task needs strict boundaries
+- parent and child work need separate contracts
+- task retry, review, or handoff needs durable instructions
+- completion should be checked against explicit criteria
+
 ## Suggested Team Workflows
 
 ### Before merging dependency changes
@@ -109,6 +157,12 @@ infynon weave flow run checkout --format json --no-input
 ```bash
 infynon trace note add repo-handoff --title "Branch handoff" --body "Summarize the important implementation context here"
 infynon trace sync --direction both
+```
+
+### Before launching an agent task
+
+```bash
+infynon task create task_001 --mutate --workspace ./apps/web --agent codex --prompt "Build the settings page using existing UI components. Do not modify auth logic. Typecheck must pass."
 ```
 
 ## Exit Codes and Automation
