@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 "use strict";
 
 const path = require("path");
@@ -15,7 +15,7 @@ if (!fs.existsSync(BIN_PATH)) {
   console.error(
     "[infynon] Binary not found at: " + BIN_PATH + "\n" +
     "         Try reinstalling: npm install -g infynon\n" +
-    "         Or build from source: cargo install --git https://github.com/d4rkNinja/infynon-cli"
+    "         Or download a release manually: https://github.com/d4rkNinja/infynon-cli/releases"
   );
   process.exit(1);
 }
@@ -35,3 +35,4 @@ if (result.signal) {
 }
 
 process.exit(result.status !== null ? result.status : 1);
+

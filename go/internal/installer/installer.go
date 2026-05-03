@@ -1,4 +1,4 @@
-package installer
+﻿package installer
 
 import (
 	"fmt"
@@ -11,10 +11,10 @@ import (
 	"time"
 )
 
-	const (
-		repo    = "d4rkNinja/infynon-cli"
-		version = "0.2.0-beta.9.0.9"
-	)
+const (
+	repo    = "d4rkNinja/infynon-cli"
+	version = "0.2.0-beta.9.0.9"
+)
 
 func targetTriple() (target, ext string, ok bool) {
 	switch runtime.GOOS + "/" + runtime.GOARCH {
@@ -126,7 +126,7 @@ func Main() {
 	target, ext, ok := targetTriple()
 	if !ok {
 		fmt.Fprintf(os.Stderr, "[infynon] Unsupported platform: %s/%s\n", runtime.GOOS, runtime.GOARCH)
-		fmt.Fprintf(os.Stderr, "         Build from source: cargo install --git https://github.com/%s\n", repo)
+		fmt.Fprintf(os.Stderr, "[infynon] Manual install: https://github.com/%s/releases\n", repo)
 		os.Exit(1)
 	}
 

@@ -1,7 +1,7 @@
-{
+﻿{
   "name": "infynon",
   "version": "0.2.0-beta.9.0.9",
-  "description": "Package intelligence, API flow testing, and repo memory for AI-assisted backend teams.",
+  "description": "Thin npm installer for the proprietary INFYNON CLI binary releases.",
   "bin": {
     "infynon": "run.js",
     "infynon-pkg": "run.js"
@@ -11,6 +11,7 @@
     "preuninstall": "node preuninstall.js"
   },
   "files": [
+    "LICENSE",
     "run.js",
     "postinstall.js",
     "preuninstall.js"
@@ -18,35 +19,8 @@
   "engines": {
     "node": ">=14.14"
   },
-  "keywords": [
-    "security",
-    "cli",
-    "vulnerability-scanner",
-    "cve",
-    "package-security",
-    "supply-chain-security",
-    "waf",
-    "web-application-firewall",
-    "reverse-proxy",
-    "firewall",
-    "api-testing",
-    "devsecops",
-    "dependency-scanner",
-    "npm-security",
-    "pip-security",
-    "cargo-security",
-    "osv",
-    "audit",
-    "security-scanner",
-    "integration-testing",
-    "rate-limiter",
-    "ip-filter",
-    "security-proxy",
-    "package-manager",
-    "developer-tools"
-  ],
   "author": "d4rkNinja",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/d4rkNinja/infynon-cli.git"
@@ -54,7 +28,7 @@
   "bugs": {
     "url": "https://github.com/d4rkNinja/infynon-cli/issues"
   },
-  "homepage": "https://cli.infynon.com/docs",
+  "homepage": "https://github.com/d4rkNinja/infynon-cli#readme",
   "publishConfig": {
     "access": "public",
     "tag": "beta"

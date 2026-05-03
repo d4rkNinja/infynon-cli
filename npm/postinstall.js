@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 "use strict";
 
 const https = require("https");
@@ -10,17 +10,12 @@ const VERSION = require("./package.json").version;
 const BIN_DIR = path.join(__dirname, "bin");
 const BIN_PATH = path.join(BIN_DIR, process.platform === "win32" ? "infynon.exe" : "infynon");
 
-// Map Node.js platform/arch to the GitHub release target triple
 function getTarget() {
-  const platform = process.platform;
-  const arch = process.arch;
-
-  if (platform === "win32" && arch === "x64") return { target: "x86_64-pc-windows-msvc", ext: ".exe" };
-  if (platform === "linux" && arch === "x64")  return { target: "x86_64-unknown-linux-musl", ext: "" };
-  if (platform === "linux" && arch === "arm64") return { target: "aarch64-unknown-linux-musl", ext: "" };
-  if (platform === "darwin" && arch === "x64") return { target: "x86_64-apple-darwin", ext: "" };
-  if (platform === "darwin" && arch === "arm64") return { target: "aarch64-apple-darwin", ext: "" };
-
+  if (process.platform === "win32" && process.arch === "x64") return { target: "x86_64-pc-windows-msvc", ext: ".exe" };
+  if (process.platform === "linux" && process.arch === "x64") return { target: "x86_64-unknown-linux-musl", ext: "" };
+  if (process.platform === "linux" && process.arch === "arm64") return { target: "aarch64-unknown-linux-musl", ext: "" };
+  if (process.platform === "darwin" && process.arch === "x64") return { target: "x86_64-apple-darwin", ext: "" };
+  if (process.platform === "darwin" && process.arch === "arm64") return { target: "aarch64-apple-darwin", ext: "" };
   return null;
 }
 
@@ -67,12 +62,11 @@ async function main() {
   if (!info) {
     console.warn(
       "[infynon] Unsupported platform: " + process.platform + " " + process.arch + ".\n" +
-      "         Build from source: cargo install --git https://github.com/" + REPO
+      "         Download a release manually: https://github.com/" + REPO + "/releases"
     );
-    process.exit(0); // non-fatal — let the install succeed
+    process.exit(0);
   }
 
-  // Strip npm prerelease suffix for the GitHub tag (beta.6 → beta.6 stays; just prefix with v)
   const tag = "v" + VERSION;
   const assetName = "infynon-" + info.target + info.ext;
   const url = "https://github.com/" + REPO + "/releases/download/" + tag + "/" + assetName;
@@ -87,11 +81,10 @@ async function main() {
     await downloadFile(url, BIN_PATH);
   } catch (err) {
     console.error("[infynon] Download failed: " + err.message);
-    console.error("[infynon] You can install manually: https://github.com/" + REPO + "/releases/tag/" + tag);
+    console.error("[infynon] Manual install: https://github.com/" + REPO + "/releases/tag/" + tag);
     process.exit(1);
   }
 
-  // Make executable on Unix
   if (process.platform !== "win32") {
     fs.chmodSync(BIN_PATH, 0o755);
   }
@@ -103,3 +96,4 @@ main().catch(function (err) {
   console.error("[infynon] Unexpected error during install:", err.message);
   process.exit(1);
 });
+

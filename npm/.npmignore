@@ -1,2 +1,0 @@
-# Ignore the downloaded binary — it is fetched at postinstall time per-user
-bin/
