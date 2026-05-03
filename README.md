@@ -1,6 +1,8 @@
 # INFYNON CLI
 
-INFYNON is distributed here as prebuilt binaries, install scripts, and thin package wrappers.
+INFYNON is a security-first CLI for package intelligence, API flow testing, and repository memory.
+
+This public repository is the official distribution channel for INFYNON binaries, installers, checksums, and user documentation.
 
 The source code is not included in this repository.
 
@@ -30,20 +32,40 @@ Go wrapper:
 go install github.com/d4rkNinja/infynon-cli/go/cmd/infynon@latest
 ```
 
-## What is in this repo
+## Docs
 
-- GitHub Releases with Windows, Linux, and macOS binaries
-- `install.sh` and `install.ps1`
-- npm wrapper package sources
-- Go wrapper sources
-- checksums for every release
+- [docs/overview.md](docs/overview.md)
+- [docs/install.md](docs/install.md)
+- [docs/commands.md](docs/commands.md)
+- [docs/verification.md](docs/verification.md)
 
-## What is not in this repo
+## Release Assets
+
+Each release includes:
+
+- Windows x64 binary
+- Linux x64 binary
+- Linux arm64 binary
+- macOS x64 binary
+- macOS arm64 binary
+- `checksums.txt`
+
+## Repository Contents
+
+This public repo contains:
+
+- GitHub release assets
+- installer scripts
+- npm wrapper package
+- Go wrapper package
+- end-user documentation
+
+This public repo does not contain:
 
 - Rust source code
-- internal build logic
+- internal CI/CD code beyond distribution wrappers
 - proprietary implementation details
 
-## Verify downloads
+## Verify Downloads
 
-Every GitHub Release includes `checksums.txt` so users can validate downloaded binaries before running them.
+Use the `checksums.txt` file attached to each GitHub Release to verify binaries before installation.

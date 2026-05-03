@@ -1,6 +1,6 @@
 {
   "name": "infynon",
-  "version": "0.2.0-beta.9.0.10",
+  "version": "0.2.0",
   "description": "Thin npm installer for the proprietary INFYNON CLI binary releases.",
   "bin": {
     "infynon": "run.js",
@@ -30,7 +30,6 @@
   },
   "homepage": "https://github.com/d4rkNinja/infynon-cli#readme",
   "publishConfig": {
-    "access": "public",
-    "tag": "beta"
+    "access": "public"
   }
 }
