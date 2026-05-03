@@ -13,7 +13,7 @@ import (
 
 const (
 	repo    = "d4rkNinja/infynon-cli"
-	version = "0.2.0"
+	version = "0.2.1"
 )
 
 func targetTriple() (target, ext string, ok bool) {

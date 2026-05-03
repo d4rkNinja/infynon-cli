@@ -1,9 +1,75 @@
 # INFYNON Overview
 
-INFYNON groups three workflow areas into one CLI:
+INFYNON is a production CLI for package intelligence, API flow validation, and repository memory. It is built for teams that work quickly across dependency updates, backend API changes, and AI-assisted development tasks where context needs to remain inspectable after the work moves on.
 
-- `pkg` for dependency scanning, install-time controls, and package risk visibility
-- `weave` for API flow execution, validation, and runtime testing
-- `trace` for repository memory, handoff context, and provenance
+## Product Areas
 
-INFYNON is a binary-distributed product. This repository provides release artifacts and user-facing documentation only.
+### Package intelligence
+
+`infynon pkg` helps teams understand dependency risk and package behavior before risky changes spread through a repository.
+
+Typical uses:
+
+- scan project dependencies
+- inspect package risk and vulnerability signals
+- explain why a package is present
+- compare dependency changes
+- run audit and remediation workflows
+- support stricter install-time package decisions
+
+### API flow testing
+
+`infynon weave` is for workflows where one HTTP request is not enough. It models API flows as connected steps, carries context between requests, and supports repeatable terminal-based validation.
+
+Typical uses:
+
+- create reusable API nodes and flows
+- run multi-step API workflows
+- pass state between steps
+- validate responses
+- run flows in CI-oriented output formats
+- test API behavior without relying on a GUI collection runner
+
+### Repository memory
+
+`infynon trace` gives teams a structured way to preserve handoffs, branch context, file notes, package ownership, and long-lived project memory.
+
+Typical uses:
+
+- initialize repo-local memory
+- add and retrieve structured notes
+- sync context across sources
+- inspect project knowledge in a terminal UI
+- track branch, file, and package context
+- preserve useful context for AI-assisted coding sessions
+
+## Distribution Model
+
+INFYNON is distributed as prebuilt binaries through GitHub Releases. This public repository includes installation scripts, package-manager wrappers, release checksums, and documentation.
+
+The Rust source code is proprietary and is not included in this repository.
+
+## Supported Platforms
+
+Prebuilt releases are produced for:
+
+- Windows x64
+- Linux x64
+- Linux arm64
+- macOS Intel
+- macOS Apple Silicon
+
+## Operational Expectations
+
+INFYNON is designed to be run locally by developers and automation. It should be treated like any other developer security tool:
+
+- pin versions in repeatable environments
+- verify release checksums for managed deployment
+- review command output before applying remediation
+- run package and API checks in the same workspace where the relevant lockfiles, manifests, or flow definitions live
+
+## Related Docs
+
+- [Install Guide](install.md)
+- [Command Guide](commands.md)
+- [Verification Guide](verification.md)
