@@ -11,6 +11,8 @@ D = Done When
 
 A normal prompt says what someone wants. A GCCD task also records what matters around the work: the expected outcome, the boundaries, the relevant project context, and the checks that define completion.
 
+In INFYNON, GCCD is the contract layer for the agent control plane. A parent developer or agent can split work into child tasks, assign those tasks to Codex, Claude Code, or Gemini CLI, and keep each child result attached to a durable task record.
+
 ## Why It Exists
 
 AI-assisted development fails most often when the task boundary is weak. A prompt like `Build settings page` leaves important questions open:
@@ -113,6 +115,24 @@ DONE WHEN:
 For a parent task, GCCD should be strongly recommended. The parent task may start from a broader product request and become more specific during planning.
 
 For a child task, GCCD should be required. A child agent needs stricter boundaries because it is usually responsible for one slice of the work and should not modify unrelated parts of the repository.
+
+Typical subagent flow:
+
+```bash
+infynon workspace create app --mutate --folder-name backend --path D:/Codeverse/app --default
+
+infynon task create task_parent \
+  --mutate \
+  --workspace app \
+  --prompt "Prepare the release. Split implementation, docs, and verification into child tasks."
+
+infynon task fork task_docs \
+  --from task_parent \
+  --mutate \
+  --agent codex \
+  --folder-name backend \
+  --prompt "Update release docs only. Do not edit source code. Done when docs are updated and links are checked."
+```
 
 Recommended child task requirements:
 

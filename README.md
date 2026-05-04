@@ -1,6 +1,14 @@
 # INFYNON CLI
 
-INFYNON is a security-first command-line tool for teams that need dependency visibility, API workflow validation, durable repository context, and bounded AI task execution in one place.
+[![GitHub release](https://img.shields.io/github/v/release/d4rkNinja/infynon-cli?style=flat-square&logo=github)](https://github.com/d4rkNinja/infynon-cli/releases)
+[![npm version](https://img.shields.io/npm/v/infynon?style=flat-square&logo=npm)](https://www.npmjs.com/package/infynon)
+[![npm downloads](https://img.shields.io/npm/dm/infynon?style=flat-square&logo=npm)](https://www.npmjs.com/package/infynon)
+[![Agent control plane](https://img.shields.io/badge/agent%20control%20plane-Codex%20%7C%20Claude%20%7C%20Gemini-7c3aed?style=flat-square)](docs/agent-control-plane.md)
+[![Package security](https://img.shields.io/badge/pkg-secure%20installs-ef4444?style=flat-square)](docs/commands.md)
+[![API flows](https://img.shields.io/badge/weave-API%20flows-0ea5e9?style=flat-square)](docs/commands.md)
+[![Repo memory](https://img.shields.io/badge/trace-repo%20memory-10b981?style=flat-square)](docs/commands.md)
+
+INFYNON is a terminal control plane for agentic engineering: multi-agent workspace/task orchestration, package intelligence, API workflow validation, durable repository context, and release-ready local automation in one native CLI.
 
 This repository is the public distribution channel for INFYNON CLI. It contains installers, package-manager wrappers, user documentation, release checksums, and prebuilt binaries. The proprietary Rust source code is not included.
 
@@ -8,20 +16,23 @@ This repository is the public distribution channel for INFYNON CLI. It contains 
 
 Modern development teams move across package managers, API surfaces, and AI-assisted code changes quickly. INFYNON focuses on the parts of that workflow where context usually gets lost:
 
+- Codex, Claude Code, Gemini CLI, and child-agent assignments need durable task boundaries
+- agents need to start in the right workspace folder with the right model and prompt
 - dependency risk before and after installation
 - package audit, explanation, remediation, and monitoring workflows
 - multi-step API flows that need shared state, runtime prompts, and repeatable validation
 - repository memory for handoffs, branch context, package ownership, and provenance
 - GCCD task contracts that turn vague AI work requests into executable, bounded, and verifiable task briefs
 
-INFYNON is organized around four command areas:
+INFYNON is organized around five command areas:
 
 | Area | Command | Purpose |
 |---|---|---|
+| Agent control plane | `infynon workspace`, `infynon task`, `infynon coding` | Coordinate Codex, Claude Code, Gemini CLI, and child-agent sessions through durable workspace and task records. |
 | Package intelligence | `infynon pkg` | Scan dependencies, inspect risk, explain packages, audit projects, and support safer install workflows. |
 | API flow testing | `infynon weave` | Model, execute, and validate multi-step API flows from the terminal. |
 | Repository memory | `infynon trace` | Store, retrieve, and inspect structured repo context, notes, ownership, and handoff history. |
-| Agent task contracts | `infynon task` | Create structured GCCD task briefs for AI agents so work has a clear goal, boundaries, context, and completion criteria. |
+| Agent task contracts | GCCD briefs | Give AI work a clear goal, boundaries, context, and completion criteria. |
 
 ## Install
 
@@ -53,13 +64,34 @@ go install github.com/d4rkNinja/infynon-cli/go/cmd/infynon@latest
 
 ```bash
 infynon --help
+infynon workspace agent-root-show
 infynon pkg scan
 infynon pkg audit
 infynon weave flow run checkout
 infynon trace init
 infynon trace tui
-infynon task create task_001 --mutate --workspace . --prompt "Ship the settings API patch"
+infynon task create task_001 --mutate --workspace app --agent codex --prompt "Ship the settings API patch"
 ```
+
+## Agent Control Plane
+
+INFYNON can be used as a parent-agent command center. A lead human or agent creates a workspace, creates child tasks, assigns each task to Codex, Claude Code, or Gemini CLI, and keeps every child result attached to a durable task record.
+
+```bash
+infynon workspace agent-root-set --mutate --path D:/Codeverse/infynon-agent
+infynon workspace create app --mutate --folder-name web --path D:/Codeverse/app --default
+
+infynon task create task_ui_review \
+  --mutate \
+  --workspace app \
+  --folder-name web \
+  --agent claude \
+  --prompt "Review the settings UI change. Do not edit backend files. Done when findings are recorded."
+
+infynon coding tui
+```
+
+Use this when subagent work needs clear ownership, a real working directory, status tracking, notes, results, and completion criteria instead of scattered terminal tabs and chat messages.
 
 ## GCCD Task Contracts
 
@@ -90,6 +122,7 @@ Every release publishes these assets:
 - [Overview](docs/overview.md)
 - [Install Guide](docs/install.md)
 - [Command Guide](docs/commands.md)
+- [Agent Control Plane](docs/agent-control-plane.md)
 - [GCCD Task Contracts](docs/gccd.md)
 - [Verification Guide](docs/verification.md)
 

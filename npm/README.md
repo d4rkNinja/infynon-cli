@@ -1,6 +1,12 @@
 # infynon
 
-INFYNON is a security-first CLI for package intelligence, API flow testing, repository memory, and bounded AI task execution.
+[![npm version](https://img.shields.io/npm/v/infynon?style=flat-square&logo=npm)](https://www.npmjs.com/package/infynon)
+[![npm downloads](https://img.shields.io/npm/dm/infynon?style=flat-square&logo=npm)](https://www.npmjs.com/package/infynon)
+[![GitHub release](https://img.shields.io/github/v/release/d4rkNinja/infynon-cli?style=flat-square&logo=github)](https://github.com/d4rkNinja/infynon-cli/releases)
+[![Agent control plane](https://img.shields.io/badge/agent%20control%20plane-Codex%20%7C%20Claude%20%7C%20Gemini-7c3aed?style=flat-square)](https://github.com/d4rkNinja/infynon-cli/blob/main/docs/agent-control-plane.md)
+[![Package security](https://img.shields.io/badge/pkg-secure%20installs-ef4444?style=flat-square)](https://github.com/d4rkNinja/infynon-cli/blob/main/docs/commands.md)
+
+INFYNON is a terminal control plane for agentic engineering: multi-agent workspace/task orchestration, package intelligence, API flow testing, and repository memory in one native CLI.
 
 This npm package is the official installer wrapper for the INFYNON native binary. It downloads the matching prebuilt binary from GitHub Releases during installation.
 
@@ -14,10 +20,11 @@ npm install -g infynon
 
 | Area | Command | Purpose |
 |---|---|---|
+| Agent control plane | `infynon workspace`, `infynon task`, `infynon coding` | Coordinate Codex, Claude Code, Gemini CLI, and child-agent sessions through durable workspace and task records. |
 | Package intelligence | `infynon pkg` | Scan dependencies, inspect package risk, audit package changes, and support safer install workflows. |
 | API flow testing | `infynon weave` | Run multi-step API flows from the terminal. |
 | Repository memory | `infynon trace` | Preserve handoff notes, branch context, package ownership, and repo memory. |
-| Agent task contracts | `infynon task` | Create GCCD task briefs with a goal, context, constraints, and completion criteria for AI agents. |
+| Agent task contracts | GCCD briefs | Create work contracts with a goal, context, constraints, and completion criteria for AI agents. |
 
 ## Supported Platforms
 
@@ -31,12 +38,38 @@ npm install -g infynon
 
 ```bash
 infynon --help
+infynon workspace agent-root-show
 infynon pkg scan
 infynon pkg audit
 infynon weave flow run checkout
 infynon trace tui
-infynon task create task_001 --mutate --workspace . --prompt "Ship the settings API patch"
+infynon task create task_001 --mutate --workspace app --agent codex --prompt "Ship the settings API patch"
 ```
+
+## Agent Control Plane
+
+Use INFYNON when one lead session needs to coordinate child coding agents.
+
+```bash
+infynon workspace agent-root-set --mutate --path D:/Codeverse/infynon-agent
+infynon workspace create app --mutate --folder-name web --path D:/Codeverse/app --default
+
+infynon task create task_ui_review \
+  --mutate \
+  --workspace app \
+  --folder-name web \
+  --agent claude \
+  --prompt "Review the settings UI change. Do not edit backend files. Done when findings are recorded."
+
+infynon coding tui
+```
+
+Good fit:
+
+- parent and child agent work
+- Codex, Claude Code, and Gemini CLI sessions launched from the right workspace
+- task retries where context and completion criteria must stay intact
+- reviewable handoffs between agents and humans
 
 ## GCCD Task Contracts
 
@@ -70,6 +103,7 @@ go install github.com/d4rkNinja/infynon-cli/go/cmd/infynon@latest
 ## Documentation
 
 - https://github.com/d4rkNinja/infynon-cli/tree/main/docs
+- https://github.com/d4rkNinja/infynon-cli/blob/main/docs/agent-control-plane.md
 - https://github.com/d4rkNinja/infynon-cli/blob/main/docs/gccd.md
 - https://github.com/d4rkNinja/infynon-cli/releases
 

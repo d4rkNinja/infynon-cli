@@ -1,16 +1,53 @@
 # INFYNON Command Guide
 
-INFYNON is organized into command areas. Each area supports a different part of the development workflow: package risk, API behavior, repository context, and bounded agent task execution.
+INFYNON is organized as a terminal control plane for agentic engineering. `workspace` and `task` coordinate coding-agent work; `pkg`, `weave`, and `trace` give that work package safety, API validation, and durable repo memory.
 
 Use the built-in help for the exact command surface available in your installed version:
 
 ```bash
 infynon --help
+infynon workspace --help
+infynon task --help
 infynon pkg --help
 infynon weave --help
 infynon trace --help
-infynon task --help
 ```
+
+## Agent Control Plane: `infynon workspace`, `infynon task`, `infynon coding`
+
+Use the control plane when one lead developer or agent needs to coordinate child coding agents such as Codex, Claude Code, or Gemini CLI.
+
+The pieces fit together like this:
+
+| Command | Role |
+|---|---|
+| `infynon workspace` | Defines the workspace, folders, model slots, and saved agent root. |
+| `infynon task` | Stores each assignment as a GCCD task with agent, status, notes, result, and optional pid/session metadata. |
+| `infynon coding` | Launches Codex, Claude Code, Gemini CLI, or the workspace/task TUI from the selected working directory. |
+
+Common entry points:
+
+```bash
+infynon workspace agent-root-show
+infynon workspace agent-root-set --mutate --path D:/Codeverse/infynon-agent
+infynon workspace create app --mutate --folder-name backend --path D:/Codeverse/app --default
+
+infynon task create task_backend_review \
+  --mutate \
+  --workspace app \
+  --folder-name backend \
+  --agent claude \
+  --prompt "Review the auth middleware change. Do not edit frontend files. Done when findings are recorded."
+
+infynon coding tui
+```
+
+Use this area when:
+
+- a parent agent needs to split work into child-agent tasks
+- Codex, Claude Code, or Gemini CLI must start in a known workspace folder
+- task status, notes, result, pid, and session metadata need to survive beyond a terminal tab
+- package checks, API flow runs, and trace notes should become completion evidence
 
 ## Package Intelligence: `infynon pkg`
 

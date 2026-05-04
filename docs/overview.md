@@ -1,8 +1,23 @@
 # INFYNON Overview
 
-INFYNON is a production CLI for package intelligence, API flow validation, repository memory, and bounded AI task execution. It is built for teams that work quickly across dependency updates, backend API changes, and AI-assisted development tasks where context needs to remain inspectable after the work moves on.
+INFYNON is a production CLI control plane for agentic engineering. It brings multi-agent workspace/task orchestration, package intelligence, API flow validation, and repository memory into one terminal workflow.
+
+It is built for teams that work quickly across dependency updates, backend API changes, and AI-assisted development tasks where context needs to remain inspectable after the work moves on.
 
 ## Product Areas
+
+### Agent control plane
+
+`infynon workspace`, `infynon task`, and `infynon coding` help a lead developer or agent coordinate Codex, Claude Code, Gemini CLI, and child-agent sessions without losing the working directory, task boundary, status, notes, or result.
+
+Typical uses:
+
+- define user-global workspaces and named folders
+- store model slots and an agent root folder
+- create GCCD task contracts for parent and child work
+- launch Codex, Claude Code, or Gemini CLI into the right workspace
+- track task status, pid, notes, result, and session metadata
+- keep subagent handoffs reviewable after the terminal closes
 
 ### Package intelligence
 
@@ -84,5 +99,6 @@ INFYNON is designed to be run locally by developers and automation. It should be
 
 - [Install Guide](install.md)
 - [Command Guide](commands.md)
+- [Agent Control Plane](agent-control-plane.md)
 - [GCCD Task Contracts](gccd.md)
 - [Verification Guide](verification.md)
