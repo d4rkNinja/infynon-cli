@@ -1,6 +1,6 @@
 {
   "name": "@infynon/cli-darwin-arm64",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "macOS Apple Silicon native binary package for INFYNON CLI.",
   "os": [
     "darwin"

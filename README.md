@@ -54,7 +54,7 @@ iwr https://raw.githubusercontent.com/d4rkNinja/infynon-cli/main/install.ps1 -us
 npm install -g infynon
 ```
 
-The npm package is configured for npm provenance and can use optional platform packages such as `@infynon/cli-win32-x64`, `@infynon/cli-linux-x64`, and `@infynon/cli-darwin-arm64` for native binaries.
+The npm package is configured for npm provenance when published from a public GitHub Actions source repository and can use optional platform packages such as `@infynon/cli-win32-x64`, `@infynon/cli-linux-x64`, and `@infynon/cli-darwin-arm64` for native binaries.
 
 ### Go wrapper
 

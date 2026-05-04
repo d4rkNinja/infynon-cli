@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.2.7 - 2026-05-04
+## v0.2.8 - 2026-05-04
 
 - Stable release.
 - Public distribution repo now includes end-user documentation in `docs/`.

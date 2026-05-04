@@ -38,7 +38,7 @@ npm install -g infynon
 
 The public distribution repo includes installers, npm/go wrappers, docs, and release assets; the core Rust implementation is not included.
 
-INFYNON npm packages are configured for npm provenance from the release pipeline. The package can use optional native binary packages:
+INFYNON npm packages are configured for npm provenance when published from a public GitHub Actions source repository. Private-source release runs publish without provenance because npm rejects private-repo provenance bundles. The package can use optional native binary packages:
 
 - `@infynon/cli-win32-x64`
 - `@infynon/cli-linux-x64`

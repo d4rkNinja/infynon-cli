@@ -52,4 +52,4 @@ Checksum verification confirms that the downloaded file matches the release arti
 
 For locked-down environments, mirror only the specific release assets your organization has approved.
 
-For npm installs, INFYNON packages are configured for npm provenance from the release pipeline. Treat provenance as a supply-chain signal alongside pinned versions and release checksums.
+For npm installs, INFYNON packages are configured for npm provenance when published from a public GitHub Actions source repository. Treat provenance, when present, as a supply-chain signal alongside pinned versions and release checksums.

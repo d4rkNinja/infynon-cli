@@ -26,13 +26,13 @@ npm installs only the optional package matching the current OS and CPU. If optio
 
 ## Provenance
 
-INFYNON npm packages are configured for npm provenance from the release pipeline. Provenance links the published npm artifact to the GitHub Actions workflow that produced it.
+INFYNON npm packages are configured for npm provenance when they are published from a public GitHub Actions source repository. npm currently rejects provenance bundles from private GitHub Actions source repositories, so private-source release runs publish without provenance and rely on the GitHub Release manifest plus SHA-256 checksums.
 
 Use provenance together with normal package controls:
 
 - pin versions in CI and managed developer images
 - keep lockfiles when installing INFYNON as a project dependency
-- review the npm package page for the provenance badge and package metadata
+- review the npm package page for provenance status and package metadata
 - verify GitHub Release downloads with `checksums.txt` when installing outside npm
 
 ## Troubleshooting
