@@ -1,10 +1,10 @@
 {
   "name": "infynon",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "description": "Thin npm installer for the proprietary INFYNON CLI binary releases.",
   "bin": {
     "infynon": "run.js",
-    "infynon-pkg": "run.js"
+    "infynon-pkg": "run-pkg.js"
   },
   "scripts": {
     "postinstall": "node postinstall.js",
@@ -13,6 +13,7 @@
   "files": [
     "LICENSE",
     "run.js",
+    "run-pkg.js",
     "postinstall.js",
     "preuninstall.js"
   ],

@@ -20,13 +20,21 @@ if (!fs.existsSync(BIN_PATH)) {
   process.exit(1);
 }
 
-const result = spawnSync(BIN_PATH, process.argv.slice(2), {
-  stdio: "inherit",
-  windowsHide: false,
-});
+function runBinary(args) {
+  return spawnSync(BIN_PATH, args, {
+    stdio: "inherit",
+    windowsHide: false,
+  });
+}
+
+const result = runBinary(process.argv.slice(2));
 
 if (result.error) {
   console.error("[infynon] Failed to run binary:", result.error.message);
+  if (process.platform === "win32" && result.error.code === "UNKNOWN") {
+    console.error("[infynon] The installed Windows binary could not be executed.");
+    console.error("[infynon] Reinstall to download and verify a fresh release asset: npm install -g infynon");
+  }
   process.exit(1);
 }
 

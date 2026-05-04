@@ -4,6 +4,7 @@
 const https = require("https");
 const fs = require("fs");
 const path = require("path");
+const { spawnSync } = require("child_process");
 
 const REPO = "d4rkNinja/infynon-cli";
 const VERSION = require("./package.json").version;
@@ -56,6 +57,23 @@ function downloadFile(url, dest, redirects) {
   });
 }
 
+function verifyBinary() {
+  const result = spawnSync(BIN_PATH, ["--version"], {
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  if (result.error) {
+    throw new Error("Downloaded binary is not executable: " + result.error.message);
+  }
+  if (result.status !== 0) {
+    const detail = (result.stderr || result.stdout || "").trim();
+    throw new Error(
+      "Downloaded binary failed verification" +
+      (detail ? ": " + detail : " with exit code " + result.status)
+    );
+  }
+}
+
 async function main() {
   const info = getTarget();
 
@@ -87,6 +105,15 @@ async function main() {
 
   if (process.platform !== "win32") {
     fs.chmodSync(BIN_PATH, 0o755);
+  }
+
+  try {
+    verifyBinary();
+  } catch (err) {
+    fs.unlink(BIN_PATH, function () {});
+    console.error("[infynon] Binary verification failed: " + err.message);
+    console.error("[infynon] Reinstall after the release asset is corrected: npm install -g infynon");
+    process.exit(1);
   }
 
   console.log("[infynon] Installed successfully. Run: infynon --help");
