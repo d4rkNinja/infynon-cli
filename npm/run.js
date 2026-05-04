@@ -21,6 +21,16 @@ if (!fs.existsSync(BIN_PATH)) {
 }
 
 function runBinary(args) {
+  if (process.platform === "win32") {
+    const estimatedLength = BIN_PATH.length + args.reduce(function (total, arg) {
+      return total + String(arg).length + 3;
+    }, 0);
+    if (estimatedLength > 30000) {
+      return {
+        error: new Error("command line is too long for Windows process creation; reduce arguments or use file-based package-manager input"),
+      };
+    }
+  }
   return spawnSync(BIN_PATH, args, {
     stdio: "inherit",
     windowsHide: false,

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 "use strict";
 
+const crypto = require("crypto");
 const https = require("https");
 const fs = require("fs");
 const path = require("path");
@@ -10,6 +11,8 @@ const REPO = "d4rkNinja/infynon-cli";
 const VERSION = require("./package.json").version;
 const BIN_DIR = path.join(__dirname, "bin");
 const BIN_PATH = path.join(BIN_DIR, process.platform === "win32" ? "infynon.exe" : "infynon");
+const TEMP_BIN_PATH = BIN_PATH + ".download-" + process.pid;
+const TEMP_CHECKSUMS_PATH = BIN_PATH + ".checksums-" + process.pid + ".txt";
 
 function getTarget() {
   if (process.platform === "win32" && process.arch === "x64") return { target: "x86_64-pc-windows-msvc", ext: ".exe" };
@@ -23,14 +26,24 @@ function getTarget() {
 function downloadFile(url, dest, redirects) {
   redirects = redirects === undefined ? 0 : redirects;
   if (redirects > 5) {
-    throw new Error("Too many redirects while downloading binary");
+    return Promise.reject(new Error("Too many redirects while downloading binary"));
   }
 
   return new Promise(function (resolve, reject) {
     https
       .get(url, { headers: { "User-Agent": "infynon-npm-installer" } }, function (res) {
-        if (res.statusCode === 301 || res.statusCode === 302) {
-          return downloadFile(res.headers.location, dest, redirects + 1)
+        if (res.statusCode >= 300 && res.statusCode < 400) {
+          res.resume();
+          if (!res.headers.location) {
+            return reject(new Error("Redirect response did not include a Location header"));
+          }
+          let nextUrl;
+          try {
+            nextUrl = new URL(res.headers.location, url).toString();
+          } catch (err) {
+            return reject(err);
+          }
+          return downloadFile(nextUrl, dest, redirects + 1)
             .then(resolve)
             .catch(reject);
         }
@@ -48,6 +61,12 @@ function downloadFile(url, dest, redirects) {
         file.on("finish", function () {
           file.close(resolve);
         });
+        res.on("error", function (err) {
+          file.close(function () {
+            fs.unlink(dest, function () {});
+            reject(err);
+          });
+        });
         res.pipe(file);
       })
       .on("error", function (err) {
@@ -55,6 +74,36 @@ function downloadFile(url, dest, redirects) {
         reject(err);
       });
   });
+}
+
+function removeQuietly(filePath) {
+  try {
+    fs.rmSync(filePath, { force: true });
+  } catch (_) {}
+}
+
+function checksumForAsset(checksumsText, assetName) {
+  const lines = checksumsText.split(/\r?\n/);
+  for (const line of lines) {
+    const match = line.match(/^([a-fA-F0-9]{64})\s+[* ]?(.+)$/);
+    if (!match) continue;
+    if (path.basename(match[2].trim()) === assetName) {
+      return match[1].toLowerCase();
+    }
+  }
+  throw new Error("checksums.txt does not include " + assetName);
+}
+
+function sha256File(filePath) {
+  return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+}
+
+function verifyChecksum(checksumsPath, filePath, assetName) {
+  const expected = checksumForAsset(fs.readFileSync(checksumsPath, "utf8"), assetName);
+  const actual = sha256File(filePath);
+  if (actual !== expected) {
+    throw new Error("SHA-256 mismatch for " + assetName);
+  }
 }
 
 function verifyBinary() {
@@ -72,6 +121,15 @@ function verifyBinary() {
       (detail ? ": " + detail : " with exit code " + result.status)
     );
   }
+  const versionFields = String((result.stdout || "") + " " + (result.stderr || ""))
+    .trim()
+    .split(/\s+/)
+    .map(function (field) {
+      return field.replace(/^v/, "");
+    });
+  if (versionFields.indexOf(VERSION) === -1) {
+    throw new Error("Downloaded binary did not report version " + VERSION);
+  }
 }
 
 async function main() {
@@ -88,6 +146,7 @@ async function main() {
   const tag = "v" + VERSION;
   const assetName = "infynon-" + info.target + info.ext;
   const url = "https://github.com/" + REPO + "/releases/download/" + tag + "/" + assetName;
+  const checksumsUrl = "https://github.com/" + REPO + "/releases/download/" + tag + "/checksums.txt";
 
   if (!fs.existsSync(BIN_DIR)) {
     fs.mkdirSync(BIN_DIR, { recursive: true });
@@ -96,11 +155,21 @@ async function main() {
   console.log("[infynon] Downloading " + assetName + " from " + tag + " release...");
 
   try {
-    await downloadFile(url, BIN_PATH);
+    removeQuietly(TEMP_BIN_PATH);
+    removeQuietly(TEMP_CHECKSUMS_PATH);
+    await downloadFile(url, TEMP_BIN_PATH);
+    await downloadFile(checksumsUrl, TEMP_CHECKSUMS_PATH);
+    verifyChecksum(TEMP_CHECKSUMS_PATH, TEMP_BIN_PATH, assetName);
+    removeQuietly(BIN_PATH);
+    fs.renameSync(TEMP_BIN_PATH, BIN_PATH);
   } catch (err) {
+    removeQuietly(TEMP_BIN_PATH);
+    removeQuietly(TEMP_CHECKSUMS_PATH);
     console.error("[infynon] Download failed: " + err.message);
     console.error("[infynon] Manual install: https://github.com/" + REPO + "/releases/tag/" + tag);
     process.exit(1);
+  } finally {
+    removeQuietly(TEMP_CHECKSUMS_PATH);
   }
 
   if (process.platform !== "win32") {
@@ -110,7 +179,7 @@ async function main() {
   try {
     verifyBinary();
   } catch (err) {
-    fs.unlink(BIN_PATH, function () {});
+    removeQuietly(BIN_PATH);
     console.error("[infynon] Binary verification failed: " + err.message);
     console.error("[infynon] Reinstall after the release asset is corrected: npm install -g infynon");
     process.exit(1);
