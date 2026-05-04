@@ -1,7 +1,7 @@
 # infynon
 
 [![npm version](https://img.shields.io/npm/v/infynon?style=flat-square&logo=npm)](https://www.npmjs.com/package/infynon)
-[![npm downloads](https://img.shields.io/npm/dm/infynon?style=flat-square&logo=npm)](https://www.npmjs.com/package/infynon)
+[![npm downloads](https://img.shields.io/badge/dynamic/json?style=flat-square&logo=npm&label=npm%20downloads&query=%24.downloads&url=https%3A%2F%2Fapi.npmjs.org%2Fdownloads%2Fpoint%2F2025-05-04%3A2050-12-31%2Finfynon&cacheSeconds=3600)](https://www.npmjs.com/package/infynon)
 [![GitHub release](https://img.shields.io/github/v/release/d4rkNinja/infynon-cli?style=flat-square&logo=github)](https://github.com/d4rkNinja/infynon-cli/releases)
 [![Agent control plane](https://img.shields.io/badge/agent%20control%20plane-Codex%20%7C%20Claude%20%7C%20Gemini-7c3aed?style=flat-square)](https://github.com/d4rkNinja/infynon-cli/blob/main/docs/agent-control-plane.md)
 [![Package security](https://img.shields.io/badge/pkg-secure%20installs-ef4444?style=flat-square)](https://github.com/d4rkNinja/infynon-cli/blob/main/docs/commands.md)
