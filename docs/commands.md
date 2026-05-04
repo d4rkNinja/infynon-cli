@@ -59,6 +59,7 @@ Common entry points:
 infynon pkg scan
 infynon pkg audit
 infynon pkg explain <package>
+infynon pkg npm install express --strict high
 infynon pkg outdated
 infynon pkg diff
 infynon pkg doctor
@@ -78,6 +79,14 @@ Use this area when:
 - you need a local package risk report
 - you want to understand why a package is present
 - you want package security checks before continuing with development
+
+Package install exit codes:
+
+- `0` success
+- `1` command, warning, or nonblocking failure
+- `2` lookup or upstream scan failure
+- `3` strict policy block
+- `4` non-interactive decision required
 
 ## API Flow Testing: `infynon weave`
 

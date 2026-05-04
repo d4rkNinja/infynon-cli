@@ -10,7 +10,7 @@
 
 INFYNON is a terminal control plane for agentic engineering: multi-agent workspace/task orchestration, package intelligence, API workflow validation, durable repository context, and release-ready local automation in one native CLI.
 
-This repository is the public distribution channel for INFYNON CLI. It contains installers, package-manager wrappers, user documentation, release checksums, and prebuilt binaries. The proprietary Rust source code is not included.
+This repository is the public distribution channel for INFYNON CLI. The public distribution repo includes installers, npm/go wrappers, docs, and release assets; the core Rust implementation is not included.
 
 ## What INFYNON Solves
 
@@ -53,6 +53,8 @@ iwr https://raw.githubusercontent.com/d4rkNinja/infynon-cli/main/install.ps1 -us
 ```bash
 npm install -g infynon
 ```
+
+The npm package is configured for npm provenance and can use optional platform packages such as `@infynon/cli-win32-x64`, `@infynon/cli-linux-x64`, and `@infynon/cli-darwin-arm64` for native binaries.
 
 ### Go wrapper
 
@@ -123,7 +125,10 @@ Every release publishes these assets:
 - [Install Guide](docs/install.md)
 - [Command Guide](docs/commands.md)
 - [Agent Control Plane](docs/agent-control-plane.md)
+- [AI Agent Workflow](docs/ai-agent-workflow.md)
 - [GCCD Task Contracts](docs/gccd.md)
+- [npm Install](docs/npm-install.md)
+- [Windows Troubleshooting](docs/windows-troubleshooting.md)
 - [Verification Guide](docs/verification.md)
 
 ## Repository Contents
@@ -138,7 +143,7 @@ This public repository contains:
 
 This public repository does not contain:
 
-- Rust source code
+- core Rust implementation
 - internal product logic
 - proprietary scanner or workflow implementation
 - private build internals
@@ -151,4 +156,4 @@ Security issues should be reported privately to the INFYNON maintainers. Do not 
 
 ## License
 
-INFYNON binaries are distributed under the proprietary binary license included in this repository. The public wrappers and docs exist to install and operate the product; they do not make the proprietary source code open source.
+INFYNON binaries are distributed under the proprietary binary license included in this repository. The public wrappers and docs exist to install and operate the product; they do not make the core Rust implementation open source.

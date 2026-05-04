@@ -72,9 +72,7 @@ Typical uses:
 
 ## Distribution Model
 
-INFYNON is distributed as prebuilt binaries through GitHub Releases. This public repository includes installation scripts, package-manager wrappers, release checksums, and documentation.
-
-The Rust source code is proprietary and is not included in this repository.
+INFYNON is distributed as prebuilt binaries through GitHub Releases. The public distribution repo includes installers, npm/go wrappers, docs, and release assets; the core Rust implementation is not included.
 
 ## Supported Platforms
 
@@ -100,5 +98,8 @@ INFYNON is designed to be run locally by developers and automation. It should be
 - [Install Guide](install.md)
 - [Command Guide](commands.md)
 - [Agent Control Plane](agent-control-plane.md)
+- [AI Agent Workflow](ai-agent-workflow.md)
 - [GCCD Task Contracts](gccd.md)
+- [npm Install](npm-install.md)
+- [Windows Troubleshooting](windows-troubleshooting.md)
 - [Verification Guide](verification.md)

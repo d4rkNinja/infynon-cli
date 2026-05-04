@@ -1,36 +1,55 @@
 {
   "name": "infynon",
-  "version": "0.2.6",
-  "description": "Thin npm installer for the proprietary INFYNON CLI binary releases.",
+  "version": "0.2.7",
+  "description": "Security-first CLI for AI-assisted development: safe package installs, dependency scanning, API flow testing, and agent task orchestration.",
   "bin": {
     "infynon": "run.js",
     "infynon-pkg": "run-pkg.js"
   },
-  "scripts": {
-    "postinstall": "node postinstall.js",
-    "preuninstall": "node preuninstall.js"
-  },
   "files": [
+    "README.md",
     "LICENSE",
     "run.js",
     "run-pkg.js",
     "postinstall.js",
     "preuninstall.js"
   ],
-  "engines": {
-    "node": ">=14.14"
+  "optionalDependencies": {
+    "@infynon/cli-win32-x64": "0.2.7",
+    "@infynon/cli-linux-x64": "0.2.7",
+    "@infynon/cli-linux-arm64": "0.2.7",
+    "@infynon/cli-darwin-x64": "0.2.7",
+    "@infynon/cli-darwin-arm64": "0.2.7"
   },
+  "engines": {
+    "node": ">=18"
+  },
+  "packageManager": "npm@11.8.0",
   "author": "d4rkNinja",
   "license": "SEE LICENSE IN LICENSE",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/d4rkNinja/infynon-cli.git"
+    "url": "git+https://github.com/d4rkNinja/infynon-cli.git",
+    "directory": "npm"
   },
   "bugs": {
     "url": "https://github.com/d4rkNinja/infynon-cli/issues"
   },
-  "homepage": "https://github.com/d4rkNinja/infynon-cli#readme",
+  "homepage": "https://cli.infynon.com",
   "publishConfig": {
-    "access": "public"
-  }
+    "access": "public",
+    "provenance": true
+  },
+  "keywords": [
+    "cli",
+    "security",
+    "supply-chain",
+    "dependency-scanning",
+    "ai-agents",
+    "claude-code",
+    "codex",
+    "gemini-cli",
+    "api-testing",
+    "devtools"
+  ]
 }

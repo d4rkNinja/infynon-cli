@@ -79,6 +79,14 @@ infynon task create task_001 \
 
 INFYNON can normalize plain task text into a structured GCCD brief before the agent receives it.
 
+When a Claude task starts, INFYNON passes the generated task-start prompt file with:
+
+```bash
+claude {model_arg} --append-system-prompt-file {quoted_task_start_system_prompt_path}
+```
+
+Using a prompt file keeps Windows launches reliable by avoiding large system prompts in argv.
+
 ## Agent Prompt Shape
 
 When INFYNON launches an agent, the task contract should be passed clearly:
@@ -176,3 +184,9 @@ A task is ready for execution when another agent can read it and answer four que
 - How will completion be verified?
 
 That is the standard GCCD enforces.
+
+## Related Docs
+
+- [AI Agent Workflow](ai-agent-workflow.md)
+- [Command Guide](commands.md)
+- [Windows Troubleshooting](windows-troubleshooting.md)

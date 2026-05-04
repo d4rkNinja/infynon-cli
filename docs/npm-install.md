@@ -1,0 +1,43 @@
+# npm Install
+
+The `infynon` npm package is the official npm entry point for INFYNON. It is a thin wrapper around the native binary distribution, not a JavaScript reimplementation.
+
+```bash
+npm install -g infynon
+```
+
+## What Gets Installed
+
+The public distribution repo includes installers, npm/go wrappers, docs, and release assets; the core Rust implementation is not included.
+
+The npm package provides the `infynon` and `infynon-pkg` commands. npm installs the matching optional native package when it is available for the current OS and CPU. If that optional package is unavailable, the wrapper downloads and verifies the matching GitHub Release binary on first launch.
+
+## Optional Platform Packages
+
+Current npm releases can use optional platform packages for native binaries:
+
+- `@infynon/cli-win32-x64`
+- `@infynon/cli-linux-x64`
+- `@infynon/cli-linux-arm64`
+- `@infynon/cli-darwin-x64`
+- `@infynon/cli-darwin-arm64`
+
+npm installs only the optional package matching the current OS and CPU. If optional package installation is unavailable, the wrapper can fall back to the GitHub Release asset for the same version and platform.
+
+## Provenance
+
+INFYNON npm packages are configured for npm provenance from the release pipeline. Provenance links the published npm artifact to the GitHub Actions workflow that produced it.
+
+Use provenance together with normal package controls:
+
+- pin versions in CI and managed developer images
+- keep lockfiles when installing INFYNON as a project dependency
+- review the npm package page for the provenance badge and package metadata
+- verify GitHub Release downloads with `checksums.txt` when installing outside npm
+
+## Troubleshooting
+
+- Use Node.js 18 or newer.
+- Run `npm prefix -g` to see where global packages are installed.
+- Confirm npm's global bin directory is on `PATH`.
+- If a corporate proxy blocks binary download fallback, allow `github.com`, `api.github.com`, and `objects.githubusercontent.com`.

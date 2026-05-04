@@ -155,6 +155,8 @@ infynon task complete task_fix_deps --mutate --result "Risk fixed, checkout flow
 ## Related Docs
 
 - [Command Guide](commands.md)
+- [AI Agent Workflow](ai-agent-workflow.md)
 - [GCCD Task Contracts](gccd.md)
 - [Install Guide](install.md)
+- [npm Install](npm-install.md)
 - [Verification Guide](verification.md)

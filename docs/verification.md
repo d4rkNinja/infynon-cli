@@ -51,3 +51,5 @@ Compare the `Hash` value with the matching entry in `checksums.txt`.
 Checksum verification confirms that the downloaded file matches the release artifact published for that version. It does not replace normal endpoint security controls such as HTTPS, trusted release channels, endpoint protection, or internal software approval processes.
 
 For locked-down environments, mirror only the specific release assets your organization has approved.
+
+For npm installs, INFYNON packages are configured for npm provenance from the release pipeline. Treat provenance as a supply-chain signal alongside pinned versions and release checksums.

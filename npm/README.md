@@ -8,7 +8,7 @@
 
 INFYNON is a terminal control plane for agentic engineering: multi-agent workspace/task orchestration, package intelligence, API flow testing, and repository memory in one native CLI.
 
-This npm package is the official installer wrapper for the INFYNON native binary. It downloads the matching prebuilt binary from GitHub Releases during installation.
+This npm package is the official wrapper for the INFYNON native binary. npm installs the matching optional platform package when available; otherwise the wrapper downloads and verifies the matching GitHub Release binary on first launch.
 
 ## Install
 
@@ -33,6 +33,18 @@ npm install -g infynon
 - Linux arm64
 - macOS x64
 - macOS arm64
+
+## Provenance and Platform Packages
+
+The public distribution repo includes installers, npm/go wrappers, docs, and release assets; the core Rust implementation is not included.
+
+INFYNON npm packages are configured for npm provenance from the release pipeline. The package can use optional native binary packages:
+
+- `@infynon/cli-win32-x64`
+- `@infynon/cli-linux-x64`
+- `@infynon/cli-linux-arm64`
+- `@infynon/cli-darwin-x64`
+- `@infynon/cli-darwin-arm64`
 
 ## Quick Start
 
@@ -104,9 +116,12 @@ go install github.com/d4rkNinja/infynon-cli/go/cmd/infynon@latest
 
 - https://github.com/d4rkNinja/infynon-cli/tree/main/docs
 - https://github.com/d4rkNinja/infynon-cli/blob/main/docs/agent-control-plane.md
+- https://github.com/d4rkNinja/infynon-cli/blob/main/docs/ai-agent-workflow.md
 - https://github.com/d4rkNinja/infynon-cli/blob/main/docs/gccd.md
+- https://github.com/d4rkNinja/infynon-cli/blob/main/docs/npm-install.md
+- https://github.com/d4rkNinja/infynon-cli/blob/main/docs/windows-troubleshooting.md
 - https://github.com/d4rkNinja/infynon-cli/releases
 
 ## Source Availability
 
-This package distributes the INFYNON binary and installer wrapper only. The Rust source code is proprietary and is not bundled in this package.
+This package distributes the INFYNON binary and installer wrapper only. The core Rust implementation is not bundled in this package.

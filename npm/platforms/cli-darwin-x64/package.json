@@ -1,0 +1,31 @@
+{
+  "name": "@infynon/cli-darwin-x64",
+  "version": "0.2.7",
+  "description": "macOS Intel native binary package for INFYNON CLI.",
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "README.md",
+    "LICENSE",
+    "bin/infynon"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "author": "d4rkNinja",
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/d4rkNinja/infynon-cli.git",
+    "directory": "npm/platforms/cli-darwin-x64"
+  },
+  "homepage": "https://cli.infynon.com",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}
