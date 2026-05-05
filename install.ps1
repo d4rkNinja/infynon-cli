@@ -1,4 +1,4 @@
-﻿$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Stop"
 
 $repo = "d4rkNinja/infynon-cli"
 $homeDir = [Environment]::GetFolderPath("UserProfile")

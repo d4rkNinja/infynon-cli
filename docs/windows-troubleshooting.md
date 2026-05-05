@@ -1,4 +1,4 @@
-﻿# Windows Troubleshooting
+# Windows Troubleshooting
 
 ## Install Command
 

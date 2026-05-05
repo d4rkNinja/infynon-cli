@@ -1,4 +1,4 @@
-﻿package installer
+package installer
 
 import (
 	"crypto/sha256"

@@ -1,4 +1,4 @@
-﻿# Install INFYNON
+# Install INFYNON
 
 INFYNON is distributed as prebuilt native binaries. The public distribution repo includes installers, npm/go wrappers, docs, and release assets; the core Rust implementation is not included.
 

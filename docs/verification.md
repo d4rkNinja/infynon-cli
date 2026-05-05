@@ -1,4 +1,4 @@
-﻿# Verify INFYNON Downloads
+# Verify INFYNON Downloads
 
 Each INFYNON GitHub Release includes a `checksums.txt` file containing SHA-256 hashes for the release assets.
 

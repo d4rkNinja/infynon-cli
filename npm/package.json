@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "infynon",
   "version": "0.2.10",
   "description": "Security-first CLI for AI-assisted development: safe package installs, dependency scanning, API flow testing, and agent task orchestration.",

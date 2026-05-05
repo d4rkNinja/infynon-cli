@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "@infynon/cli-linux-arm64",
   "version": "0.2.10",
   "description": "Linux arm64 native binary package for INFYNON CLI.",

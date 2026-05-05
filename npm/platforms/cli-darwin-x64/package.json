@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "@infynon/cli-darwin-x64",
   "version": "0.2.10",
   "description": "macOS Intel native binary package for INFYNON CLI.",
