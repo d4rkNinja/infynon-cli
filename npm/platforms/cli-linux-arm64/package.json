@@ -1,6 +1,6 @@
 {
-  "name": "infynon-cli-linux-arm64",
-  "version": "0.2.11",
+  "name": "infynon-linux-arm64",
+  "version": "0.2.12",
   "description": "Linux arm64 native binary package for INFYNON CLI.",
   "os": [
     "linux"

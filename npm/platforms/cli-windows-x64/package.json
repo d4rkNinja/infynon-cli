@@ -1,6 +1,6 @@
 {
-  "name": "infynon-cli-win32-x64",
-  "version": "0.2.11",
+  "name": "infynon-windows-x64",
+  "version": "0.2.12",
   "description": "Windows x64 native binary package for INFYNON CLI.",
   "os": [
     "win32"
@@ -21,7 +21,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/d4rkNinja/infynon-cli.git",
-    "directory": "npm/platforms/cli-win32-x64"
+    "directory": "npm/platforms/cli-windows-x64"
   },
   "homepage": "https://cli.infynon.com",
   "publishConfig": {

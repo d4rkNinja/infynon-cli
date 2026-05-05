@@ -20,7 +20,7 @@ function getTarget() {
     return {
       target: "x86_64-pc-windows-msvc",
       ext: ".exe",
-      packageName: "infynon-cli-win32-x64",
+      packageName: "infynon-windows-x64",
       binaryName: "infynon.exe",
     };
   }
@@ -28,7 +28,7 @@ function getTarget() {
     return {
       target: "x86_64-unknown-linux-musl",
       ext: "",
-      packageName: "infynon-cli-linux-x64",
+      packageName: "infynon-linux-x64",
       binaryName: "infynon",
     };
   }
@@ -36,7 +36,7 @@ function getTarget() {
     return {
       target: "aarch64-unknown-linux-musl",
       ext: "",
-      packageName: "infynon-cli-linux-arm64",
+      packageName: "infynon-linux-arm64",
       binaryName: "infynon",
     };
   }
@@ -44,7 +44,7 @@ function getTarget() {
     return {
       target: "x86_64-apple-darwin",
       ext: "",
-      packageName: "infynon-cli-darwin-x64",
+      packageName: "infynon-darwin-x64",
       binaryName: "infynon",
     };
   }
@@ -52,7 +52,7 @@ function getTarget() {
     return {
       target: "aarch64-apple-darwin",
       ext: "",
-      packageName: "infynon-cli-darwin-arm64",
+      packageName: "infynon-darwin-arm64",
       binaryName: "infynon",
     };
   }
