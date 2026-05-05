@@ -1,0 +1,27 @@
+Proprietary Binary License
+
+Copyright (c) 2026 INFYNON.
+All rights reserved.
+
+This repository distributes compiled INFYNON CLI binaries, install scripts,
+and thin package wrappers only. The underlying source code is proprietary and
+is not included in this repository.
+
+Permission is granted to download and use the released INFYNON binaries for
+internal or personal use, subject to the following restrictions:
+
+1. You may not copy, modify, reverse engineer, decompile, disassemble, or
+   create derivative works from the binaries except where applicable law
+   explicitly prohibits that restriction.
+2. You may not redistribute the binaries, republish release assets, or mirror
+   this repository's release artifacts without prior written permission.
+3. You may not remove or alter any copyright, trademark, or attribution
+   notices.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM,
+OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

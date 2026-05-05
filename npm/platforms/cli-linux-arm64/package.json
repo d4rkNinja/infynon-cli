@@ -1,0 +1,31 @@
+﻿{
+  "name": "@infynon/cli-linux-arm64",
+  "version": "0.2.10",
+  "description": "Linux arm64 native binary package for INFYNON CLI.",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "files": [
+    "README.md",
+    "LICENSE",
+    "bin/infynon"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "author": "d4rkNinja",
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/d4rkNinja/infynon-cli.git",
+    "directory": "npm/platforms/cli-linux-arm64"
+  },
+  "homepage": "https://cli.infynon.com",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}
