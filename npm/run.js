@@ -17,19 +17,19 @@ const POSTINSTALL_PATH = path.join(PACKAGE_DIR, "postinstall.js");
 
 function getPlatformPackage() {
   if (process.platform === "win32" && process.arch === "x64") {
-    return { packageName: "@infynon/cli-win32-x64", binaryName: "infynon.exe" };
+    return { packageName: "infynon-cli-win32-x64", binaryName: "infynon.exe" };
   }
   if (process.platform === "linux" && process.arch === "x64") {
-    return { packageName: "@infynon/cli-linux-x64", binaryName: "infynon" };
+    return { packageName: "infynon-cli-linux-x64", binaryName: "infynon" };
   }
   if (process.platform === "linux" && process.arch === "arm64") {
-    return { packageName: "@infynon/cli-linux-arm64", binaryName: "infynon" };
+    return { packageName: "infynon-cli-linux-arm64", binaryName: "infynon" };
   }
   if (process.platform === "darwin" && process.arch === "x64") {
-    return { packageName: "@infynon/cli-darwin-x64", binaryName: "infynon" };
+    return { packageName: "infynon-cli-darwin-x64", binaryName: "infynon" };
   }
   if (process.platform === "darwin" && process.arch === "arm64") {
-    return { packageName: "@infynon/cli-darwin-arm64", binaryName: "infynon" };
+    return { packageName: "infynon-cli-darwin-arm64", binaryName: "infynon" };
   }
   return null;
 }

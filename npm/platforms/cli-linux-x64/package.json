@@ -1,6 +1,6 @@
 {
-  "name": "@infynon/cli-linux-x64",
-  "version": "0.2.10",
+  "name": "infynon-cli-linux-x64",
+  "version": "0.2.11",
   "description": "Linux x64 native binary package for INFYNON CLI.",
   "os": [
     "linux"

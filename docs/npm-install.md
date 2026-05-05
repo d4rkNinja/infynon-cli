@@ -16,11 +16,11 @@ The npm package provides the `infynon` and `infynon-pkg` commands. npm installs 
 
 Current npm releases can use optional platform packages for native binaries:
 
-- `@infynon/cli-win32-x64`
-- `@infynon/cli-linux-x64`
-- `@infynon/cli-linux-arm64`
-- `@infynon/cli-darwin-x64`
-- `@infynon/cli-darwin-arm64`
+- `infynon-cli-win32-x64`
+- `infynon-cli-linux-x64`
+- `infynon-cli-linux-arm64`
+- `infynon-cli-darwin-x64`
+- `infynon-cli-darwin-arm64`
 
 npm installs only the optional package matching the current OS and CPU. If optional package installation is unavailable, the wrapper can fall back to the GitHub Release asset for the same version and platform.
 
