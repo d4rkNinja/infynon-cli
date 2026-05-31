@@ -1,0 +1,22 @@
+Explain why one installed package matters and what to do next
+
+Usage: infynon.exe explain [OPTIONS] <PACKAGE>
+
+Arguments:
+  <PACKAGE>  
+
+Options:
+      --ecosystem <ECOSYSTEM>  
+      --strict [<LEVEL>]       
+      --pkg-file <FILE>        
+      --json                   Emit machine-readable JSON to stdout
+      --no-input               Disable interactive prompts and fail when input is required
+      --yes                    Non-interactive: install all packages, even vulnerable ones
+      --skip-vulnerable        Non-interactive: skip vulnerable packages, install only safe ones
+      --auto-fix               Non-interactive: auto-install fixed versions, skip unfixable packages
+  -h, --help                   Print help
+
+Examples:
+  infynon pkg explain serde_json
+  infynon pkg explain requests --ecosystem pip
+  infynon pkg explain tokio --pkg-file Cargo.lock

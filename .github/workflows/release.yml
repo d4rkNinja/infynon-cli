@@ -1,0 +1,327 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag to publish, for example v0.2.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  verify-release-metadata:
+    name: Verify release metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+
+      - name: Validate release tag
+        shell: bash
+        run: |
+          if [[ ! "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
+            echo "Release tag must be v-prefixed semver, for example v0.2.7: ${RELEASE_TAG}" >&2
+            exit 1
+          fi
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+
+      - name: Verify release versions
+        run: python3 scripts/verify-release-versions.py "${RELEASE_TAG}"
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+
+  build-binaries:
+    name: Build ${{ matrix.target }}
+    needs: verify-release-metadata
+    runs-on: ${{ matrix.os }}
+    env:
+      WINDOWS_SIGNING_CERT_PFX: ${{ secrets.WINDOWS_SIGNING_CERT_PFX }}
+      WINDOWS_SIGNING_CERT_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERT_PASSWORD }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            ext: .exe
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            ext: ""
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            ext: ""
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            ext: ""
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            ext: ""
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install musl build tools
+        if: contains(matrix.target, 'musl')
+        shell: bash
+        timeout-minutes: 15
+        run: |
+          python3 -m pip install --user --upgrade pip
+          python3 -m pip install --user ziglang
+          cargo install cargo-zigbuild --locked
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build release binary
+        shell: bash
+        run: |
+          if [[ "${{ matrix.target }}" == *"musl" ]]; then
+            cargo zigbuild --release --target "${{ matrix.target }}"
+          else
+            cargo build --release --target "${{ matrix.target }}"
+          fi
+
+      - name: Sign Windows binary
+        if: matrix.target == 'x86_64-pc-windows-msvc' && env.WINDOWS_SIGNING_CERT_PFX != '' && env.WINDOWS_SIGNING_CERT_PASSWORD != ''
+        shell: pwsh
+        run: |
+          $certPath = Join-Path $env:RUNNER_TEMP "infynon-signing-cert.pfx"
+          [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_SIGNING_CERT_PFX))
+          $binary = "target/${{ matrix.target }}/release/infynon${{ matrix.ext }}"
+          & signtool sign /f $certPath /p $env:WINDOWS_SIGNING_CERT_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $binary
+          & signtool verify /pa /v $binary
+          Remove-Item -LiteralPath $certPath -Force
+
+      - name: Stage asset
+        shell: bash
+        run: |
+          mkdir -p dist
+          BIN="infynon${{ matrix.ext }}"
+          SRC="target/${{ matrix.target }}/release/$BIN"
+          DEST="dist/infynon-${{ matrix.target }}${{ matrix.ext }}"
+          cp "$SRC" "$DEST"
+          test -s "$DEST"
+
+      - name: Upload asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish-github-release:
+    name: Publish GitHub Release
+    needs:
+      - verify-release-metadata
+      - build-binaries
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Flatten release assets
+        shell: bash
+        run: |
+          mkdir -p release-bundle
+          find release-assets -maxdepth 2 -type f -exec cp {} release-bundle/ \;
+          asset_count="$(find release-bundle -maxdepth 1 -type f -name 'infynon-*' | wc -l)"
+          if [[ "$asset_count" -ne 5 ]]; then
+            echo "Expected 5 release binaries, found $asset_count" >&2
+            exit 1
+          fi
+          ls -la release-bundle
+
+      - name: Generate checksums and release manifest
+        working-directory: release-bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          find . -maxdepth 1 -type f -name 'infynon-*' -printf '%f\0' | sort -z | xargs -0 sha256sum > checksums.txt
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          release_tag = os.environ["RELEASE_TAG"]
+          version = release_tag[1:] if release_tag.startswith("v") else release_tag
+          assets = []
+
+          for path in sorted(Path(".").glob("infynon-*")):
+              if not path.is_file():
+                  continue
+              target = path.name.removeprefix("infynon-")
+              if target.endswith(".exe"):
+                  target = target[:-4]
+              assets.append(
+                  {
+                      "target": target,
+                      "asset": path.name,
+                      "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                      "size": path.stat().st_size,
+                  }
+              )
+
+          if not assets:
+              raise SystemExit("No release assets found for release manifest")
+
+          manifest = {
+              "schema_version": 1,
+              "version": version,
+              "assets": assets,
+          }
+          Path("release-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+          PY
+          test -s checksums.txt
+          test -s release-manifest.json
+
+      - name: Publish GitHub Release assets
+        shell: bash
+        run: |
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release edit "${RELEASE_TAG}" \
+              --title "INFYNON CLI ${RELEASE_TAG}" \
+              --notes "Stable INFYNON CLI release assets for ${RELEASE_TAG}."
+            gh release upload "${RELEASE_TAG}" release-bundle/* --clobber
+          else
+            gh release create "${RELEASE_TAG}" release-bundle/* \
+              --title "INFYNON CLI ${RELEASE_TAG}" \
+              --notes "Stable INFYNON CLI release assets for ${RELEASE_TAG}."
+          fi
+
+      - name: Trigger Go proxy indexing
+        shell: bash
+        run: |
+          repo="${GITHUB_REPOSITORY}"
+          curl -fsSL "https://proxy.golang.org/github.com/${repo}/go/@v/${RELEASE_TAG}.info" || true
+          curl -fsSL "https://proxy.golang.org/github.com/${repo}/go/@v/go%2F${RELEASE_TAG}.info" || true
+
+  publish-npm:
+    name: Publish npm installer
+    needs:
+      - publish-github-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Stage platform npm packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS='|' read -r package asset binary; do
+            package_dir="npm/platforms/${package}"
+            source="$(find release-assets -type f -name "${asset}" -print -quit)"
+            if [[ -z "${source}" ]]; then
+              echo "Missing release asset for ${package}: ${asset}" >&2
+              exit 1
+            fi
+
+            mkdir -p "${package_dir}/bin"
+            cp "${source}" "${package_dir}/bin/${binary}"
+            cp npm/LICENSE "${package_dir}/LICENSE"
+            chmod 755 "${package_dir}/bin/${binary}"
+            test -s "${package_dir}/bin/${binary}"
+          done <<'EOF'
+          cli-windows-x64|infynon-x86_64-pc-windows-msvc.exe|infynon.exe
+          cli-linux-x64|infynon-x86_64-unknown-linux-musl|infynon
+          cli-linux-arm64|infynon-aarch64-unknown-linux-musl|infynon
+          cli-darwin-x64|infynon-x86_64-apple-darwin|infynon
+          cli-darwin-arm64|infynon-aarch64-apple-darwin|infynon
+          EOF
+
+      - name: Validate platform npm package contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r package_dir; do
+            (cd "${package_dir}" && npm pack --dry-run)
+          done < <(find npm/platforms -mindepth 1 -maxdepth 1 -type d | sort)
+
+      - name: Validate npm package contents
+        working-directory: npm
+        run: npm pack --dry-run
+
+      - name: Publish npm packages
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          npm_publish_args=(--access public --provenance)
+
+          publish_if_needed() {
+            local package_dir="$1"
+            local required="${2:-true}"
+            local name version published
+
+            name="$(node -p "require('./${package_dir}/package.json').name")"
+            version="$(node -p "require('./${package_dir}/package.json').version")"
+
+            if published="$(npm view "${name}@${version}" version --silent 2>/dev/null)" && [[ "${published}" == "${version}" ]]; then
+              echo "Skipping ${name}@${version}; already published."
+              return
+            fi
+
+            echo "Publishing ${name}@${version} from ${package_dir}"
+            if (cd "${package_dir}" && npm publish "${npm_publish_args[@]}"); then
+              return
+            fi
+
+            if [[ "${required}" == "false" ]]; then
+              echo "::warning::Optional platform package ${name}@${version} could not be published. The main package will keep the GitHub Release downloader fallback."
+              return
+            fi
+
+            return 1
+          }
+
+          while IFS= read -r package_dir; do
+            publish_if_needed "${package_dir}" false
+          done < <(find npm/platforms -mindepth 1 -maxdepth 1 -type d | sort)
+
+          publish_if_needed npm true
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

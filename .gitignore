@@ -1,0 +1,36 @@
+# Build artifacts
+/target
+/dist
+
+# IDE & editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Environment & secrets
+.env
+.env.*
+*.pem
+*.key
+# Scan output (generated at runtime)
+infynon-scan-report.md
+infynon-scan-report.pdf
+.playwright-mcp
+.tmp-eagle-eye
+.tmp-eagle-eye-env
+.infynon/
+.claude
+# Logs
+*.log
+concept.md
+# Cargo lock is committed for binaries (keep it)
+
+# Private INFYNON docs
+private-docs/

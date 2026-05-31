@@ -1,0 +1,53 @@
+{
+  "codex": {
+    "open": "codex --no-alt-screen",
+    "bootstrap": "codex --config {quoted_codex_system_prompt_config} {model_arg} --yolo --no-alt-screen",
+    "bootstrap_background": "codex exec --config {quoted_codex_system_prompt_config} {model_arg} --dangerously-bypass-approvals-and-sandbox \"\"",
+    "task": {
+      "create": "",
+      "start": "codex --config {quoted_codex_task_start_system_prompt_config} {model_arg} --yolo --no-alt-screen {quoted_task_start_interactive_prompt}",
+      "resume": "codex resume --config {quoted_codex_task_start_system_prompt_config} {model_arg} --yolo --no-alt-screen {quoted_session_id} {quoted_task_resume_interactive_prompt}",
+      "note": "",
+      "update": "",
+      "result": "",
+      "complete": "",
+      "fail": "",
+      "kill": "",
+      "remove": ""
+    }
+  },
+  "claude": {
+    "open": "claude",
+    "bootstrap": "claude {model_arg} --append-system-prompt-file {quoted_system_prompt_path} --permission-mode bypassPermissions --dangerously-skip-permissions",
+    "bootstrap_background": "claude {model_arg} --print --append-system-prompt-file {quoted_system_prompt_path} --permission-mode bypassPermissions --dangerously-skip-permissions \"\"",
+    "task": {
+      "create": "",
+      "start": "claude {model_arg} --append-system-prompt-file {quoted_task_start_system_prompt_path} --permission-mode bypassPermissions --dangerously-skip-permissions {task_start_system_prompt_arg}",
+      "resume": "claude {model_arg} --append-system-prompt-file {quoted_task_start_system_prompt_path} --permission-mode bypassPermissions --dangerously-skip-permissions -r {quoted_session_id} {quoted_prompt}",
+      "note": "",
+      "update": "",
+      "result": "",
+      "complete": "",
+      "fail": "",
+      "kill": "",
+      "remove": ""
+    }
+  },
+  "gemini": {
+    "open": "gemini --skip-trust",
+    "bootstrap": "{gemini_system_prompt_env} gemini {model_arg} --skip-trust --approval-mode=yolo --prompt-interactive {quoted_system_prompt}",
+    "bootstrap_background": "{gemini_system_prompt_env} gemini {model_arg} --skip-trust --approval-mode=yolo --prompt {quoted_system_prompt}",
+    "task": {
+      "create": "",
+      "start": "{gemini_task_system_prompt_env} gemini {model_arg} --skip-trust --approval-mode=yolo --prompt-interactive {task_start_system_prompt_arg}",
+      "resume": "{gemini_task_system_prompt_env} gemini {model_arg} --skip-trust --approval-mode=yolo --resume {quoted_session_id} {quoted_prompt}",
+      "note": "",
+      "update": "",
+      "result": "",
+      "complete": "",
+      "fail": "",
+      "kill": "",
+      "remove": ""
+    }
+  }
+}

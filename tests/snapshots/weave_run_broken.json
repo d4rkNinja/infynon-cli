@@ -1,0 +1,32 @@
+{
+  "base_url": "http://example.test",
+  "duration_ms": 0,
+  "exit_code": 22,
+  "final_context": {},
+  "flow_id": "broken",
+  "flow_name": "Broken",
+  "schema_version": "infynon.weave.run.v1",
+  "status": "failed",
+  "steps": [
+    {
+      "assertion_results": [],
+      "duration_ms": 0,
+      "error": "Node 'missing' not found in library",
+      "extracted": {},
+      "method": "",
+      "node_id": "missing",
+      "node_name": "missing",
+      "passed": false,
+      "request_body": null,
+      "response_body": null,
+      "response_headers": {},
+      "status_code": null,
+      "url": ""
+    }
+  ],
+  "summary": {
+    "failed_steps": 1,
+    "passed_steps": 0,
+    "total_steps": 1
+  }
+}
